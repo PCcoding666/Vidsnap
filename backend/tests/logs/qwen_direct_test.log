@@ -1,0 +1,73 @@
+2025-04-08 11:16:05,424 - __main__ - INFO - === 环境变量信息 ===
+2025-04-08 11:16:05,424 - __main__ - INFO - QWEN_API_KEY: 已设置
+2025-04-08 11:16:05,424 - __main__ - INFO - BASE_URL: https://dashscope-intl.aliyuncs.com/compatible-mode/v1/chat/completions
+2025-04-08 11:16:05,425 - __main__ - INFO - === 发送API请求 ===
+2025-04-08 11:16:05,425 - __main__ - INFO - 请求负载: {
+  "model": "qwen-vl-max",
+  "messages": [
+    {
+      "role": "system",
+      "content": [
+        {
+          "type": "text",
+          "text": "你是一位专业的视频分析师，善于从图像和音频转录中提取关键信息并生成摘要。请提供一个包含主要内容、关键点和结论的摘要。"
+        }
+      ]
+    },
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "image_url",
+          "image_url": {
+            "url": "https://dashscope.oss-cn-beijing.aliyuncs.com/images/tiger.png"
+          }
+        },
+        {
+          "type": "text",
+          "text": "这是什么动物？它在做什么？请生成一个简短的描述。"
+        }
+      ]
+    }
+  ],
+  "max_tokens": 1000
+}
+2025-04-08 11:16:09,364 - __main__ - INFO - 响应状态码: 200
+2025-04-08 11:16:09,364 - __main__ - INFO - 响应内容: {"choices":[{"message":{"content":"这是一只老虎。它正在森林中行走，周围是茂密的树木和落叶。老虎的姿态显得非常优雅和有力。","role":"assistant"},"finish_reason":"stop","index":0,"logprobs":null}],"object":"chat.completion","usage":{"prompt_tokens":1290,"completion_tokens":28,"total_tokens":1318},"created":1744082169,"system_fingerprint":null,"model":"qwen-vl-max","id":"chatcmpl-52bb98d8-327d-980f-9397-2ac73062feba"}
+2025-04-08 11:16:09,364 - __main__ - INFO - 生成的内容: 这是一只老虎。它正在森林中行走，周围是茂密的树木和落叶。老虎的姿态显得非常优雅和有力。
+2025-04-08 11:22:21,780 - __main__ - INFO - === 环境变量信息 ===
+2025-04-08 11:22:21,780 - __main__ - INFO - QWEN_API_KEY: 已设置
+2025-04-08 11:22:21,780 - __main__ - INFO - BASE_URL: https://dashscope-intl.aliyuncs.com/compatible-mode/v1/chat/completions
+2025-04-08 11:22:21,780 - __main__ - INFO - === 发送API请求 ===
+2025-04-08 11:22:21,780 - __main__ - INFO - 请求负载: {
+  "model": "qwen-vl-max",
+  "messages": [
+    {
+      "role": "system",
+      "content": [
+        {
+          "type": "text",
+          "text": "你是一位专业的视频分析师，善于从图像和音频转录中提取关键信息并生成摘要。请提供一个包含主要内容、关键点和结论的摘要。"
+        }
+      ]
+    },
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "image_url",
+          "image_url": {
+            "url": "https://dashscope.oss-cn-beijing.aliyuncs.com/images/tiger.png"
+          }
+        },
+        {
+          "type": "text",
+          "text": "这是什么动物？它在做什么？请生成一个简短的描述。"
+        }
+      ]
+    }
+  ]
+}
+2025-04-08 11:22:25,577 - __main__ - INFO - 响应状态码: 200
+2025-04-08 11:22:25,577 - __main__ - INFO - 响应内容: {"choices":[{"message":{"content":"这是一只老虎。它正在森林中行走，周围是茂密的树木和落叶。老虎的姿态显得非常优雅和有力。","role":"assistant"},"finish_reason":"stop","index":0,"logprobs":null}],"object":"chat.completion","usage":{"prompt_tokens":1290,"completion_tokens":28,"total_tokens":1318},"created":1744082546,"system_fingerprint":null,"model":"qwen-vl-max","id":"chatcmpl-0f3e93e4-3693-91e3-9d14-d7af8d815371"}
+2025-04-08 11:22:25,577 - __main__ - INFO - 生成的内容: 这是一只老虎。它正在森林中行走，周围是茂密的树木和落叶。老虎的姿态显得非常优雅和有力。

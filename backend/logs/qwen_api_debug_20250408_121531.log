@@ -1,0 +1,120 @@
+2025-04-08 18:53:29,558 - qwen_api_debug - INFO - ===== API请求开始 =====
+2025-04-08 18:53:29,559 - qwen_api_debug - INFO - 请求有效负载: {
+  "model": "qwen-vl-max",
+  "messages": [
+    {
+      "role": "system",
+      "content": [
+        {
+          "type": "text",
+          "text": "你是一位专业的视频分析师，善于从图像和音频转录中提取关键信息并生成摘要。请提供一个包含主要内容、关键点和结论的摘要。"
+        }
+      ]
+    },
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "image_url",
+          "image_url": {
+            "url": "https://storage.googleapis.com/yt_summerizer_seperate_frontend_backend/keyframes/967413db-64d9-4b58-b7dd-88007956b37a_e63e67fa-b182-488b-b402-b73d8f8e09ff_interval_0.00s.jpg"
+          }
+        },
+        {
+          "type": "image_url",
+          "image_url": {
+            "url": "https://storage.googleapis.com/yt_summerizer_seperate_frontend_backend/keyframes/4d0744b2-1cf0-4c3d-9f3f-d3d759a6d9a5_89f606aa-f2be-47fd-924b-cd7684fdc21c_interval_30.00s.jpg"
+          }
+        },
+        {
+          "type": "image_url",
+          "image_url": {
+            "url": "https://storage.googleapis.com/yt_summerizer_seperate_frontend_backend/keyframes/0535506e-ecf0-4ec2-8a5c-2a5098e0f66d_cfba8f83-83ae-4f80-b6ef-cdc632992c55_interval_90.00s.jpg"
+          }
+        },
+        {
+          "type": "image_url",
+          "image_url": {
+            "url": "https://storage.googleapis.com/yt_summerizer_seperate_frontend_backend/keyframes/66b5955e-0714-408e-87e5-af73b811d3cc_6a9c2a04-3d77-403a-8dfd-d3fc6a39e8c0_interval_150.00s.jpg"
+          }
+        },
+        {
+          "type": "image_url",
+          "image_url": {
+            "url": "https://storage.googleapis.com/yt_summerizer_seperate_frontend_backend/keyframes/edf772e2-26aa-4994-a415-e10c7f71afbc_7afae518-087e-4e23-b6a2-e0e18d33ab5f_interval_210.00s.jpg"
+          }
+        },
+        {
+          "type": "image_url",
+          "image_url": {
+            "url": "https://storage.googleapis.com/yt_summerizer_seperate_frontend_backend/keyframes/97cbc685-1f6f-4bd3-915d-bf25cf619236_f9e3c5be-8c06-4261-bde4-229b2ff4fcee_interval_270.00s.jpg"
+          }
+        },
+        {
+          "type": "image_url",
+          "image_url": {
+            "url": "https://storage.googleapis.com/yt_summerizer_seperate_frontend_backend/keyframes/27c29b75-c46c-4f41-b7b3-7ec0f63f84dc_9a5485e2-3589-4e6d-8b08-1a0efee6f10b_interval_330.00s.jpg"
+          }
+        },
+        {
+          "type": "image_url",
+          "image_url": {
+            "url": "https://storage.googleapis.com/yt_summerizer_seperate_frontend_backend/keyframes/18d163ad-6e43-46f4-a9ef-a57b06842e9e_33483bec-b3c6-4b54-8d5a-a24ffa7315ec_interval_390.00s.jpg"
+          }
+        },
+        {
+          "type": "image_url",
+          "image_url": {
+            "url": "https://storage.googleapis.com/yt_summerizer_seperate_frontend_backend/keyframes/cb587f13-7386-4600-9485-2f75b79baba1_5b23b01c-dcb3-4ca0-9785-b6b607010cce_interval_450.00s.jpg"
+          }
+        },
+        {
+          "type": "image_url",
+          "image_url": {
+            "url": "https://storage.googleapis.com/yt_summerizer_seperate_frontend_backend/keyframes/a3b3ecdc-d475-411e-855b-60760a10b523_af311f4c-1af3-4ce4-b6dc-3b4cf8313f91_interval_510.00s.jpg"
+          }
+        },
+        {
+          "type": "image_url",
+          "image_url": {
+            "url": "https://storage.googleapis.com/yt_summerizer_seperate_frontend_backend/keyframes/22a289b0-7034-4d35-a2cb-de68211b3fed_30ce8275-9571-4776-a02e-fc7a547133a2_interval_570.00s.jpg"
+          }
+        },
+        {
+          "type": "text",
+          "text": "音频转录文本：\n每個人都在談論人工智能,人工智能是另一個熱門話題 它們是一樣的東西,還是不一樣的東西,如果是的話,那些差異是什麼? 深入學習也是另一個話題 我其實做了一個視頻關於這三個,人工智能,人工智能,深入學習 談論了它們的適合性 我讀了很多留言,我想要回答一些最常被問到的問題 以清除一些謬誤和誤解 此外,那段視頻拍攝以來發生了另一件事 那就是這項產生人工智能的爆炸 例如,大語言模式和聊天機 似乎在全世界都受到影響,我們看到它們到處都在 非常有趣的技術 還有一些像是深入偽造的東西 這些都在人工智能的範圍之內 但是它們如何相配? 它們如何相互相連? 我們將在這段視頻中看一看 並嘗試解釋這些技術如何相連 以及我們如何使用它們 首先,我會提供一些宣傳 我必須將一些概念簡單化 以避免讓這段視頻延期一星期 所以,對於在這個領域的深入專家 我先向你們道歉 但我們將嘗試將這件事簡單化 並且將涉及一些總結 首先,我們開始從人工智能開始 人工智能基本上是 用電腦模擬 人工智能相配或超越的東西 什麼是智能? 這可能是很多不同的東西 但我們通常會認為它是 能夠學習和理論 類似的東西 所以這就是我們嘗試做的 在人工智能的廣泛領域 如果我們看一看人工智能的時間軸 它實際上開始在這個時間軸 在那些日子中 它非常早期 很多人甚至沒有聽過 它基本上是一項研究項目 但我可以告訴你 作為一名大學畢業生 對我來說是在那些時候 我們在做人工智能工作 事實上,我們會使用程式語言 例如Lisp或Prolog 這些東西 是後來的專家系統 所成為的先鋒 這是一種技術 再次說,一些這些東西 在過去已經存在 但這就是當時 它成為一個重點 而成為更受歡迎的 所以,1980年代的專家系統 也許是90年代 再說一遍,我們使用了這些技術 所有這些 都是我們在 在我們接觸到的 下一個話題之前 做過的 那就是機械學習的領域 機械學習 正如它的名字所指 機械學習 我不需要程式化 我給它很多資訊 它會觀察到一些東西 例如,如果我開始做這個 如果我給你這個 然後要你預測 下一個東西會在哪裡 你可能會得到 你可能不會 你會有非常限制的訓練數據 來基於這個 但如果我給你一個 然後要你預測 下一個東西會在哪裡 你可能會說這個 然後你會說是這個 然後你會覺得你已經 全部想通了 然後你看到一個這些 然後突然間 我給你一個 然後給你一個彎彎彎彎的球 所以這個 事實上 然後也許它會變成像這個 所以機械學習的領域 非常擅長在看圖案 和在數據中發現圖案 你能給出更多訓練數據 它可以更有信心地預測 所以預測是機械學習 特別擅長的一件事 另一件事就是 在這個情況下 看到偽造 然後說 噢,這不屬於 它看起來不像其他東西 因為系統破壞了 所以這對於私人安全方面 特別有用 我工作的領域 因為我們在尋找偽造 我們在尋找使用者 在使用系統的方式 使用的方式 或是他們普遍不做的方式 所以這個技術 機械學習對我們特別有用 而機械學習 實際上是由此而來 並且在這個時間點 變得更受歡迎 在2010年 再一次 我當時是大學生 開著我的機械學習課程 我們在做這種東西 我們從來沒有討論過機械學習 它可能存在過 但實際上還沒有 接觸到人們的普遍思維 但這項技術 在過去幾十年 變得非常成熟 現在它成為了我們 將來所做的很多事情的基礎 下一層 我們的Venn圖表 涉及深入學習 深入學習的意思是 深入學習 我們使用的東西 叫做人工智能網絡 人工智能網絡 是我們在電腦中 模擬和模仿 人類的智慧 至少我們明白 人類的智慧 它叫做深入 因為我們有多層 的智慧網絡 有趣的是 它會模擬 智慧智慧的智慧 但我不知道你有沒有注意到 人類的智慧 可能有些不可預測 你把某些東西放進去 你不總是得到 相同的東西 深入學習是相同的 在某些情況下 我們並不能完全理解 為什麼我們得到的結果 因為智慧網絡 有那麼多層 很難分辨 完全理解它在哪裡 但這已經成為 非常重要的一部分 非常重要的進步 這也達到了 2010年時的一些人氣 我們至今仍然使用它 為基礎 我們的下一個AI領域 最近的進步 在智慧智慧領域 都在這個領域 現在我會介紹一個詞語 你可能不熟悉 就是基礎模式 基礎模式是我們得到的 一些這些東西 例如 基礎模式的一個例子 就是一個大語言模式 這是我們拿語言 模型 我們在這個技術中 做出預測 如果我看到一些語言 我會預測 下一種語言會是什麼 我會過度的簡單地 我會過度的簡單地 簡單地 但想想這個 有點像自動完成 當你開始輸入一些東西 然後它預測 你的下一個語言會是什麼 但在這個情況下 大語言模型 它們並不是預測 下一個語言 它們是預測 下一個句子 下一個句子 下一個整個文件 所以這些東西 能夠做出 一個非常驚人的 速度 我們稱呼 這些技術為 Generative 因為它們 在生產新的內容 有些人 甚至說 Generative AI 並不是真的 Generative 這些技術 只是在複製 存在的資訊 並將它們 放在不同的形式 讓我給你一個例子 如果你 以音樂為例 那麼 每個音符 都已經被創造了 所以在某種意義上 每首歌 只是一個重組 或某種其他複製 所有已經存在的 音符 並將它們 放在不同的形式 我們不說 新的音樂 不存在 人們還在創作 和創造新的歌曲 從 存在的資訊 我會說 Generative AI 是相似的 這是一個對比 所以有些不完美 但你能夠 理解 實際上 新的內容 可以從這些內容 生產出來 而這裡有很多 不同的形式 其他類型的模式 是 聲音模式 影片模式 等等 實際上 我們可以利用這些 來創造 深層偽造 深層偽造 是例子 我們可以 例如 一個人的聲音 然後重新創造 然後讓它看起來 這個人說了 他從來沒有說過的話 這實際上 很有用於 娛樂的情況 對比 等等 或者 假設 有人失去聲音 你能夠 捕捉他們的聲音 然後他們能夠 輸入 然後你能夠 聽到他們的聲音 但也有很多 這種情況 可以被侵犯 聊天機 又是來自 這個空間 深層偽造 來自 這個空間 但它們都是 Generative AI 的一部分 以及這些 基礎模式的一部分 這 又是 這個範圍 讓我們 真的要注意 AI 能夠 創造 新的內容 或者在某些情況下 總結 存在的內容 並給予我們 某些 大小 可管理的東西 這就是 引起了 所有的注意 這就是聊天機 和所有這些東西 來源的地方 在早期 AI的 採用 開始很慢 大部分的人 甚至不知道它存在 如果它存在 它總是 看起來 是五到十年 但後來 機械學習 深入學習 後來 基礎模式 Generative AI 和燈光 都來了 這些東西 就直接到月亮 這些基礎模式 就是 改變了 採用曲線 現在 我們看到 AI在 所有地方 被採用 我們需要 了解 它在哪裡 它適合在哪裡 確保 我們能夠 獲得 所有的 技術 如果您喜歡這個視頻 想看到更多 請點贊和訂閱 如果您有任何問題 或想分享您的想法 關於這個話題 請留言\n\n视频元数据:\n\n\n视频元数据：\ntitle: AI, Machine Learning, Deep Learning and Generative AI Explained\nchannel: IBM Technology\nupload_date: 20240805\nduration: 600\ncategories: ['Education']\ntags: ['IBM', 'IBM Cloud', 'AI', 'MachineLearning', 'DeepLearning', 'GenerativeAI', 'GenAI', 'Gen AI', 'LargeLanguageModels', 'LLMs', 'Deepfakes', 'Deep Fakes', 'TechExplained', 'ArtificialIntelligence', 'Artificial Intelligence', 'ML', 'DL', 'AIExplained', 'TechTrends', 'DataScience', 'NeuralNetworks', 'Chatbots', 'FutureOfAI', 'TechSimplified']\ndescription: Want to learn about AI agents and assistants? Register for Virtual Agents Day here → https://ibm.biz/BdaAVa\nWant to play with the technology yourself? Explore our interactive demo → https://ibm.biz/BdKSer\n\nJoin Jeff Crume as he dives into the distinctions between Artificial Intelligence (AI), Machine Learning (ML), Deep Learning (DL), and Foundation Models and how these technologies have evolved over time. He also explores the latest advancements in Generative AI, including large language models, chatbots, and deepfakes - and clarifies common misconceptions, simplifies complex concepts, and discusses the impact these technologies have on various fields.\n\nAI news moves fast. Sign up for a monthly newsletter for AI updates from IBM → https://ibm.biz/BdKSei\n\n\n请根据以上信息，生成一份语言为 'zh'、粒度为 'medium' 的视频摘要。\n请使用 Markdown 格式输出摘要。"
+        }
+      ]
+    }
+  ]
+}
+2025-04-08 18:53:29,559 - qwen_api_debug - INFO - 请求头: {
+  "Authorization": "Bearer sk-e...0281",
+  "Content-Type": "application/json"
+}
+2025-04-08 18:53:45,629 - qwen_api_debug - INFO - API端点: https://dashscope-intl.aliyuncs.com/compatible-mode/v1/chat/completions
+2025-04-08 18:53:45,630 - qwen_api_debug - INFO - 状态码: 200
+2025-04-08 18:53:45,630 - qwen_api_debug - INFO - 响应时间: 16.07 秒
+2025-04-08 18:53:45,630 - qwen_api_debug - INFO - 响应内容: {
+  "choices": [
+    {
+      "message": {
+        "content": "### 视频摘要\n\n#### 主要内容\n视频详细解释了人工智能 (AI)、机器学习 (ML)、深度学习 (DL) 和生成式 AI (Generative AI) 之间的区别，以及这些技术如何随时间演变。演讲者还探讨了生成式 AI 的最新进展，包括大型语言模型 (LLMs)、聊天机器人和深度伪造 (Deepfakes)。\n\n#### 关键点\n1. **人工智能 (AI)**:\n   - 用计算机模拟智能。\n   - 智能的定义可以是多样的，但通常指能够学习和推理的能力。\n   - AI 开始于 20 世纪 50 年代，早期使用 Lisp 或 Prolog 等编程语言。\n\n2. **机器学习 (ML)**:\n   - 通过给定大量数据来观察模式并进行预测。\n   - 特别擅长在数据中发现模式，并根据训练数据进行预测。\n   - ML 在 2010 年左右变得流行。\n\n3. **深度学习 (DL)**:\n   - 使用神经网络模拟人类智慧。\n   - 多层神经网络使其更复杂且难以完全理解。\n   - DL 在 2010 年左右开始受到关注。\n\n4. **生成式 AI (Generative AI)**:\n   - 包括大型语言模型 (LLMs)、聊天机器人和深度伪造等技术。\n   - 能够生成新的内容或总结现有内容。\n   - 近年来发展迅速，对多个领域产生了重大影响。\n\n#### 结论\n- AI 技术的发展经历了从早期研究项目到广泛采用的过程。\n- ML 和 DL 是 AI 的重要组成部分，而生成式 AI 则代表了最新的进展。\n- 这些技术在各个领域都有广泛应用，但也存在一些误解和挑战。",
+        "role": "assistant"
+      },
+      "finish_reason": "stop",
+      "index": 0,
+      "logprobs": null
+    }
+  ],
+  "object": "chat.completion",
+  "usage": {
+    "prompt_tokens": 15706,
+    "completion_tokens": 383,
+    "total_tokens": 16089
+  },
+  "created": 1744109626,
+  "system_fingerprint": null,
+  "model": "qwen-vl-max",
+  "id": "chatcmpl-517624b7-4304-95eb-8644-0957b61a8034"
+}

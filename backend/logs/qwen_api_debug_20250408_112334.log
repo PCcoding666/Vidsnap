@@ -1,0 +1,240 @@
+2025-04-08 11:24:56,439 - qwen_api_debug - INFO - ===== API请求开始 =====
+2025-04-08 11:24:56,440 - qwen_api_debug - INFO - 请求有效负载: {
+  "model": "qwen-vl-max",
+  "messages": [
+    {
+      "role": "system",
+      "content": [
+        {
+          "type": "text",
+          "text": "你是一位专业的视频分析师，善于从图像和音频转录中提取关键信息并生成摘要。请提供一个包含主要内容、关键点和结论的摘要。"
+        }
+      ]
+    },
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "image_url",
+          "image_url": {
+            "url": "https://storage.googleapis.com/yt_summerizer_seperate_frontend_backend/keyframes/f54b4490-cd27-469c-94e3-d54358f071db_6c910cf3-6f9c-40f3-b93e-4ebddc7ccf65_interval_0.00s.jpg"
+          }
+        },
+        {
+          "type": "image_url",
+          "image_url": {
+            "url": "https://storage.googleapis.com/yt_summerizer_seperate_frontend_backend/keyframes/21b1f6cb-22da-4c15-9604-f0449e9c9d99_eb2ec31e-d3d7-4cdf-b41c-a6e82b9b1a9d_interval_30.00s.jpg"
+          }
+        },
+        {
+          "type": "image_url",
+          "image_url": {
+            "url": "https://storage.googleapis.com/yt_summerizer_seperate_frontend_backend/keyframes/f2747b73-113a-4470-8093-fd5606162de9_81da1554-7a67-450f-a80c-5c00543745c3_interval_90.00s.jpg"
+          }
+        },
+        {
+          "type": "image_url",
+          "image_url": {
+            "url": "https://storage.googleapis.com/yt_summerizer_seperate_frontend_backend/keyframes/00b68e6a-83ac-4b80-a124-db65eaaf9b99_c4c169f5-3b7d-4988-bc6b-8a6136b3001b_interval_150.00s.jpg"
+          }
+        },
+        {
+          "type": "image_url",
+          "image_url": {
+            "url": "https://storage.googleapis.com/yt_summerizer_seperate_frontend_backend/keyframes/547142f6-a3bc-4fbe-bf8b-50765083989e_5c5590fa-0e86-438d-9717-b9346df1a3c6_interval_210.00s.jpg"
+          }
+        },
+        {
+          "type": "image_url",
+          "image_url": {
+            "url": "https://storage.googleapis.com/yt_summerizer_seperate_frontend_backend/keyframes/1733b356-131c-4410-ad93-19b34251faf9_d1596eff-af11-465f-ab79-1b7c9e8629cd_interval_270.00s.jpg"
+          }
+        },
+        {
+          "type": "image_url",
+          "image_url": {
+            "url": "https://storage.googleapis.com/yt_summerizer_seperate_frontend_backend/keyframes/5a1eede8-6f1c-475c-a1e0-0914edfa57b3_80e1f5bb-7db6-4343-92b4-0730d3bfca4c_interval_300.00s.jpg"
+          }
+        },
+        {
+          "type": "image_url",
+          "image_url": {
+            "url": "https://storage.googleapis.com/yt_summerizer_seperate_frontend_backend/keyframes/8325d89b-7f84-4a3c-9db7-d8aa7d1aa000_d2d1918d-44ed-4682-93cb-c6f2bb3b9da4_interval_360.00s.jpg"
+          }
+        },
+        {
+          "type": "image_url",
+          "image_url": {
+            "url": "https://storage.googleapis.com/yt_summerizer_seperate_frontend_backend/keyframes/a080ff7b-392b-48a9-993e-61ecb7046a20_e11ec48e-db8d-48c7-88f5-07a45e6e3cb4_interval_420.00s.jpg"
+          }
+        },
+        {
+          "type": "image_url",
+          "image_url": {
+            "url": "https://storage.googleapis.com/yt_summerizer_seperate_frontend_backend/keyframes/fb2036a9-c155-446c-962d-5d6b6d941c30_3dca1398-41a9-428a-86c8-31f8fa4c9d85_interval_480.00s.jpg"
+          }
+        },
+        {
+          "type": "image_url",
+          "image_url": {
+            "url": "https://storage.googleapis.com/yt_summerizer_seperate_frontend_backend/keyframes/61fd5649-ccb6-4219-b4f7-cba6258861dc_24713ed2-7a05-4ad3-8e36-df8aee8133ce_interval_540.00s.jpg"
+          }
+        },
+        {
+          "type": "text",
+          "text": "音频转录文本：\n哈喽大家好 欢迎回到区块链日报 现在呢是美国西部时间2025年 4月7号的早上6 43号 咱们先看一下过去24小时比特币以及加密货币市场变化的情况 那目前总的市值呢是2 43万亿美元 比昨天下降了7 64% 过去24小时成交量1850 2亿美元 比昨天的上涨了349 95% 好 我们看到比特币目前的价格75907 过去24小时下跌7 94% 以太坊1489 过去24小时下跌15 57% 好 那我们看到色罗纳101 17过去24小时下跌12 14% 好 狗狗币0 1385过去24小时下跌13 93% 好 咱们来看一下这个 资金方面的情况 那截止到目前过去24小时比特币净流出11亿美元 以太坊净流出2 89亿美元 色罗纳净流出1 16亿美元 好 狗狗币净流出5 180万美元 好 那咱们来看一下今天的清算的地图啊 清算地图的话 那由于这个价格的短时间之内继续下跌 那我们本身我昨天晚上看的时候 这个下方的多单并没有多少啊 大概是这样子一个位置 但是现在来看多单也开始多起来了 呃 我们看到上方的七天的图的话 上方是在6 依然是在85,000的地方啊 有一个非常明显的一个高点 那30天图的话 第一个高点是80,000 第二个高点依然是在啊88,000 那85,000的位置反而没有那么明显了 好 这是这个比特币 所有比特币的清算地图 然后现在他增加了一个这个hyper liquid的清算地图啊 也是非常明显啊 那他是在9万的地方 这是比特币啊 好 那我们来看一下这个清算热图 清算热图的话 那我们 昨天这这一波下跌呢 其实就是杀多头啊 这一放这一块的多头呢 几乎全部就杀光了 然后继续杀在这个地方继续杀多头有多少杀多少啊 那现在这个做多真的是有一点危险 目前来看 啊 好 那我们看到这个上方第一个高点8万点的地方 第二个高点是84,000 第三个是84,800 好 这个上方依然有很多的空单啊 现在做空的确实是赚了太多的了啊 好 那我们来看一下这个 今天的未平仓合约的数据 今天的未平仓合约合约的数据的是524亿美元啊 我们把它刷新一下509亿美元 509亿美元比昨天的就是大幅度的一个下降了啊 下降了十几亿啊 从柱上头也能看得出来 好 那咱们来看一下今天资讯方面内容 第一条信息是 高盛那他说 若经济真的陷入衰退 美联储明年恐降息200个基点 呃 那高盛调整了对美联储降息的预期 认为如果经济呢 真的衰退来临 那么美联储进一步放宽政策的风险的更高 那美高盛呢 现在预计美联储将在6月份开始一系列的降息 比之前预测的7月份要早 那作为预防性宽松周期的一部分 在假设美国避免衰退的基本情况下 那美联储将连续三次 25个基点降息 那是美联邦的这个 基金的利率的下降的3%到3.75%之间 那不过呢 高盛预计如果经济真的陷入衰退 美联储将采取更为激进的政策的反应 那明年呢 将降息约200个基点 考虑到经济衰退的可能性的增加 该机构采用的加权预测显示 2025年总共将降息 130个基点高于此前的105个基点 那截止到上周五的时候 把这一前景与市场当前市场的预期的基本一致 好 那如果说啊 真的陷入衰退了的话 那么你降息再多其实也是无济于事的啊 好 那接下来这个是奥特黑斯说 今日呢 陆续买入比特币并还会买入更多 那他说一整天的都在陆续买入比特币 并且还会买入更多 山寨币虽然跌到我们的 狙击区了 但我认为比特币占比将会持续下70%飙升 所以我们不会在山寨币里面大肆买入 记住美国唯一的解决方案就是印钞啊 呃 好吧 这个奥特黑斯最近的言论有点多啊 那我们看的有点应接不暇了 好 那摩登摩根士丹利那除非美国白宫或美联储出手 否则美股可能再跌8%啊 那我就再跌20% 我觉得都不稀奇啊 呃 因为现在的这个信号确实是让全球开始恐慌到了 那我们刚刚看到 全球的股市呢 也是啊 非常非常的惨的 刚刚我看到这个华尔街见闻有一篇文章说 那也是总结了啊 总结了这个亚洲的欧洲所有的股票的这个情况 确确实实非常的惨啊 呃 好 那我们看他说呃 如果说啊 标普500再下跌7%到8% 那要做好一个准备 那否则呢 这个或者是这个呃 就是除非啊 白宫放弃关税计划 或者是美联储释放宽松的信号 那二者呢 取其一 对不对 那他们在周一的时候给客户的报告中表示 该指数的下一个支撑位 那也就是买家入场的点位即将在目前是在4800 我觉得4800很快就到了啊啊4700 刚刚已经4800多点了 那他们补充到这一水平的估值可能提供了更好的支撑 该点位接近200周移动平均线 这是技术 趋势的一个长期的指标 那上周四的时候 摩根士斥胆力曾经将5100点作为关键点位 但该行周一更新了啊 这个支撑位啊 这个支撑位啊 呃 真的恐慌情绪达到一定程度之后 所有的支撑都是无效的啊 好 那接下来我们看美联储紧急降息的预期攀升啊 只是预期对不对 那如果说没有动作的话 那还是没有用的 对吧 那周一的时候对货币政策最敏感的美国两年期的国债收益率下降了22%啊 下降了22个基点 达到了3.43% 那自特朗普宣布征税以来 美国两年期的国债收益率总共下跌了约50个基点 那其实这个是 呃 应该是某种程度上能看得出来 假戏的一种预期 只是预期啊 那美联储没有动作的话 它也是没有用的啊 好的 接下来是 呃 特朗普说这个美联储应该降息啊 每一次他都在喊应该降息啊 这个都是说比特币只有作为 成为日常支付手段才能避免走向失败 呃 那么他在这个21in21的博客中表示 那比特币虽然发展至今 但仍可能失败 原因呢 在于他可能失去最初啊 这个解决最初设计问题的相关性 那刀子认为比特币若 想在日常生活中保持重要性就必须成为一种支付手段 否则人们只会在紧急或变现时才想起他 他强调说支付是推动比特币采用 避免其失败的关键因素 那比特币支持者需打道 打造这个简单应用的支付体验 那实现规模化和快速化与Visa和万事打卡 网络竞争啊 这个才能 避免导致他的失败啊 这是他看到的一点啊 其实我觉得 呃 支不支付的啊 不是一个硬性的一个 需求 一个一个一个一个这个必要的一个手一个手段吧 那我觉得这个处置也是可以让比特币成功的啊 好 那接下来是strategy 第一季度的数字资产未实现损失59.1亿美元 比特币策略是本公司面临多重的风险 那这是上市公司他的一个披露 那 这个我们的比特币策略是我们面临多重风险啊 这是呃 有可能就是承认那继续下跌 好 那接下来这个是 截止到3月31号 未偿还的债务是82.2亿美元啊 这个债务还是蛮低的 跟他的持有的比特币的市值相比啊 我觉得还是很低很低的 所以说他的杠杆杠杆率的是不是特别高的 好 那美国官员是时候是适度的缓和关税的措辞 那特朗普将决定贸易协议是否足够优越 当然不够优越了 对不对 呃 这个时候呢 昨天看到有很多大V在分享一个段子说 呃 关税呢就是 哎 你看到你看到这个邻居呢打老婆 那作为一种抗议的手段 你于是呢 把自己的老婆也打了一顿啊 其实我觉得 这个这个比喻呢还是比较好玩的啊 但是 真正的情况可能还是不太一样啊 那美国总统啊 正在加倍投资于他知道的有效的策略 那如果贸易伙伴是能够提供真正优质的交易 那美国总统川普呢会 倾听他们的意见 那川普呢指定贸易协议是否足够优越 呃 周末的时候与世界各国的领导人进行了交谈啊 交谈没有用啊 我们现在看到只是一些小的国家开始跪下了 但是大的国家还是硬刚的啊 好 那美联储观察家 警告鲍威尔已悄悄转阴 哦 这个是不好的一个信息啊 呃 周五的时候释放鹰派的信号啊 呃 好吧 这个这个我们先不看他了 我觉得先呃 先观察一下市场吧 好的 贝德菲尼克斯 比特币或进一步与股票脱钩 并重新夺回全球资产风险的领导地位啊 呃 这个看看也就行了啊 好 那接下来这格拉斯诺的比特币限于7万4的位置呢 奇稳接下来的跌势或略有放缓 好 那以上的就是今天视频所有内容 我们明天再见 拜拜\n\n视频元数据:\n\n\n视频元数据：\ntitle: 区块链日报（437）比特币到底了吗？\nchannel: 区块链日报Blockchain-Dailynews\nupload_date: 20250407\nduration: 586\ncategories: ['Howto & Style']\ntags: ['比特币', '狗狗币', '区块链日报', '阿力', '區塊鏈日報']\ndescription: 区块链日报（437）比特币到底了吗？ #比特币\n\n区块链日报给每一位华语加密货币投资者提供最及时的投资资讯，做华语区最好的新闻资讯分析，为你的投资指明方向。这是真正的区块链日报，每日更新，感谢大家订阅！\n更新时间：东八区每天晚上10点，美西时间早上7点（夏令时）。\n欢迎订阅！\n\n力哥会员加入方式：\n免费电报群找力哥本人\n免费电报群：https://t.me/alexbtcdogeeth\n\n兄弟们，用我的链接注册deepcoin，免KYC认证，68%返佣比例，秒杀市面所有交易所！https://s.deepcoin.com/shcahff\n\nledger硬件钱包：https://shop.ledger.com/?r=13c1600d02f7\n我的联系方式：alexzhinusa@gmail.com\n我的推特账户：https://x.com/alex_bitcoin1m\n\nBitget注册链接：https://partner.bitget.com/bg/Q5Z4U7\nBybit注册链接（入金100U送30U）：https://partner.bybit.com/b/79691\n\nledger硬件钱包：https://shop.ledger.com/?r=13c1600d02f7\n\nRobinhood开户抽取免费股票：https://join.robinhood.com/binz71\n狗狗币打赏：DADqj4EkEnfrNZ7ps3ViYheuYzpUgmmbUu\n柴犬（屎）币打赏：0x8E50214E7E8afe2536849D68c5916A1cff84eF95\n\n#比特币\n#狗狗币\n#以太坊\n#比特幣 #比特币 #以太幣 #btc #eth #虛擬貨幣 #加密貨幣 #bitcoin  #大餅 #技術分析 #技术分析 #比特幣分析 #以太幣分析 #道氏理論 #波浪理論 #威克夫操盤法 #亞當理論 #斐波拉契 #斐波那契  #諧波形態 #威克夫 #Wyckoff #江恩 #海龜交易法 #壓力支撐  #doge #狗狗幣 #狗幣 #艾略特波浪理论 #利弗莫爾  #李佛摩尔  #数字货币  #數字貨幣 #區塊鏈 #区块链 #币安 #Binance #bybit #幣安 #合約#美聯儲 #加息 #美股 #幣圈 #BTC#ETH #DOGE #LTC #XRP #比特幣交易 #... (描述已截断)\n\n\n请根据以上信息，生成一份语言为 'zh'、粒度为 'medium' 的视频摘要。\n请使用 Markdown 格式输出摘要。"
+        }
+      ]
+    }
+  ]
+}
+2025-04-08 11:24:56,441 - qwen_api_debug - INFO - 请求头: {
+  "Authorization": "Bearer sk-e...0281",
+  "Content-Type": "application/json"
+}
+2025-04-08 11:25:19,244 - qwen_api_debug - INFO - API端点: https://dashscope-intl.aliyuncs.com/compatible-mode/v1/chat/completions
+2025-04-08 11:25:19,244 - qwen_api_debug - INFO - 状态码: 200
+2025-04-08 11:25:19,244 - qwen_api_debug - INFO - 响应时间: 22.80 秒
+2025-04-08 11:25:19,245 - qwen_api_debug - INFO - 响应内容: {
+  "choices": [
+    {
+      "message": {
+        "content": "## 区块链日报（437）比特币到底了吗？\n\n### 摘要\n\n区块链日报在2025年4月7日的视频中，对过去24小时比特币及加密货币市场的变化进行了分析。以下是主要内容和关键点：\n\n1. **市场概况**\n   - 总市值：2.43万亿美元，比昨天下降了7.64%。\n   - 24小时成交量：1850.2亿美元，比昨天上涨了349.95%。\n\n2. **主要加密货币价格变化**\n   - 比特币：目前价格为75,907美元，过去24小时下跌7.94%。\n   - 以太坊：目前价格为1,489美元，过去24小时下跌15.57%。\n   - 色罗纳：目前价格为101.17美元，过去24小时下跌12.14%。\n   - 狗狗币：目前价格为0.1385美元，过去24小时下跌13.93%。\n\n3. **资金流动情况**\n   - 比特币净流出11亿美元。\n   - 以太坊净流出2.89亿美元。\n   - 色罗纳净流出1.16亿美元。\n   - 狗狗币净流出518万美元。\n\n4. **清算地图与热图**\n   - 清算地图显示，由于价格短时间内的继续下跌，下方多单被大量清算。\n   - 清算热图显示，最近一波下跌杀光了大部分多头，并继续在低位杀多头。\n\n5. **未平仓合约数据**\n   - 今天的未平仓合约数据为509亿美元，比昨天大幅下降。\n\n6. **重要新闻**\n   - 高盛预计若经济陷入衰退，美联储明年可能降息200个基点。\n   - 特朗普表示美联储应降息。\n   - 摩根士丹利认为除非白宫或美联储出手，否则美股可能再跌8%。\n   - Jack Dorsey认为比特币只有成为日常支付手段才能避免走向失败。\n   - Strategy第一季度数字资产未实现损失59.1亿美元。\n   - 截至3月31日，未偿还债务为82.2亿美元。\n\n### 结论\n当前市场情绪较为悲观，比特币和其他主要加密货币价格均出现显著下跌。高盛等机构对未来经济形势持谨慎态度，建议投资者密切关注市场动态并做好风险管理。",
+        "role": "assistant"
+      },
+      "finish_reason": "stop",
+      "index": 0,
+      "logprobs": null
+    }
+  ],
+  "object": "chat.completion",
+  "usage": {
+    "prompt_tokens": 16356,
+    "completion_tokens": 553,
+    "total_tokens": 16909
+  },
+  "created": 1744082719,
+  "system_fingerprint": null,
+  "model": "qwen-vl-max",
+  "id": "chatcmpl-703440df-02c9-9a36-a8a9-32c486cd5b13"
+}
+2025-04-08 11:28:41,747 - qwen_api_debug - INFO - ===== API请求开始 =====
+2025-04-08 11:28:41,748 - qwen_api_debug - INFO - 请求有效负载: {
+  "model": "qwen-vl-max",
+  "messages": [
+    {
+      "role": "system",
+      "content": [
+        {
+          "type": "text",
+          "text": "你是一位专业的视频分析师，善于从图像和音频转录中提取关键信息并生成摘要。请提供一个包含主要内容、关键点和结论的摘要。"
+        }
+      ]
+    },
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "image_url",
+          "image_url": {
+            "url": "https://storage.googleapis.com/yt_summerizer_seperate_frontend_backend/keyframes/6b3ea968-956b-42d6-a9de-0d5b5e3a2323_8fbe60e0-bb6e-45d0-a6be-5d127eccacdc_interval_0.00s.jpg"
+          }
+        },
+        {
+          "type": "image_url",
+          "image_url": {
+            "url": "https://storage.googleapis.com/yt_summerizer_seperate_frontend_backend/keyframes/2a86e15d-0ce1-4d03-afca-ad2c40c49144_acd38d7d-90c2-4a45-93c0-8f720a4ac5a4_interval_30.00s.jpg"
+          }
+        },
+        {
+          "type": "image_url",
+          "image_url": {
+            "url": "https://storage.googleapis.com/yt_summerizer_seperate_frontend_backend/keyframes/784542a4-0982-4f1e-b655-4ba3235a4200_67034100-ef56-4741-9867-2b6a3326dfbc_interval_90.00s.jpg"
+          }
+        },
+        {
+          "type": "image_url",
+          "image_url": {
+            "url": "https://storage.googleapis.com/yt_summerizer_seperate_frontend_backend/keyframes/63dd3509-8502-4931-b578-ea74e1d21143_ae70bb6c-017c-4dc5-869c-800fc8b8ceeb_interval_150.00s.jpg"
+          }
+        },
+        {
+          "type": "image_url",
+          "image_url": {
+            "url": "https://storage.googleapis.com/yt_summerizer_seperate_frontend_backend/keyframes/e7b4b41f-8008-4649-a725-accdca70a7cf_81b4a1c7-3563-44e5-8871-b72ca72a09ba_interval_210.00s.jpg"
+          }
+        },
+        {
+          "type": "image_url",
+          "image_url": {
+            "url": "https://storage.googleapis.com/yt_summerizer_seperate_frontend_backend/keyframes/cd8b6a3c-3194-4ef8-a45a-ee37601a8338_7ea23213-4fa3-468d-91a6-52b9da8b775a_interval_270.00s.jpg"
+          }
+        },
+        {
+          "type": "image_url",
+          "image_url": {
+            "url": "https://storage.googleapis.com/yt_summerizer_seperate_frontend_backend/keyframes/b0ff30f5-369b-4fce-8026-8b6b48b3696d_660dd76a-ca17-41d4-aa27-3d1d3eefbfe5_interval_330.00s.jpg"
+          }
+        },
+        {
+          "type": "image_url",
+          "image_url": {
+            "url": "https://storage.googleapis.com/yt_summerizer_seperate_frontend_backend/keyframes/907a20fb-6db3-4033-a9b2-cf0272721d5e_03c165d4-0180-4342-b769-5db39d5d3e58_interval_390.00s.jpg"
+          }
+        },
+        {
+          "type": "image_url",
+          "image_url": {
+            "url": "https://storage.googleapis.com/yt_summerizer_seperate_frontend_backend/keyframes/eff88c8f-1ccc-458b-9ce3-932fd6e475c1_38f144a5-9748-4e97-a71a-c7fa7b8a7f47_interval_450.00s.jpg"
+          }
+        },
+        {
+          "type": "image_url",
+          "image_url": {
+            "url": "https://storage.googleapis.com/yt_summerizer_seperate_frontend_backend/keyframes/4f6c6c6d-8a6c-457a-8218-c589e457854b_e4f92434-3fc1-4fcf-b3d6-394254f0f2e3_interval_510.00s.jpg"
+          }
+        },
+        {
+          "type": "image_url",
+          "image_url": {
+            "url": "https://storage.googleapis.com/yt_summerizer_seperate_frontend_backend/keyframes/582a28a6-ad23-45c5-a7ca-b7987e0b8953_3134bc98-673c-431d-a964-29f18bab859f_interval_570.00s.jpg"
+          }
+        },
+        {
+          "type": "text",
+          "text": "音频转录文本：\n每個人都在談論人工智能,人工智能是另一個熱門話題 它們是一樣的東西,還是不一樣的東西,如果是的話,那些差異是什麼? 深入學習也是另一個話題 我其實做了一個視頻關於這三個,人工智能,人工智能,深入學習 談論了它們的適合性 我讀了很多留言,我想要回答一些最常被問到的問題 以清除一些謬誤和誤解 此外,那段視頻拍攝以來發生了另一件事 那就是這項產生人工智能的爆炸 比如說,大語言模式和聊天機 似乎在全世界都受到影響,我們看到它們到處都在 非常有趣的技術 還有一些像是深入偽造的東西 這些都在人工智能的範圍之內 但是它們如何相配? 它們如何相連? 我們將在這段視頻中看一看 並嘗試解釋這些技術的相似性 以及我們如何使用它們 首先,我會提供一些宣傳 我必須將一些概念簡單化 以避免讓這段視頻延期一星期 所以,對於在這個領域的深入專家 我先向你們道歉 但我們將嘗試將這件事簡單化 並且將涵蓋一些總結 首先,我們開始從人工智能開始 人工智能基本上是 用電腦模擬 人工智能與或超越人類的東西 什麼是智能? 這可能是很多不同的東西 但我們通常認為它是 能夠學習、理解和理論 類似的東西 所以,這就是我們嘗試做的 在人工智能的廣泛領域 如果我們看一看人工智能的時間表 它實際上是在這個時間點開始 在那些年代,它非常早期 很多人甚至沒有聽過 基本上它是一項研究項目 但我可以告訴你 作為一名大學畢業生 對我來說,那是在那些年代 我們在做人工智能工作 事實上,我們會使用程式語言 例如Lisp或Prolog 這些東西 是後來的專家系統 所成為的先鋒 這是一種技術 再次,一些這些東西在過去存在 但那是當它實際上 成為了一個關鍵的力量 並且變得更受歡迎 所以,1980年代的專家系統 也許是90年代 再次,我們使用了這些技術 所有這些 都是我們在 在我們接觸到的 下一個話題之前做的 那就是機器學習的領域 機器學習 正如它的名字所指 機器學習 我不需要程式化 我給它很多資訊 它會觀察到一些東西 例如,如果我開始做這個 如果我給你這個 然後要你預測 接下來會有什麼東西 你可能會有 你可能不會有 你會有極少數的訓練資料 來基於這個 但如果我給你一個 然後要你預測 接下來會發生什麼 你可能會說這個 然後你會說這是這個 然後你會覺得你都搞定了 然後你會看到這個 然後突然間 我給你一個 然後給你一個彎彎彎彎的球 所以,這個 然後也許它會變成這個 所以,機器學習的領域 非常擅長在看圖標 和在數據中發現圖標 你給它更多的訓練資料 它可以更有信心地預測 所以預測是機器學習 特別擅長的一件事 另一件事是 像這樣的圖標 然後說 噢,這個不屬於 它看起來不像其他東西 因為系統壞了 所以,這個在私人安全方面 是特別有用的 在我工作的領域 因為我們在尋找圖標 我們在尋找使用者 在使用系統的方式 使用方式 或是不太常見的方式 所以,這個技術 機器學習是特別有用的 而機器學習 實際上是在這個時間點 變得更受歡迎 在2010年 再說一遍 我當時是大學生 當時是大學生 我們在做這種東西 我們從來沒有討論過機器學習 它可能存在 但它並沒有 達到人們的熱愛 但這個技術 在過去幾十年 變得非常成熟 現在它成為了 我們將來做的很多事情的基礎 下一層 我們的Venn圖表 涉及深入學習 深入學習 意味著 深入學習 我們使用的東西 叫做自然網絡 自然網絡 是我們在電腦裡 模擬和模仿 人類的智慧 至少我們明白 人類的智慧 它叫深入 因為我們有多層 這些自然網絡 有趣的是 它們會模擬 智慧的運作 但是 我不知道你有沒有注意到 人類的智慧 有些不可預測 你把某些東西放進去 你不會總是得到同樣的東西 深入學習是同樣的 在某些情況下 我們並不能完全理解 為什麼我們得到的結果 因為有這麼多層 到自然網絡 很難分辨 完全理解 但是這變成了 非常重要的一部分 非常重要的進步 這也達到了 2010年時的一些人氣 我們仍然使用它 為基礎 我們的下一個AI領域 最近的進步 在智慧的領域 都在這個領域 AI的生產領域 我現在要介紹一個詞語 你可能不熟悉 就是基礎模式 基礎模式是我們得到的 一些這些東西 例如 一個基礎模式的例子 是一個大語言模式 這是我們使用語言 來模擬它 我們在這個技術中 做出預測 如果我看到某些詞語 我可以預測 下一個詞語會是什麼 我會過於簡單 為了簡單 想像一下 這就像自動完成 當你開始輸入一些東西 然後它預測下一個詞語 但在這個情況下 大語言模式 它們並不預測下一個詞語 它們預測下一個句子 下一個句子 下一個整篇文章 所以這些東西 能夠做出 非常奇妙的速度 我們稱呼這些技術為 生產性 因為它們在生產新內容 有些人其實 認為生產性AI 並不是真正的生產性 這些技術 只是在複製 存在的資訊 並將它們放在不同的形式 讓我給你一個例子 如果我們以音樂為例 每個音符 都已經被創造了 所以在某種意義上 每首歌都是一個重組 某種其他複製 所有已經存在的音符 並將它們放在不同的系列 我們並不是說 新的音樂不存在 人們還在創作 創造新的歌曲 從存在的資訊 我會說生產性AI是相似的 這是一個類似的例子 所以有些不完美 但是你能夠理解 實際上新內容 可以從這些內容中生產 還有很多不同的形式 它們都可以使用 其他類型的模型 包括音樂模型 視訊模型 等等 實際上我們可以使用這些 來創造深層偽造 深層偽造 是例子 我們可以 例如一個人的聲音 然後重新創造 然後讓它看起來 像是那個人說了一些 他從來沒有說過的話 這是很有用的 在娛樂的情況下 在對比的情況下 之類的 或是如果有人失去聲音 你就可以捕捉他們的聲音 然後他們能夠輸入 然後你能夠聽到 他們的聲音 但是也有很多例子 這個東西可以被侵犯 聊天機 再次來自這個空間 深層偽造 來自這個空間 但它們都是 AI的生產 以及這些基礎模型的一部分 這又是一個 讓我們所有人 關注AI的原因 生產新內容的可能性 或者在某些情況下 總結出現的內容 並給予我們 某些規格和管理性的東西 這就是讓所有人關注到的 這就是聊天機 和所有這些東西的來源 在早期 AI的採用 開始順利地開始 很多人甚至不知道它存在 如果它存在 它總是看起來 有五到十年 但後來 機器學習 深層學習 和其他類似的東西 出現了 我們開始看到一些升級 然後基礎模型 GEN-AI 和光影出現了 這些基礎模型 是改變了生產曲線 現在我們看到 AI在所有地方都在生產 我們需要了解 它在哪裡 它適用在哪裡 以便確保我們 從所有這些技術中 獲得益處 如果您喜歡這個視頻 想看到更多 請點贊和訂閱 如果您有任何疑問 或想分享您的想法 關於這個話題 請留言 由 Amara.org 社群提供的字幕\n\n视频元数据:\n\n\n视频元数据：\ntitle: AI, Machine Learning, Deep Learning and Generative AI Explained\nchannel: IBM Technology\nupload_date: 20240805\nduration: 600\ncategories: ['Education']\ntags: ['IBM', 'IBM Cloud', 'AI', 'MachineLearning', 'DeepLearning', 'GenerativeAI', 'GenAI', 'Gen AI', 'LargeLanguageModels', 'LLMs', 'Deepfakes', 'Deep Fakes', 'TechExplained', 'ArtificialIntelligence', 'Artificial Intelligence', 'ML', 'DL', 'AIExplained', 'TechTrends', 'DataScience', 'NeuralNetworks', 'Chatbots', 'FutureOfAI', 'TechSimplified']\ndescription: Want to learn about AI agents and assistants? Register for Virtual Agents Day here → https://ibm.biz/BdaAVa\nWant to play with the technology yourself? Explore our interactive demo → https://ibm.biz/BdKSer\n\nJoin Jeff Crume as he dives into the distinctions between Artificial Intelligence (AI), Machine Learning (ML), Deep Learning (DL), and Foundation Models and how these technologies have evolved over time. He also explores the latest advancements in Generative AI, including large language models, chatbots, and deepfakes - and clarifies common misconceptions, simplifies complex concepts, and discusses the impact these technologies have on various fields.\n\nAI news moves fast. Sign up for a monthly newsletter for AI updates from IBM → https://ibm.biz/BdKSei\n\n\n请根据以上信息，生成一份语言为 'zh'、粒度为 'medium' 的视频摘要。\n请使用 Markdown 格式输出摘要。"
+        }
+      ]
+    }
+  ]
+}
+2025-04-08 11:28:41,748 - qwen_api_debug - INFO - 请求头: {
+  "Authorization": "Bearer sk-e...0281",
+  "Content-Type": "application/json"
+}
+2025-04-08 11:28:57,061 - qwen_api_debug - INFO - API端点: https://dashscope-intl.aliyuncs.com/compatible-mode/v1/chat/completions
+2025-04-08 11:28:57,061 - qwen_api_debug - INFO - 状态码: 200
+2025-04-08 11:28:57,062 - qwen_api_debug - INFO - 响应时间: 15.31 秒
+2025-04-08 11:28:57,062 - qwen_api_debug - INFO - 响应内容: {
+  "choices": [
+    {
+      "message": {
+        "content": "### 视频摘要\n\n#### 主要内容\n这段视频详细解释了人工智能（AI）、机器学习（ML）、深度学习（DL）和生成式人工智能（Generative AI）之间的区别及其发展。以下是主要内容：\n\n1. **人工智能 (AI)**\n   - 定义：用计算机模拟人类智能。\n   - 早期阶段：20世纪50年代，当时是研究项目。\n\n2. **机器学习 (ML)**\n   - 定义：通过大量数据让计算机自动学习。\n   - 发展阶段：2010年左右开始流行。\n\n3. **深度学习 (DL)**\n   - 定义：使用神经网络进行复杂任务的学习。\n   - 发展阶段：2010年左右开始流行。\n\n4. **生成式人工智能 (Generative AI)**\n   - 定义：能够生成新内容的AI技术。\n   - 示例：大语言模型、聊天机器人、深度伪造等。\n\n#### 关键点\n- **时间线**：\n  - 20世纪50年代：AI起步。\n  - 2010年：ML和DL开始流行。\n  - 最近几年：Generative AI兴起。\n\n- **技术应用**：\n  - ML：预测和分类。\n  - DL：图像识别和自然语言处理。\n  - Generative AI：生成文本、音乐、视频等。\n\n- **影响**：\n  - 生产新内容的能力。\n  - 在娱乐、医疗、教育等多个领域的应用。\n\n#### 结论\n- AI、ML、DL 和 Generative AI 是相互关联但又有所区别的技术。\n- 这些技术的发展对各个领域产生了深远的影响。\n- 未来，这些技术将继续推动创新和发展。",
+        "role": "assistant"
+      },
+      "finish_reason": "stop",
+      "index": 0,
+      "logprobs": null
+    }
+  ],
+  "object": "chat.completion",
+  "usage": {
+    "prompt_tokens": 15617,
+    "completion_tokens": 363,
+    "total_tokens": 15980
+  },
+  "created": 1744082937,
+  "system_fingerprint": null,
+  "model": "qwen-vl-max",
+  "id": "chatcmpl-2507cb93-b89b-94b8-b80b-afb4dcd688b0"
+}
