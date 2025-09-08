@@ -1,0 +1,27 @@
+# 阿里云视频分析平台依赖包
+# 更新版本：使用OpenAI Whisper替代阿里云语音服务
+
+# Web界面
+gradio>=4.0.0
+
+# 视频处理 
+yt-dlp>=2023.10.13
+ffmpeg-python>=0.2.0
+
+# 云存储服务
+oss2>=2.18.0
+
+# AI服务
+openai>=1.0.0  # OpenAI Whisper语音识别
+
+# 基础工具
+requests>=2.31.0
+numpy>=1.24.0
+Pillow>=10.0.0
+
+# 环境变量管理
+python-dotenv>=1.0.0
+
+# 可选：本地fallback（如果OpenAI服务不可用）
+# SpeechRecognition>=3.10.0
+# pydub>=0.25.1

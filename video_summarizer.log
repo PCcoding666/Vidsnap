@@ -1,0 +1,7 @@
+2025-09-08 23:31:20,215 - simple_video_service - INFO - Initialized SimpleVideoService with temp dir: /var/folders/2b/y40mjr4136q28vlkbjl3jpym0000gn/T/simple_video_service
+2025-09-08 23:31:20,215 - simple_speech_service - WARNING - OpenAI API key not found. Set OPENAI_API_KEY environment variable.
+2025-09-08 23:31:20,218 - simple_speech_service - INFO - LocalSpeechService initialized successfully
+2025-09-08 23:31:20,218 - simple_llm_service - WARNING - No LLM API key found. Set OPENAI_API_KEY or QWEN_API_KEY/DASHSCOPE_API_KEY
+2025-09-08 23:31:20,218 - simple_speech_service - INFO - Using local speech service as fallback
+2025-09-08 23:31:20,218 - video_processing_pipeline - INFO - Pipeline initialized. Services status: {'video': True, 'speech': True, 'llm': False}
+2025-09-08 23:31:22,451 - httpx - INFO - HTTP Request: GET https://api.gradio.app/pkg-version "HTTP/1.1 200 OK"
