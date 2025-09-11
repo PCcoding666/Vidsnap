@@ -15,6 +15,15 @@ class TranscriptSegment:
 
 
 @dataclass
+class TranscriptSegmentMetadata:
+    """转录段落元数据"""
+    text: str
+    start_time: float
+    end_time: float
+    confidence: float
+
+
+@dataclass
 class TranscriptMetadata:
     """音频转录元数据"""
     oss_audio_url: str

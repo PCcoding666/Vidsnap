@@ -13,7 +13,7 @@ from pathlib import Path
 
 from ..core.logging import logger
 from ..models.video import VideoInfo
-from ..models.analysis import KeyframeMetadata, TranscriptSegmentMetadata, TranscriptMetadata, VideoMetadata
+from ..models.analysis import KeyframeMetadata, TranscriptSegment, TranscriptMetadata, VideoMetadata
 from .video_service import video_service
 from .speech_service import speech_service
 from .oss_service import oss_service
@@ -172,7 +172,7 @@ class AliyunVideoProcessingPipeline:
             if transcript_result and transcript_result.segments:
                 transcript_segments = []
                 for segment in transcript_result.segments:
-                    segment_meta = TranscriptSegmentMetadata(
+                    segment_meta = TranscriptSegment(
                         text=segment.text,
                         start_time=segment.start_time,
                         end_time=segment.end_time,
