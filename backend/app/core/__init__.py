@@ -1,1 +1,1 @@
-# 核心配置包 
+# Core package
