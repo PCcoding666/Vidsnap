@@ -70,4 +70,5 @@ temp/
 *.tmp
 
 # Project specific
-.qoder/
+.qoder/__pycache__/
+*.log
