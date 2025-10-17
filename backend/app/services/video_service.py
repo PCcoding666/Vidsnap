@@ -32,11 +32,14 @@ class AliyunVideoService:
         self.temp_dir.mkdir(parents=True, exist_ok=True)
         logger.info(f"阿里云视频服务初始化完成，临时目录: {self.temp_dir}")
         
-        # yt-dlp下载选项
+        # yt-dlp下载选项 (2024 最新配置)
         self.ytdl_opts = {
+            # 基础配置
             'noplaylist': True,
             'retries': 10,
             'fragment_retries': 10,
+            'extractor_retries': 3,  # 提取器重试
+            'file_access_retries': 3,  # 文件访问重试
             'socket_timeout': 60,
             'nocheckcertificate': True,
             'ignoreerrors': False,
@@ -45,11 +48,32 @@ class AliyunVideoService:
             'no_warnings': False,
             'default_search': 'auto',
             'source_address': '0.0.0.0',
+            
+            # 绕过限制配置
+            'age_limit': None,
+            'geo_bypass': True,
+            'geo_bypass_country': 'US',
+            
+            # 2024 最新 HTTP 头配置
             'http_headers': {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-                'Accept-Language': 'en-us,en;q=0.5',
-                'Sec-Fetch-Mode': 'navigate',
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+                'Accept': '*/*',
+                'Accept-Language': 'en-US,en;q=0.9',
+                'Accept-Encoding': 'gzip, deflate, br',
+                'Sec-Fetch-Dest': 'empty',
+                'Sec-Fetch-Mode': 'cors',
+                'Sec-Fetch-Site': 'same-origin',
+                'Sec-Ch-Ua': '"Chromium";v="131", "Not_A Brand";v="24"',
+                'Sec-Ch-Ua-Mobile': '?0',
+                'Sec-Ch-Ua-Platform': '"Windows"',
+            },
+            
+            # YouTube 特定优化配置
+            'extractor_args': {
+                'youtube': {
+                    'player_client': ['android', 'web'],  # 多客户端降级策略
+                    'skip': ['hls'],  # 跳过某些流格式
+                }
             }
         }
     

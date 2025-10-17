@@ -15,8 +15,8 @@ class Settings:
     ALIYUN_OSS_ENDPOINT: str = os.getenv("ALIYUN_OSS_ENDPOINT", "")
     ALIYUN_OSS_BUCKET: str = os.getenv("ALIYUN_OSS_BUCKET", "")
     
-    # OpenAI配置
-    OPENAI_API_KEY: str = os.getenv("OPENAI_API_KEY", "")
+    # DashScope配置 (使用 QWEN_API_KEY)
+    QWEN_API_KEY: str = os.getenv("QWEN_API_KEY", "")
     
     # 应用配置
     TEMP_DIR: str = os.getenv("TEMP_DIR", "/tmp/video_analysis")
@@ -32,8 +32,8 @@ class Settings:
         ])
     
     @property
-    def openai_available(self) -> bool:
-        return bool(self.OPENAI_API_KEY)
+    def dashscope_available(self) -> bool:
+        return bool(self.QWEN_API_KEY)
 
 
 # 创建配置实例

@@ -78,8 +78,9 @@ class AliyunOSSService:
             with open(video_path, 'rb') as fileobj:
                 self.bucket.put_object(object_key, fileobj)
             
-            # 生成访问URL
-            url = f"https://{self.bucket_name}.{self.endpoint.replace('https://', '').replace('http://', '')}/{object_key}"
+            # 生成访问URL（处理endpoint格式）
+            clean_endpoint = self.endpoint.replace('https://', '').replace('http://', '')
+            url = f"https://{self.bucket_name}.{clean_endpoint}/{object_key}"
             logger.info(f"视频上传成功: {url}")
             
             return url
@@ -113,8 +114,9 @@ class AliyunOSSService:
             with open(audio_path, 'rb') as fileobj:
                 self.bucket.put_object(object_key, fileobj)
             
-            # 生成访问URL
-            url = f"https://{self.bucket_name}.{self.endpoint.replace('https://', '').replace('http://', '')}/{object_key}"
+            # 生成访问URL（处理endpoint格式）
+            clean_endpoint = self.endpoint.replace('https://', '').replace('http://', '')
+            url = f"https://{self.bucket_name}.{clean_endpoint}/{object_key}"
             logger.info(f"音频上传成功: {url}")
             
             return url
@@ -149,8 +151,9 @@ class AliyunOSSService:
             with open(image_path, 'rb') as fileobj:
                 self.bucket.put_object(object_key, fileobj)
             
-            # 生成访问URL
-            url = f"https://{self.bucket_name}.{self.endpoint.replace('https://', '').replace('http://', '')}/{object_key}"
+            # 生成访问URL（处理endpoint格式）
+            clean_endpoint = self.endpoint.replace('https://', '').replace('http://', '')
+            url = f"https://{self.bucket_name}.{clean_endpoint}/{object_key}"
             logger.debug(f"关键帧上传成功: {url}")
             
             return url
@@ -188,8 +191,9 @@ class AliyunOSSService:
             # 上传JSON内容
             self.bucket.put_object(object_key, metadata_json.encode('utf-8'))
             
-            # 生成访问URL
-            url = f"https://{self.bucket_name}.{self.endpoint.replace('https://', '').replace('http://', '')}/{object_key}"
+            # 生成访问URL（处理endpoint格式）
+            clean_endpoint = self.endpoint.replace('https://', '').replace('http://', '')
+            url = f"https://{self.bucket_name}.{clean_endpoint}/{object_key}"
             logger.info(f"Metadata上传成功: {url}")
             
             return url
