@@ -72,3 +72,4 @@ temp/
 # Project specific
 .qoder/__pycache__/
 *.log
+hf_space/
