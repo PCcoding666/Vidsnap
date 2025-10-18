@@ -3,6 +3,7 @@ Unit tests for the pipeline service.
 """
 import pytest
 import asyncio
+import os
 from unittest.mock import patch, MagicMock
 from datetime import datetime
 
@@ -14,6 +15,7 @@ from ..models.analysis import TranscriptSegment, TranscriptMetadata, KeyframeMet
 @pytest.fixture
 def pipeline_service():
     """Create a pipeline service instance for testing."""
+    # Create a new pipeline instance for each test to avoid shared state
     with patch.dict(os.environ, {
         "ALIYUN_ACCESS_KEY_ID": "test-key",
         "ALIYUN_ACCESS_KEY_SECRET": "test-secret",
@@ -21,7 +23,22 @@ def pipeline_service():
         "ALIYUN_OSS_BUCKET": "test-bucket",
         "OPENAI_API_KEY": "test-openai-key"
     }):
-        return AliyunVideoProcessingPipeline()
+        # Mock the service instances directly
+        with patch('app.services.pipeline_service.video_service') as mock_video_service, \
+             patch('app.services.pipeline_service.speech_service') as mock_speech_service, \
+             patch('app.services.pipeline_service.oss_service') as mock_oss_service:
+            
+            # Configure the mocks
+            mock_speech_service.is_available.return_value = True
+            mock_oss_service.is_available.return_value = True
+            
+            pipeline = AliyunVideoProcessingPipeline()
+            # Override the service instances with our mocks
+            pipeline.video_service = mock_video_service
+            pipeline.speech_service = mock_speech_service
+            pipeline.oss_service = mock_oss_service
+            
+            yield pipeline
 
 
 def test_create_empty_transcript(pipeline_service):
@@ -41,7 +58,11 @@ def test_create_empty_transcript(pipeline_service):
 
 def test_check_services_availability(pipeline_service):
     """Test checking service availability."""
-    # 由于我们mock了环境变量，所有服务都应该可用
+    # Configure the mocks to return True for availability
+    pipeline_service.speech_service.is_available.return_value = True
+    pipeline_service.oss_service.is_available.return_value = True
+    
+    # 由于我们mock了服务实例，所有服务都应该可用
     availability = pipeline_service.check_services_availability()
     
     assert isinstance(availability, dict)
