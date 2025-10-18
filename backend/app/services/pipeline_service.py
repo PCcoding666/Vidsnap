@@ -13,10 +13,17 @@ from pathlib import Path
 
 from ..core.logging import logger
 from ..models.video import VideoInfo
-from ..models.analysis import KeyframeMetadata, TranscriptSegmentMetadata, TranscriptMetadata, VideoMetadata
+from ..models.analysis import (
+    KeyframeMetadata, 
+    TranscriptSegmentMetadata, 
+    TranscriptMetadata, 
+    VideoMetadata,
+    VideoSummary
+)
 from .video_service import video_service
 from .speech_service import speech_service
 from .oss_service import oss_service
+from .llm_service import llm_service
 
 
 class AliyunVideoProcessingPipeline:
@@ -27,8 +34,9 @@ class AliyunVideoProcessingPipeline:
         self.video_service = video_service
         self.speech_service = speech_service
         self.oss_service = oss_service
+        self.llm_service = llm_service
         
-        logger.info("阿里云视频处理管道初始化完成（使用OpenAI语音服务）")
+        logger.info("阿里云视频处理管道初始化完成（使用 SenseVoice 语音服务 + Qwen VL 视频总结服务）")
     
     async def process_video(self, 
                           video_file: Optional[str] = None,
@@ -290,8 +298,172 @@ class AliyunVideoProcessingPipeline:
         return {
             "video_service": True,  # 视频服务总是可用
             "speech_service": self.speech_service.is_available(),
-            "oss_service": self.oss_service.is_available()
+            "oss_service": self.oss_service.is_available(),
+            "llm_service": self.llm_service.is_available()
         }
+    
+    async def process_video_with_summary(
+        self,
+        video_file: Optional[str] = None,
+        youtube_url: Optional[str] = None,
+        granularity: str = "standard",
+        progress_callback: Optional[callable] = None
+    ) -> Dict[str, Any]:
+        """
+        处理视频的完整流程（包含 LLM 总结）
+        
+        Args:
+            video_file: 上传的视频文件路径
+            youtube_url: YouTube视频URL
+            granularity: 总结粒度 ("brief", "standard", "detailed")
+            progress_callback: 进度回调函数
+            
+        Returns:
+            处理结果（包含视频总结）
+        """
+        if progress_callback:
+            progress_callback("开始处理视频...")
+        
+        try:
+            # 步骤1: 视频下载/上传和关键帧提取
+            if progress_callback:
+                progress_callback("处理视频文件和提取关键帧...")
+            
+            video_result = await self.video_service.process_video_dual_source(
+                video_file=video_file,
+                youtube_url=youtube_url
+            )
+            
+            if video_result["status"] != "success":
+                return video_result
+            
+            video_id = video_result["video_id"]
+            video_info = video_result["video_info"]
+            keyframes = video_result["keyframes"]
+            video_metadata = video_result["video_metadata"]
+            session_temp_dir = video_result["session_temp_dir"]
+            
+            # 确定视频文件路径
+            if youtube_url:
+                # 查找下载的视频文件
+                session_path = Path(session_temp_dir)
+                video_path = None
+                for file_path in session_path.iterdir():
+                    if file_path.suffix.lower() in ['.mp4', '.avi', '.mov', '.mkv']:
+                        video_path = str(file_path)
+                        break
+            else:
+                video_path = video_file
+            
+            if not video_path:
+                return {
+                    "status": "error",
+                    "error": "找不到视频文件用于音频提取",
+                    "video_id": video_id
+                }
+            
+            # 步骤2: 并行处理音频转录
+            if progress_callback:
+                progress_callback("提取音频并进行转录...")
+            
+            # 启动音频转录任务
+            audio_task = asyncio.create_task(
+                self.speech_service.extract_and_transcribe_audio(video_path, video_id)
+            )
+            
+            # 等待音频转录完成
+            transcript_result = await audio_task
+            
+            if not transcript_result:
+                logger.warning("音频转录失败，继续处理其他部分")
+                transcript_result = self._create_empty_transcript()
+            
+            # 步骤3: 生成统一metadata
+            if progress_callback:
+                progress_callback("生成metadata...")
+            
+            metadata = await self._generate_unified_metadata(
+                video_info, keyframes, transcript_result, video_metadata
+            )
+            
+            # 步骤4: 生成 LLM 视频总结
+            video_summary = None
+            if self.llm_service.is_available():
+                if progress_callback:
+                    progress_callback("生成视频 AI 总结...")
+                
+                try:
+                    video_summary = await self.llm_service.generate_video_summary(
+                        keyframes=metadata.keyframes,
+                        transcription=metadata.transcript,
+                        video_id=video_id,
+                        granularity=granularity
+                    )
+                    
+                    if video_summary:
+                        logger.info(f"LLM 视频总结生成成功: {len(video_summary.brief_summary)} 字符")
+                        
+                        # 将总结上传到 OSS
+                        from dataclasses import asdict
+                        summary_oss_url = await self.oss_service.upload_metadata(
+                            asdict(video_summary), 
+                            f"{video_id}_summary"
+                        )
+                        if summary_oss_url:
+                            logger.info(f"视频总结已上传到 OSS: {summary_oss_url}")
+                    else:
+                        logger.warning("LLM 视频总结生成失败")
+                        
+                except Exception as e:
+                    logger.exception(f"LLM 总结生成异常: {e}")
+            else:
+                logger.warning("LLM 服务不可用，跳过视频总结生成")
+            
+            # 步骤5: 上传metadata到OSS
+            if progress_callback:
+                progress_callback("上传metadata到OSS...")
+            
+            metadata_oss_url = await self.oss_service.upload_metadata(
+                asdict(metadata), video_id
+            )
+            
+            if metadata_oss_url:
+                metadata.metadata_oss_url = metadata_oss_url
+            
+            # 步骤6: 清理临时文件
+            if progress_callback:
+                progress_callback("清理临时文件...")
+            
+            self.video_service.cleanup_session(session_temp_dir)
+            
+            # 完成
+            if progress_callback:
+                progress_callback("处理完成！")
+            
+            logger.info(f"视频处理完成: {video_id}")
+            
+            return {
+                "status": "success",
+                "video_id": video_id,
+                "metadata": metadata,
+                "video_summary": video_summary,
+                "keyframes_count": len(keyframes),
+                "transcript_segments_count": len(transcript_result.segments) if transcript_result.segments else 0,
+                "summary_generated": video_summary is not None
+            }
+            
+        except Exception as e:
+            error_msg = f"视频处理管道异常: {str(e)}"
+            logger.exception(error_msg)
+            
+            if progress_callback:
+                progress_callback(f"处理失败: {error_msg}")
+            
+            return {
+                "status": "error",
+                "error": error_msg,
+                "video_id": video_id if 'video_id' in locals() else None
+            }
 
 
 # 创建单例实例

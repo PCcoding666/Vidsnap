@@ -38,6 +38,29 @@ app/tests/
 
 ## 测试脚本使用说明
 
+### 0. 完整端到端测试（推荐，包含 LLM 视频总结）
+
+运行完整的YouTube视频处理管道，包括下载、关键帧提取、OSS上传、SenseVoice转录和 Qwen3-VL-Flash 视频总结：
+
+```bash
+cd /Users/chengpeng/Downloads/MyProject/My_Youtube_Summarizer/backend
+./app/tests/run_complete_pipeline_test.sh
+```
+
+或者从 tests 目录直接运行：
+
+```bash
+cd /Users/chengpeng/Downloads/MyProject/My_Youtube_Summarizer/backend/app/tests
+./run_complete_pipeline_test.sh
+```
+
+**测试内容**：
+- ✅ YouTube 视频下载
+- ✅ 关键帧提取
+- ✅ OSS 上传
+- ✅ SenseVoice 音频转录
+- ✅ **Qwen3-VL-Flash 视频总结**（新增）
+
 ### 1. OSS Pipeline 测试
 
 运行完整的YouTube视频到OSS存储的端到端测试：
@@ -134,4 +157,32 @@ python3 -m pytest app/tests/test_oss_service.py -v
 
 ---
 
-*最后更新: 2025-10-17*
+*最后更新: 2025-10-18*
+
+## 新增功能 (2025-10-18)
+
+### ⭐ Qwen3-VL-Flash 多模态 LLM 视频总结
+
+已集成阿里云 Qwen3-VL-Flash 多模态大模型，实现智能视频总结功能。
+
+**相关文档**：
+- `QWEN3_VL_INTEGRATION_GUIDE.md`: 完整集成指南
+- `QWEN3_VL_QUICKSTART.md`: 5分钟快速开始
+- `IMPLEMENTATION_SUMMARY.md`: 实施总结文档
+
+**主要特性**：
+- 多模态输入：结合关键帧图像和转录文本
+- 多粒度总结：brief, standard, detailed
+- 时间线同步：总结内容与视频时间轴对齐
+- API 端点：`POST /analysis/summarize`
+
+**快速使用**：
+```bash
+# 运行完整测试
+./run_complete_pipeline_test.sh
+
+# API 调用
+curl -X POST "http://localhost:8000/analysis/summarize" \
+  -H "Content-Type: application/json" \
+  -d '{"youtube_url": "https://www.youtube.com/watch?v=xxx", "granularity": "standard"}'
+```

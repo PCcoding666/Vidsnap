@@ -7,7 +7,7 @@ from typing import Optional
 
 
 class Settings:
-    #阿里云访问密钥
+    # 阿里云访问密钥
     ALIYUN_ACCESS_KEY_ID: str = os.getenv("ALIYUN_ACCESS_KEY_ID", "")
     ALIYUN_ACCESS_KEY_SECRET: str = os.getenv("ALIYUN_ACCESS_KEY_SECRET", "")
     
@@ -18,8 +18,23 @@ class Settings:
     # DashScope配置 (使用 QWEN_API_KEY)
     QWEN_API_KEY: str = os.getenv("QWEN_API_KEY", "")
     
+    # 音频转录服务 API Key（优先级最高）
+    TRANSCRIPT_SERVICE_API_KEY: str = os.getenv("TRANSCRIPT_SERVICE_API_KEY", "")
+    
     # 应用配置
     TEMP_DIR: str = os.getenv("TEMP_DIR", "/tmp/video_analysis")
+    
+    @property
+    def DASHSCOPE_API_KEY(self) -> str:
+        """
+        将 QWEN_API_KEY 映射到 DASHSCOPE_API_KEY，以保持 SDK 兼容性
+        优先级: TRANSCRIPT_SERVICE_API_KEY > QWEN_API_KEY > 原始 DASHSCOPE_API_KEY
+        """
+        return (
+            self.TRANSCRIPT_SERVICE_API_KEY or 
+            self.QWEN_API_KEY or 
+            os.getenv("DASHSCOPE_API_KEY", "")
+        )
     
     # 服务可用性检查
     @property

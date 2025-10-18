@@ -14,6 +14,10 @@ class TranscriptSegment:
     confidence: float
 
 
+# 为了兼容性保留旧名称
+TranscriptSegmentMetadata = TranscriptSegment
+
+
 @dataclass
 class TranscriptMetadata:
     """音频转录元数据"""
@@ -30,6 +34,39 @@ class KeyframeMetadata:
     timestamp: float
     oss_image_url: str
     scene_description: str
+
+
+@dataclass
+class KeyframeDescription:
+    """单个关键帧的 LLM 分析描述"""
+    frame_id: int
+    timestamp: float
+    description: str
+    oss_image_url: str
+    confidence: float
+
+
+@dataclass
+class SummarySection:
+    """基于时间线的总结段落"""
+    start_time: float
+    end_time: float
+    title: str
+    content: str
+    keyframe_ids: List[int]  # 关联的关键帧ID
+
+
+@dataclass
+class VideoSummary:
+    """完整的视频总结（由 LLM 生成）"""
+    video_id: str
+    brief_summary: str  # 简要总结(1-2句话)
+    standard_summary: str  # 标准总结(段落级)
+    detailed_summary: Optional[str]  # 详细总结(分段详解)
+    sections: List[SummarySection]  # 时间线段落
+    keyframe_descriptions: List[KeyframeDescription]  # 关键帧描述
+    language: str  # 总结语言
+    generated_at: str  # 生成时间
 
 
 @dataclass

@@ -1,0 +1,556 @@
+"""
+阿里云 Qwen3-VL 多模态视频总结服务（双模型架构）
+- Qwen3-VL-Flash (qwen-vl-max): 用于关键帧图像分析
+- Qwen3-VL-Plus (qwen-vl-plus): 用于主视频总结生成
+支持基于关键帧图像和转录文本的智能总结
+"""
+import os
+import logging
+import asyncio
+from typing import Dict, Any, List, Optional
+from dataclasses import dataclass, asdict
+from datetime import datetime
+
+import dashscope
+from dashscope import MultiModalConversation
+
+from ..core.logging import logger
+from ..models.video import KeyframeInfo
+from ..models.analysis import TranscriptMetadata, KeyframeMetadata
+
+
+@dataclass
+class KeyframeDescription:
+    """单个关键帧的分析描述"""
+    frame_id: int
+    timestamp: float
+    description: str
+    oss_image_url: str
+    confidence: float
+
+
+@dataclass
+class SummarySection:
+    """基于时间线的总结段落"""
+    start_time: float
+    end_time: float
+    title: str
+    content: str
+    keyframe_ids: List[int]  # 关联的关键帧ID
+
+
+@dataclass
+class VideoSummary:
+    """完整的视频总结"""
+    video_id: str
+    brief_summary: str  # 简要总结(1-2句话)
+    standard_summary: str  # 标准总结(段落级)
+    detailed_summary: Optional[str]  # 详细总结(分段详解)
+    sections: List[SummarySection]  # 时间线段落
+    keyframe_descriptions: List[KeyframeDescription]  # 关键帧描述
+    language: str  # 总结语言
+    generated_at: str  # 生成时间
+
+
+class QwenVLService:
+    """
+    阿里云 Qwen3-VL 多模态服务（双模型架构）
+    - vision_model (qwen-vl-max): Qwen3-VL-Flash，专用于图像分析
+    - text_model (qwen-vl-plus): Qwen3-VL-Plus，专用于文本总结
+    """
+    
+    def __init__(self):
+        """初始化 Qwen VL 服务"""
+        # 从环境变量获取 API 密钥
+        # 优先使用 QWEN_API_KEY，与现有配置保持一致
+        self.api_key = (
+            os.getenv("QWEN_API_KEY") or 
+            os.getenv("DASHSCOPE_API_KEY")
+        )
+        
+        # 设置 DashScope API 密钥
+        if self.api_key:
+            os.environ["DASHSCOPE_API_KEY"] = self.api_key
+            dashscope.api_key = self.api_key
+            logger.info("Qwen VL 服务使用 QWEN_API_KEY 初始化")
+        
+        # 模型配置（在检查可用性之前定义）
+        self.vision_model = "qwen-vl-max"  # Qwen3-VL-Flash - 用于关键帧图像分析
+        self.text_model = "qwen-vl-plus"  # Qwen3-VL-Plus - 用于主视频总结
+        self.temperature = 0.7  # 创造性和准确性的平衡
+        self.max_tokens = 2000  # 最大输出长度
+        
+        # 检查可用性
+        if not self.api_key:
+            logger.warning("Qwen API 密钥未设置，请设置环境变量: QWEN_API_KEY 或 DASHSCOPE_API_KEY")
+            self.available = False
+        else:
+            self.available = True
+            logger.info(f"Qwen3-VL 服务初始化成功 - Vision: {self.vision_model}, Text: {self.text_model}")
+    
+    def is_available(self) -> bool:
+        """检查服务是否可用"""
+        return self.available and bool(self.api_key)
+    
+    async def analyze_keyframe(self, image_url: str, context: str = "", max_retries: int = 3) -> Optional[str]:
+        """
+        分析单个关键帧，生成描述（带重试机制）
+        
+        Args:
+            image_url: 关键帧的 OSS 图片 URL
+            context: 上下文信息(如转录文本)
+            max_retries: 最大重试次数
+            
+        Returns:
+            关键帧描述文本
+        """
+        if not self.is_available():
+            logger.error("Qwen VL 服务不可用")
+            return None
+        
+        # 构建提示词
+        prompt = "请详细描述这个视频关键帧中的内容，包括场景、人物、动作和关键元素。"
+        if context:
+            prompt += f"\n\n相关上下文：{context[:500]}"  # 限制上下文长度
+        
+        # 构建消息
+        messages = [
+            {
+                "role": "user",
+                "content": [
+                    {"image": image_url},
+                    {"text": prompt}
+                ]
+            }
+        ]
+        
+        # 重试机制
+        for attempt in range(max_retries):
+            try:
+                if attempt > 0:
+                    # 重试前等待，使用指数退避策略
+                    wait_time = 2 ** attempt  # 2秒, 4秒, 8秒...
+                    logger.warning(f"第 {attempt + 1}/{max_retries} 次重试，等待 {wait_time} 秒...")
+                    await asyncio.sleep(wait_time)
+                
+                logger.info(f"分析关键帧: {image_url}")
+                
+                # 调用 API (使用 asyncio 包装同步调用)
+                # 使用 vision_model (qwen-vl-max) 进行图像分析
+                response = await asyncio.to_thread(
+                    MultiModalConversation.call,
+                    model=self.vision_model,
+                    messages=messages,
+                    temperature=self.temperature,
+                    max_length=500  # 单个关键帧描述较短
+                )
+                
+                # 检查响应
+                if not response or response.status_code != 200:
+                    error_msg = f"API 调用失败: {response.message if response else 'No response'}"
+                    logger.error(error_msg)
+                    if attempt < max_retries - 1:
+                        continue  # 重试
+                    return None
+                
+                # 提取描述文本
+                if hasattr(response, 'output') and hasattr(response.output, 'choices'):
+                    content = response.output.choices[0].message.content
+                    
+                    # 处理 API 返回格式：可能是字符串或列表
+                    if isinstance(content, list):
+                        # 如果是列表格式 [{'text': '...'}]，提取第一个元素的 text
+                        description = content[0].get('text', '') if content else ''
+                    elif isinstance(content, str):
+                        description = content
+                    else:
+                        logger.error(f"API 返回了未知的 content 格式: {type(content)}")
+                        if attempt < max_retries - 1:
+                            continue  # 重试
+                        return None
+                    
+                    logger.info(f"关键帧分析成功，描述长度: {len(description)} 字符")
+                    logger.info(f"描述内容: {description[:200]}...")  # 只显示前200字符
+                    return description
+                else:
+                    logger.error("API 响应格式异常")
+                    if attempt < max_retries - 1:
+                        continue  # 重试
+                    return None
+                    
+            except Exception as e:
+                error_type = type(e).__name__
+                error_msg = str(e)
+                
+                # 判断是否为网络相关错误（可重试）
+                is_network_error = any([
+                    'SSL' in error_msg,
+                    'Connection' in error_msg,
+                    'Timeout' in error_msg,
+                    'Max retries' in error_msg
+                ])
+                
+                if is_network_error and attempt < max_retries - 1:
+                    logger.warning(f"网络错误 ({error_type}): {error_msg}，将重试...")
+                    continue  # 重试
+                else:
+                    logger.exception(f"关键帧分析失败 (尝试 {attempt + 1}/{max_retries}): {e}")
+                    if attempt == max_retries - 1:
+                        return None  # 最后一次尝试也失败，返回 None
+        
+        return None  # 所有重试都失败
+    
+    async def generate_video_summary(
+        self,
+        keyframes: List[KeyframeMetadata],
+        transcription: TranscriptMetadata,
+        video_id: str,
+        granularity: str = "standard"
+    ) -> Optional[VideoSummary]:
+        """
+        生成完整的视频总结
+        
+        Args:
+            keyframes: 关键帧列表
+            transcription: 转录元数据
+            video_id: 视频 ID
+            granularity: 总结粒度 ("brief", "standard", "detailed")
+            
+        Returns:
+            视频总结对象
+        """
+        if not self.is_available():
+            logger.error("Qwen VL 服务不可用")
+            return None
+        
+        try:
+            logger.info(f"开始生成视频总结，粒度: {granularity}")
+            
+            # 步骤 1: 分析关键帧
+            keyframe_descriptions = await self._analyze_keyframes_batch(
+                keyframes, transcription
+            )
+            
+            # 步骤 2: 生成不同粒度的总结
+            summaries = await self._generate_summaries_by_granularity(
+                keyframe_descriptions, transcription, granularity
+            )
+            
+            # 步骤 3: 生成时间线段落
+            sections = await self._generate_timeline_sections(
+                keyframe_descriptions, transcription
+            )
+            
+            # 构建最终总结对象
+            video_summary = VideoSummary(
+                video_id=video_id,
+                brief_summary=summaries.get("brief", ""),
+                standard_summary=summaries.get("standard", ""),
+                detailed_summary=summaries.get("detailed") if granularity == "detailed" else None,
+                sections=sections,
+                keyframe_descriptions=keyframe_descriptions,
+                language=transcription.language,
+                generated_at=datetime.now().isoformat()
+            )
+            
+            logger.info(f"视频总结生成成功，包含 {len(keyframe_descriptions)} 个关键帧描述和 {len(sections)} 个段落")
+            return video_summary
+            
+        except Exception as e:
+            logger.exception(f"生成视频总结失败: {e}")
+            return None
+    
+    async def _analyze_keyframes_batch(
+        self,
+        keyframes: List[KeyframeMetadata],
+        transcription: TranscriptMetadata
+    ) -> List[KeyframeDescription]:
+        """
+        批量分析关键帧
+        
+        Args:
+            keyframes: 关键帧列表
+            transcription: 转录数据，用于提供上下文
+            
+        Returns:
+            关键帧描述列表
+        """
+        keyframe_descriptions = []
+        
+        # 准备转录文本作为上下文
+        transcript_text = " ".join([seg.text for seg in transcription.segments]) if transcription.segments else ""
+        
+        # 限制并发数量，避免 API 限流
+        max_concurrent = 3
+        semaphore = asyncio.Semaphore(max_concurrent)
+        
+        async def analyze_single_keyframe(kf: KeyframeMetadata) -> Optional[KeyframeDescription]:
+            """分析单个关键帧"""
+            async with semaphore:
+                # 找到关键帧时间附近的转录文本作为上下文
+                context = self._get_context_for_timestamp(
+                    kf.timestamp, transcription.segments, window=30.0
+                )
+                
+                # 如果没有特定上下文，使用完整转录的前500字符
+                if not context and transcript_text:
+                    context = transcript_text[:500]
+                
+                description_text = await self.analyze_keyframe(kf.oss_image_url, context)
+                
+                if description_text:
+                    return KeyframeDescription(
+                        frame_id=kf.frame_id,
+                        timestamp=kf.timestamp,
+                        description=description_text,
+                        oss_image_url=kf.oss_image_url,
+                        confidence=0.85  # 固定置信度，可以后续优化
+                    )
+                return None
+        
+        # 并发分析所有关键帧
+        tasks = [analyze_single_keyframe(kf) for kf in keyframes]
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+        
+        # 过滤成功的结果
+        for result in results:
+            if isinstance(result, KeyframeDescription):
+                keyframe_descriptions.append(result)
+            elif isinstance(result, Exception):
+                logger.warning(f"关键帧分析失败: {result}")
+        
+        logger.info(f"成功分析 {len(keyframe_descriptions)}/{len(keyframes)} 个关键帧")
+        return keyframe_descriptions
+    
+    def _get_context_for_timestamp(
+        self,
+        timestamp: float,
+        segments: List,
+        window: float = 30.0
+    ) -> str:
+        """
+        获取时间戳附近的转录文本作为上下文
+        
+        Args:
+            timestamp: 时间戳(秒)
+            segments: 转录段落列表
+            window: 时间窗口(秒)，前后各取 window/2
+            
+        Returns:
+            上下文文本
+        """
+        context_segments = []
+        
+        for seg in segments:
+            # 检查段落是否在时间窗口内
+            if (seg.start_time <= timestamp + window/2 and 
+                seg.end_time >= timestamp - window/2):
+                context_segments.append(seg.text)
+        
+        return " ".join(context_segments)
+    
+    async def _generate_summaries_by_granularity(
+        self,
+        keyframe_descriptions: List[KeyframeDescription],
+        transcription: TranscriptMetadata,
+        granularity: str
+    ) -> Dict[str, str]:
+        """
+        根据粒度生成不同层级的总结
+        
+        Args:
+            keyframe_descriptions: 关键帧描述列表
+            transcription: 转录数据
+            granularity: 总结粒度
+            
+        Returns:
+            包含不同粒度总结的字典
+        """
+        # 准备素材
+        transcript_text = " ".join([seg.text for seg in transcription.segments]) if transcription.segments else ""
+        keyframe_texts = "\n".join([
+            f"[{kf.timestamp:.1f}s] {kf.description}" 
+            for kf in keyframe_descriptions[:10]  # 限制关键帧数量，避免上下文过长
+        ])
+        
+        summaries = {}
+        
+        # 生成简要总结 (总是生成)
+        brief_prompt = f"""基于以下视频内容，用1-2句话简要总结视频的主要内容：
+
+关键帧描述：
+{keyframe_texts[:500]}
+
+转录文本：
+{transcript_text[:500]}
+
+请用简洁的中文回答："""
+        
+        logger.info(f"简要总结 Prompt 长度: {len(brief_prompt)} 字符")
+        brief_summary = await self._call_text_generation(brief_prompt, max_tokens=200)
+        logger.info(f"简要总结生成结果: {brief_summary}")
+        logger.info(f"简要总结(repr): {repr(brief_summary)}")
+        summaries["brief"] = brief_summary or "视频内容总结生成失败"
+        
+        # 生成标准总结
+        if granularity in ["standard", "detailed"]:
+            standard_prompt = f"""基于以下视频内容，生成一个段落级别的标准总结（约100-200字）：
+
+关键帧描述：
+{keyframe_texts}
+
+转录文本：
+{transcript_text[:1000]}
+
+请包含：
+1. 视频的主题和目标
+2. 主要内容要点
+3. 关键信息或亮点
+
+请用清晰的中文段落形式回答："""
+            
+            standard_summary = await self._call_text_generation(standard_prompt, max_tokens=500)
+            summaries["standard"] = standard_summary or summaries["brief"]
+        else:
+            summaries["standard"] = summaries["brief"]
+        
+        # 生成详细总结
+        if granularity == "detailed":
+            detailed_prompt = f"""基于以下视频内容，生成一个详细的分段总结（约300-500字）：
+
+关键帧描述：
+{keyframe_texts}
+
+转录文本：
+{transcript_text[:2000]}
+
+请按照以下结构组织总结：
+1. 视频概述
+2. 主要内容分段解析
+3. 关键信息和要点
+4. 总结与结论
+
+请用详细的中文段落形式回答："""
+            
+            detailed_summary = await self._call_text_generation(detailed_prompt, max_tokens=1000)
+            summaries["detailed"] = detailed_summary or summaries["standard"]
+        
+        return summaries
+    
+    async def _call_text_generation(self, prompt: str, max_tokens: int = 500) -> Optional[str]:
+        """
+        调用文本生成 API
+        
+        Args:
+            prompt: 提示词
+            max_tokens: 最大 token 数
+            
+        Returns:
+            生成的文本
+        """
+        try:
+            messages = [
+                {
+                    "role": "user",
+                    "content": [{"text": prompt}]
+                }
+            ]
+            
+            logger.info(f"调用文本生成 API, max_tokens={max_tokens}, model={self.text_model}")
+            
+            # 使用 text_model (qwen-vl-plus) 进行文本总结
+            response = await asyncio.to_thread(
+                MultiModalConversation.call,
+                model=self.text_model,
+                messages=messages,
+                temperature=self.temperature,
+                max_length=max_tokens
+            )
+            
+            logger.info(f"API 响应状态: {response.status_code if response else 'None'}")
+            
+            if response and response.status_code == 200:
+                if hasattr(response, 'output') and hasattr(response.output, 'choices'):
+                    content = response.output.choices[0].message.content
+                    
+                    # 处理 API 返回格式：可能是字符串或列表
+                    if isinstance(content, list):
+                        # 如果是列表格式 [{'text': '...'}]，提取第一个元素的 text
+                        result = content[0].get('text', '') if content else ''
+                    elif isinstance(content, str):
+                        result = content
+                    else:
+                        logger.error(f"API 返回了未知的 content 格式: {type(content)}")
+                        return None
+                    
+                    logger.info(f"文本生成成功，长度: {len(result)} 字符")
+                    logger.info(f"生成内容: {result[:200]}...")  # 只显示前200字符
+                    return result
+            
+            logger.error(f"文本生成失败: {response.message if response else 'No response'}")
+            if response:
+                logger.error(f"Response details: {response}")
+            return None
+            
+        except Exception as e:
+            logger.exception(f"文本生成异常: {e}")
+            return None
+    
+    async def _generate_timeline_sections(
+        self,
+        keyframe_descriptions: List[KeyframeDescription],
+        transcription: TranscriptMetadata
+    ) -> List[SummarySection]:
+        """
+        生成基于时间线的总结段落
+        
+        Args:
+            keyframe_descriptions: 关键帧描述列表
+            transcription: 转录数据
+            
+        Returns:
+            时间线段落列表
+        """
+        sections = []
+        
+        if not keyframe_descriptions:
+            return sections
+        
+        # 根据关键帧将视频分段
+        # 简单策略：每个关键帧为一个段落的中心点
+        for i, kf in enumerate(keyframe_descriptions):
+            # 确定段落的时间范围
+            start_time = kf.timestamp - 15.0 if i > 0 else 0.0
+            end_time = kf.timestamp + 15.0
+            
+            # 如果有下一个关键帧，则以中点为界
+            if i < len(keyframe_descriptions) - 1:
+                next_kf = keyframe_descriptions[i + 1]
+                end_time = min(end_time, (kf.timestamp + next_kf.timestamp) / 2)
+            
+            # 获取该时间段的转录文本
+            section_text = self._get_context_for_timestamp(
+                kf.timestamp, transcription.segments, window=30.0
+            )
+            
+            # 生成段落标题和内容
+            title = f"片段 {i+1} ({kf.timestamp:.1f}s)"
+            content = f"{kf.description}"
+            if section_text:
+                content += f"\n\n对话内容：{section_text[:200]}"
+            
+            section = SummarySection(
+                start_time=max(0, start_time),
+                end_time=end_time,
+                title=title,
+                content=content,
+                keyframe_ids=[kf.frame_id]
+            )
+            sections.append(section)
+        
+        logger.info(f"生成 {len(sections)} 个时间线段落")
+        return sections
+
+
+# 创建单例实例
+llm_service = QwenVLService()
