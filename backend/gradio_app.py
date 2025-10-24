@@ -448,7 +448,7 @@ def create_gradio_interface():
         基于阿里云 AI 服务的智能视频分析平台，支持：
         - 🎥 YouTube 视频下载与本地文件上传
         - 🖼️ 关键帧自动提取
-        - 🎤 高精度音频转录（SenseVoice）
+        - 🎤 高精度音频转录（Paraformer-v2 + 说话人分离）
         - 🤖 智能内容总结（Qwen3-VL-Flash）
         """)
         
@@ -706,9 +706,9 @@ def create_gradio_interface():
         
         ### 🔧 技术支持
         
-        - SenseVoice: 高精度音频转录
-        - Qwen3-VL-Flash: 多模态视频理解
-        - 阿里云 OSS: 云端存储
+        - **Paraformer-v2**: 高精度音频转录 + 说话人分离
+        - **Qwen3-VL-Flash**: 多模态视频理解
+        - **阿里云 OSS**: 云端存储
         """)
     
     return app

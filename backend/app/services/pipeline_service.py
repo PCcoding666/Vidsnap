@@ -21,7 +21,7 @@ from ..models.analysis import (
     VideoSummary
 )
 from .video_service import video_service
-from .speech_service import speech_service
+from .paraformer_service import paraformer_service  # 使用 Paraformer-v2 替代 SenseVoice
 from .oss_service import oss_service
 from .llm_service import llm_service
 
@@ -32,11 +32,11 @@ class AliyunVideoProcessingPipeline:
     def __init__(self):
         """初始化处理管道"""
         self.video_service = video_service
-        self.speech_service = speech_service
+        self.speech_service = paraformer_service  # 使用 Paraformer-v2
         self.oss_service = oss_service
         self.llm_service = llm_service
         
-        logger.info("阿里云视频处理管道初始化完成（使用 SenseVoice 语音服务 + Qwen VL 视频总结服务）")
+        logger.info("阿里云视频处理管道初始化完成（使用 Paraformer-v2 语音服务 + Qwen VL 视频总结服务）")
     
     async def process_video(self, 
                           video_file: Optional[str] = None,
