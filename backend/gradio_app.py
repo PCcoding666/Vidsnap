@@ -18,8 +18,15 @@ import sys
 sys.path.insert(0, str(Path(__file__).parent))
 
 from app.services.pipeline_service import pipeline
+from app.services.chat_service import video_chat_service
 from app.core.logging import logger
 from app.models.analysis import VideoMetadata, VideoSummary
+
+
+# 全局变量：存储当前聊天会话
+current_chat_session_id: Optional[str] = None
+current_video_metadata: Optional[dict] = None
+current_video_id: Optional[str] = None
 
 
 class GradioProgressCallback:
@@ -212,6 +219,11 @@ async def process_video_async(
         
         progress_callback("✅ 全部完成！")
         
+        # 7. 保存 metadata 到全局变量（用于聊天）
+        global current_video_metadata, current_video_id
+        current_video_metadata = asdict(metadata)
+        current_video_id = video_id
+        
         return (
             brief_summary,
             standard_summary,
@@ -284,6 +296,118 @@ def update_input_visibility(input_mode: str):
             gr.update(visible=False),  # youtube_url
             gr.update(visible=True)    # video_file
         )
+
+
+def start_chat_session() -> Tuple[str, str]:
+    """
+    启动聊天会话
+    
+    Returns:
+        (chat_status, chat_info)
+    """
+    global current_chat_session_id, current_video_metadata, current_video_id
+    
+    if not current_video_id or not current_video_metadata:
+        return "❌ 错误", "请先处理视频后再启动聊天会话"
+    
+    try:
+        # 调用聊天服务启动会话
+        result = video_chat_service.start_session(
+            video_id=current_video_id,
+            metadata=current_video_metadata
+        )
+        
+        if result.get("status") == "success":
+            current_chat_session_id = result["session_id"]
+            
+            info = f"""✅ 聊天会话已启动！
+
+📋 会话信息:
+- Session ID: {current_chat_session_id[:16]}...
+- Video ID: {result['video_id']}
+- 关键帧数量: {result['keyframes_count']}
+- 转录片段数量: {result['transcript_segments_count']}
+
+💬 现在可以开始提问了！
+"""
+            return "✅ 会话已启动", info
+        else:
+            error = result.get("error", "未知错误")
+            return "❌ 启动失败", f"启动失败: {error}"
+    
+    except Exception as e:
+        logger.exception(f"启动聊天会话失败: {e}")
+        return "❌ 错误", f"错误: {str(e)}"
+
+
+def ask_question(question: str, history: List[Tuple[str, str]]) -> Tuple[List[Tuple[str, str]], str]:
+    """
+    在聊天会话中提问
+    
+    Args:
+        question: 用户问题
+        history: 对话历史
+        
+    Returns:
+        (更新后的对话历史, 引用信息)
+    """
+    global current_chat_session_id
+    
+    if not current_chat_session_id:
+        return history, "❌ 错误: 请先启动聊天会话"
+    
+    if not question or not question.strip():
+        return history, "❌ 错误: 请输入问题"
+    
+    try:
+        # 异步调用聊天服务
+        result = asyncio.run(
+            video_chat_service.ask_question(
+                session_id=current_chat_session_id,
+                question=question.strip(),
+                top_k=5,
+                auto_keyframes=False  # 禁用自动关键帧，避免 OSS URL 问题
+            )
+        )
+        
+        if result.get("status") == "success":
+            answer = result["answer"]
+            references = result["references"]
+            
+            # 更新对话历史
+            history = history + [(question, answer)]
+            
+            # 格式化引用信息
+            ref_text = "📋 引用信息:\n\n"
+            
+            # 时间范围
+            if references["time_ranges"]:
+                ref_text += "🕒 相关时间段:\n"
+                for tr in references["time_ranges"][:5]:  # 最多显示5个
+                    start = format_timestamp(tr["start_time"])
+                    end = format_timestamp(tr["end_time"])
+                    text_preview = tr["text"][:50] + "..." if len(tr["text"]) > 50 else tr["text"]
+                    ref_text += f"  • {start} - {end}: {text_preview}\n"
+                ref_text += "\n"
+            
+            # 关键帧
+            if references["keyframes"]:
+                ref_text += "🖼️ 使用的关键帧:\n"
+                for kf in references["keyframes"]:
+                    timestamp = format_timestamp(kf["timestamp"])
+                    ref_text += f"  • Frame {kf['frame_id']} ({timestamp})\n"
+                ref_text += "\n"
+            
+            ref_text += f"💬 对话轮数: {result['history_length'] // 2}"
+            
+            return history, ref_text
+        else:
+            error = result.get("error", "未知错误")
+            return history, f"❌ 提问失败: {error}"
+    
+    except Exception as e:
+        logger.exception(f"聊天提问失败: {e}")
+        return history, f"❌ 错误: {str(e)}"
 
 
 def create_gradio_interface():
@@ -402,7 +526,7 @@ def create_gradio_interface():
                 )
             
             # ===== 标签页 2: 结果展示 =====
-            with gr.Tab("📊 结果展示", id=1):
+            with gr.Tab("📊Dynamic 结果展示", id=1):
                 
                 with gr.Row():
                     # 左列：文本信息
@@ -454,6 +578,69 @@ def create_gradio_interface():
                         download_html = gr.HTML(
                             label="下载链接"
                         )
+                
+                # 分隔线
+                gr.Markdown("---")
+                
+                # 聊天区域
+                gr.Markdown("## 💬 与视频对话")
+                gr.Markdown("基于视频内容的智能问答，支持多轮对话和时间定位")
+                
+                with gr.Row():
+                    chat_start_btn = gr.Button(
+                        "🚀 启动聊天会话",
+                        variant="primary",
+                        size="sm"
+                    )
+                
+                with gr.Row():
+                    with gr.Column(scale=1):
+                        chat_status = gr.Textbox(
+                            label="会话状态",
+                            interactive=False,
+                            max_lines=1
+                        )
+                    with gr.Column(scale=2):
+                        chat_info = gr.Textbox(
+                            label="会话信息",
+                            interactive=False,
+                            lines=6
+                        )
+                
+                chatbot = gr.Chatbot(
+                    label="对话历史",
+                    height=400,
+                    show_label=True
+                )
+                
+                with gr.Row():
+                    question_input = gr.Textbox(
+                        label="你的问题",
+                        placeholder="例如：视频中在哪里讲了XXX？",
+                        scale=4
+                    )
+                    send_btn = gr.Button(
+                        "💬 发送",
+                        variant="primary",
+                        scale=1
+                    )
+                
+                chat_references = gr.Textbox(
+                    label="引用信息",
+                    interactive=False,
+                    lines=8
+                )
+                
+                with gr.Row():
+                    clear_chat_btn = gr.Button("🗑️ 清空对话", size="sm")
+                
+                gr.Markdown("""
+                ### 💡 使用提示
+                
+                - **时间定位类问题**: "视频中在哪里讲了XXX？" → 系统会返回具体时间段
+                - **内容总结类问题**: "这个视频主要讲什么？" → 基于转录和关键帧总结
+                - **多轮对话**: 支持连续追问，系统会保留上下文
+                """)
         
         # 绑定处理按钮
         process_btn.click(
@@ -476,6 +663,35 @@ def create_gradio_interface():
                 download_html,
                 status_msg
             ]
+        )
+        
+        # 绑定聊天功能
+        chat_start_btn.click(
+            fn=start_chat_session,
+            outputs=[chat_status, chat_info]
+        )
+        
+        send_btn.click(
+            fn=ask_question,
+            inputs=[question_input, chatbot],
+            outputs=[chatbot, chat_references]
+        ).then(
+            fn=lambda: "",
+            outputs=question_input
+        )
+        
+        question_input.submit(
+            fn=ask_question,
+            inputs=[question_input, chatbot],
+            outputs=[chatbot, chat_references]
+        ).then(
+            fn=lambda: "",
+            outputs=question_input
+        )
+        
+        clear_chat_btn.click(
+            fn=lambda: [],
+            outputs=chatbot
         )
         
         # 添加使用提示

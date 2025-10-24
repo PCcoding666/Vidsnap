@@ -1,12 +1,13 @@
 """
 Video analysis API routes.
 """
-from fastapi import APIRouter, HTTPException, UploadFile, File
+from fastapi import APIRouter, HTTPException, UploadFile, File, Body
 from typing import List, Dict, Any, Optional
 import logging
 from dataclasses import asdict
 
 from ...services.pipeline_service import pipeline
+from ...services.chat_service import video_chat_service
 from ...core.logging import logger
 
 router = APIRouter(prefix="/analysis", tags=["analysis"])
@@ -174,3 +175,205 @@ async def get_services_status():
     except Exception as e:
         logger.exception(f"获取服务状态失败: {e}")
         raise HTTPException(status_code=500, detail=f"获取服务状态失败: {str(e)}")
+
+
+# ==================== Chat with Video API ====================
+
+@router.post("/chat/start")
+async def chat_start(payload: Dict[str, Any] = Body(...)):
+    """
+    启动视频聊天会话
+    
+    请求体:
+        {
+            "video_id": "视频ID",
+            "metadata": {
+                "transcript": {...},  # 转录元数据
+                "keyframes": [...]   # 关键帧列表
+            }
+        }
+    
+    返回:
+        {
+            "status": "success",
+            "session_id": "会话ID",
+            "video_id": "视频ID",
+            "keyframes_count": 10,
+            "transcript_segments_count": 50
+        }
+    """
+    try:
+        video_id = payload.get("video_id")
+        metadata = payload.get("metadata")
+        
+        if not video_id:
+            raise HTTPException(status_code=400, detail="缺少 video_id")
+        if not metadata:
+            raise HTTPException(status_code=400, detail="缺少 metadata")
+        
+        result = video_chat_service.start_session(video_id, metadata)
+        
+        if result.get("status") == "success":
+            return result
+        else:
+            raise HTTPException(
+                status_code=500,
+                detail=result.get("error", "会话创建失败")
+            )
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception(f"启动聊天会话失败: {e}")
+        raise HTTPException(status_code=500, detail=f"启动聊天会话失败: {str(e)}")
+
+
+@router.post("/chat/message")
+async def chat_message(
+    session_id: str = Body(..., embed=True),
+    question: str = Body(..., embed=True),
+    keyframe_ids: Optional[List[int]] = Body(None, embed=True),
+    top_k: int = Body(5, embed=True),
+    auto_keyframes: bool = Body(True, embed=True)
+):
+    """
+    在聊天会话中提问
+    
+    参数:
+        session_id: 会话 ID
+        question: 用户问题
+        keyframe_ids: 可选，指定的关键帧 ID 列表（用于视觉问答）
+        top_k: 检索的相关转录片段数量，默认 5
+        auto_keyframes: 是否自动查找相关关键帧，默认 True
+    
+    返回:
+        {
+            "status": "success",
+            "session_id": "会话ID",
+            "answer": "AI 回答",
+            "references": {
+                "time_ranges": [{"start_time": 10.5, "end_time": 20.3, "text": "..."}],
+                "keyframe_ids": [1, 3, 5],
+                "keyframes": [{"frame_id": 1, "timestamp": 12.5, "oss_image_url": "..."}]
+            },
+            "history_length": 4
+        }
+    """
+    try:
+        result = await video_chat_service.ask_question(
+            session_id=session_id,
+            question=question,
+            keyframe_ids=keyframe_ids,
+            top_k=top_k,
+            auto_keyframes=auto_keyframes
+        )
+        
+        if result.get("status") == "success":
+            return result
+        else:
+            raise HTTPException(
+                status_code=500,
+                detail=result.get("error", "提问失败")
+            )
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception(f"聊天提问失败: {e}")
+        raise HTTPException(status_code=500, detail=f"聊天提问失败: {str(e)}")
+
+
+@router.get("/chat/session/{session_id}")
+async def chat_session_info(session_id: str):
+    """
+    获取聊天会话信息
+    
+    返回:
+        {
+            "status": "success",
+            "session_id": "会话ID",
+            "video_id": "视频ID",
+            "created_at": "2025-10-22T10:30:00",
+            "history_length": 10,
+            "recent_messages": [...],
+            "keyframes_count": 8,
+            "transcript_segments_count": 45
+        }
+    """
+    try:
+        result = video_chat_service.get_session_info(session_id)
+        
+        if result.get("status") == "success":
+            return result
+        else:
+            raise HTTPException(
+                status_code=404,
+                detail=result.get("error", "会话不存在")
+            )
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception(f"获取会话信息失败: {e}")
+        raise HTTPException(status_code=500, detail=f"获取会话信息失败: {str(e)}")
+
+
+@router.delete("/chat/session/{session_id}")
+async def chat_session_end(session_id: str):
+    """
+    结束并清理聊天会话
+    
+    返回:
+        {
+            "status": "success",
+            "session_id": "会话ID",
+            "message": "会话已结束"
+        }
+    """
+    try:
+        success = video_chat_service.end_session(session_id)
+        
+        if success:
+            return {
+                "status": "success",
+                "session_id": session_id,
+                "message": "会话已结束"
+            }
+        else:
+            raise HTTPException(
+                status_code=404,
+                detail="会话不存在或已结束"
+            )
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception(f"结束会话失败: {e}")
+        raise HTTPException(status_code=500, detail=f"结束会话失败: {str(e)}")
+
+
+@router.get("/chat/sessions")
+async def chat_sessions_list():
+    """
+    列出所有活动的聊天会话
+    
+    返回:
+        {
+            "status": "success",
+            "sessions": [
+                {
+                    "session_id": "...",
+                    "video_id": "...",
+                    "created_at": "...",
+                    "history_length": 10
+                }
+            ],
+            "total": 3
+        }
+    """
+    try:
+        result = video_chat_service.list_sessions()
+        return result
+    except Exception as e:
+        logger.exception(f"列出会话失败: {e}")
+        raise HTTPException(status_code=500, detail=f"列出会话失败: {str(e)}")
