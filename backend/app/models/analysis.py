@@ -7,7 +7,7 @@ from typing import List, Optional
 
 @dataclass
 class TranscriptSegment:
-    """转录段落"""
+    """转录段落元数据"""
     text: str
     start_time: float
     end_time: float
@@ -16,15 +16,6 @@ class TranscriptSegment:
 
 # 为了兼容性保留旧名称
 TranscriptSegmentMetadata = TranscriptSegment
-
-
-@dataclass
-class TranscriptSegmentMetadata:
-    """转录段落元数据"""
-    text: str
-    start_time: float
-    end_time: float
-    confidence: float
 
 
 @dataclass
@@ -67,15 +58,9 @@ class SummarySection:
 
 @dataclass
 class VideoSummary:
-    """完整的视频总结（由 LLM 生成）"""
+    """视频总结（由 LLM 生成）- v0.2.0 精简版"""
     video_id: str
-    brief_summary: str  # 简要总结(1-2句话)
-    standard_summary: str  # 标准总结(段落级)
-    detailed_summary: Optional[str]  # 详细总结(分段详解)
-    sections: List[SummarySection]  # 时间线段落
-    keyframe_descriptions: List[KeyframeDescription]  # 关键帧描述
-    language: str  # 总结语言
-    generated_at: str  # 生成时间
+    detailed_summary: str  # 详细总结内容
 
 
 @dataclass

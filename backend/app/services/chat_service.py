@@ -42,13 +42,13 @@ class ChatSession:
 
 
 class VideoChatService:
-    """视频聊天服务"""
+    """视频聊天服务（v0.2.0 增强：支持 Agent 路由）"""
     
     def __init__(self):
         """初始化聊天服务"""
         self.sessions: Dict[str, ChatSession] = {}
         self.llm_service = llm_service
-        logger.info("视频聊天服务初始化完成")
+        logger.info("视频聊天服务初始化完成（支持 Agent 路由）")
     
     def _dict_to_transcript_metadata(self, data: Dict[str, Any]) -> TranscriptMetadata:
         """将字典转换为 TranscriptMetadata"""
@@ -156,6 +156,96 @@ class VideoChatService:
             logger.info(f"聊天会话已结束: {session_id}")
             return True
         return False
+    
+    def _classify_question_type(self, question: str) -> str:
+        """
+        分类问题类型（v0.2.0 Agent 路由框架）
+        
+        Args:
+            question: 用户问题
+            
+        Returns:
+            问题类型: "visual" | "ocr" | "audio" | "reasoning" | "text"
+        """
+        question_lower = question.lower()
+        
+        # 视觉类问题
+        visual_keywords = ["画面", "图片", "看到", "显示", "出现", "场景", "visual", "image", "picture"]
+        if any(kw in question_lower for kw in visual_keywords):
+            return "visual"
+        
+        # OCR 文字识别类
+        ocr_keywords = ["文字", "字幕", "标题", "ocr", "text in", "读出"]
+        if any(kw in question_lower for kw in ocr_keywords):
+            return "ocr"
+        
+        # 音频分析类
+        audio_keywords = ["情绪", "语气", "声音", "语调", "emotion", "tone", "voice"]
+        if any(kw in question_lower for kw in audio_keywords):
+            return "audio"
+        
+        # 推理类
+        reasoning_keywords = ["为什么", "原因", "怎么", "如何", "why", "how", "reason", "explain"]
+        if any(kw in question_lower for kw in reasoning_keywords):
+            return "reasoning"
+        
+        # 默认为文本类
+        return "text"
+    
+    def _route_to_model(self, question_type: str, question: str) -> Dict[str, Any]:
+        """
+        根据问题类型路由到最佳模型（v0.2.0 Agent 路由框架）
+        
+        Args:
+            question_type: 问题类型
+            question: 用户问题
+            
+        Returns:
+            路由策略: {"model": str, "requires_keyframes": bool, "requires_audio": bool}
+        """
+        # 视觉类：使用 Qwen3-VL-Flash
+        if question_type == "visual":
+            return {
+                "model": self.llm_service.vision_model,  # qwen-vl-max
+                "requires_keyframes": True,
+                "requires_audio": False,
+                "strategy": "visual_analysis"
+            }
+        
+        # OCR 类：未来可使用 tongyi-qwen-vl-ocr
+        if question_type == "ocr":
+            return {
+                "model": self.llm_service.vision_model,
+                "requires_keyframes": True,
+                "requires_audio": False,
+                "strategy": "ocr_extraction"
+            }
+        
+        # 音频类：未来可使用 qwen-audio
+        if question_type == "audio":
+            return {
+                "model": self.llm_service.text_model,
+                "requires_keyframes": False,
+                "requires_audio": True,
+                "strategy": "audio_analysis"
+            }
+        
+        # 推理类：使用多模态模型
+        if question_type == "reasoning":
+            return {
+                "model": self.llm_service.vision_model,  # qwen-vl-max
+                "requires_keyframes": True,
+                "requires_audio": False,
+                "strategy": "complex_reasoning"
+            }
+        
+        # 文本类：使用多模态模型 qwen-vl-plus，支持文本+关键帧多模态分析
+        return {
+            "model": self.llm_service.text_model,  # qwen-vl-plus (多模态模型)
+            "requires_keyframes": True,  # v0.2.0 优化：启用关键帧以支持多模态分析
+            "requires_audio": False,
+            "strategy": "multimodal_text_qa"
+        }
     
     def _get_full_transcript_text(
         self,
@@ -269,35 +359,45 @@ class VideoChatService:
             }
         
         try:
+            # 步骤 0: Agent 路由（v0.2.0 新增）
+            question_type = self._classify_question_type(question)
+            routing_strategy = self._route_to_model(question_type, question)
+            
+            logger.info(f"Agent 路由: 问题类型={question_type}, 策略={routing_strategy['strategy']}, 模型={routing_strategy['model']}")
+            
             # 步骤 1: 获取完整的转录文本
             logger.info(f"获取完整转录文本用于问答: {question[:50]}...")
             retrieval = self._get_full_transcript_text(session.transcript)
             
-            # 步骤 2: 准备关键帧
+            # 步骤 2: 准备关键帧（根据路由策略决定是否需要）
             used_keyframes: List[KeyframeMetadata] = []
             
-            # 用户指定的关键帧
-            if keyframe_ids:
-                for kfid in keyframe_ids:
-                    kf = next(
-                        (k for k in session.keyframes if k.frame_id == kfid),
-                        None
+            # 仅当路由策略要求时才获取关键帧
+            if routing_strategy["requires_keyframes"]:
+                # 用户指定的关键帧
+                if keyframe_ids:
+                    for kfid in keyframe_ids:
+                        kf = next(
+                            (k for k in session.keyframes if k.frame_id == kfid),
+                            None
+                        )
+                        if kf and kf.oss_image_url:
+                            used_keyframes.append(kf)
+                
+                # 自动查找相关关键帧
+                elif auto_keyframes and retrieval["time_ranges"]:
+                    # 根据问题类型调整关键帧数量
+                    max_kf = 5 if question_type in ["visual", "ocr"] else 3
+                    auto_kfs = self._find_relevant_keyframes(
+                        retrieval["time_ranges"],
+                        session.keyframes,
+                        max_keyframes=max_kf
                     )
-                    if kf and kf.oss_image_url:
-                        used_keyframes.append(kf)
+                    used_keyframes.extend(auto_kfs)
             
-            # 自动查找相关关键帧
-            elif auto_keyframes and retrieval["time_ranges"]:
-                auto_kfs = self._find_relevant_keyframes(
-                    retrieval["time_ranges"],
-                    session.keyframes,
-                    max_keyframes=2  # 自动时最多2个
-                )
-                used_keyframes.extend(auto_kfs)
+            logger.info(f"使用关键帧数量: {len(used_keyframes)}, 问题类型={question_type}, 需要关键帧={routing_strategy['requires_keyframes']}")
             
-            logger.info(f"使用关键帧数量: {len(used_keyframes)}")
-            
-            # 步骤 3: 构建多模态消息
+            # 步骤 3: 构建多模态消息（v0.2.0 优化：传递关键帧 URL）
             content_parts: List[Dict[str, Any]] = []
             
             # 添加问题
@@ -309,14 +409,16 @@ class VideoChatService:
                     "text": f"\n完整视频转录文本：\n{retrieval['context_text']}"
                 })
             
-            # 添加关键帧图像
-            for kf in used_keyframes:
-                if kf.oss_image_url:
-                    content_parts.append({"image": kf.oss_image_url})
-                    if kf.scene_description:
-                        content_parts.append({
-                            "text": f"关键帧 {kf.frame_id} ({kf.timestamp:.1f}s): {kf.scene_description}"
-                        })
+            # 添加关键帧图像（v0.2.0 新增：支持多模态输入，如果路由策略要求）
+            if routing_strategy["requires_keyframes"] and used_keyframes:
+                content_parts.append({"text": "\n相关关键帧："})
+                for kf in used_keyframes:
+                    if kf.oss_image_url:
+                        content_parts.append({"image": kf.oss_image_url})
+                        if kf.scene_description:
+                            content_parts.append({
+                                "text": f"关键帧 {kf.frame_id} ({kf.timestamp:.1f}s): {kf.scene_description}"
+                            })
             
             # 步骤 4: 构建完整的对话历史
             system_prompt = (

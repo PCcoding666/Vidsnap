@@ -12,16 +12,21 @@ from dataclasses import dataclass, asdict
 from datetime import datetime
 
 import dashscope
-from dashscope import MultiModalConversation
+from dashscope import MultiModalConversation, Generation
 
 from ..core.logging import logger
 from ..models.video import KeyframeInfo
-from ..models.analysis import TranscriptMetadata, KeyframeMetadata
+from ..models.analysis import (
+    TranscriptMetadata, 
+    KeyframeMetadata, 
+    VideoSummary,
+    KeyframeDescription as KeyframeDescriptionModel
+)
 
 
 @dataclass
 class KeyframeDescription:
-    """单个关键帧的分析描述"""
+    """单个关键帧的分析描述（用于旧版兼容）"""
     frame_id: int
     timestamp: float
     description: str
@@ -40,8 +45,8 @@ class SummarySection:
 
 
 @dataclass
-class VideoSummary:
-    """完整的视频总结"""
+class VideoSummaryOld:
+    """完整的视频总结（旧版本，保留用于向后兼容）"""
     video_id: str
     brief_summary: str  # 简要总结(1-2句话)
     standard_summary: str  # 标准总结(段落级)
@@ -206,9 +211,9 @@ class QwenVLService:
         transcription: TranscriptMetadata,
         video_id: str,
         granularity: str = "standard"
-    ) -> Optional[VideoSummary]:
+    ) -> Optional[VideoSummaryOld]:
         """
-        生成完整的视频总结
+        生成完整的视频总结（旧版本，保留用于向后兼容）
         
         Args:
             keyframes: 关键帧列表
@@ -241,8 +246,8 @@ class QwenVLService:
                 keyframe_descriptions, transcription
             )
             
-            # 构建最终总结对象
-            video_summary = VideoSummary(
+            # 构建最终总结对象（使用旧版本结构）
+            video_summary = VideoSummaryOld(
                 video_id=video_id,
                 brief_summary=summaries.get("brief", ""),
                 standard_summary=summaries.get("standard", ""),
@@ -259,6 +264,184 @@ class QwenVLService:
         except Exception as e:
             logger.exception(f"生成视频总结失败: {e}")
             return None
+    
+    async def generate_text_based_summary(
+        self,
+        transcript: TranscriptMetadata,
+        video_metadata: Dict[str, Any],
+        video_id: str
+    ) -> Optional[VideoSummary]:
+        """
+        基于转录文本和视频元数据生成详细总结（v0.2.0 新增）
+        使用 qwen3-max 模型，仅处理文本，不包含图像分析
+        
+        Args:
+            transcript: 转录元数据（包含完整的音频文本）
+            video_metadata: 视频元数据（来自 yt-dlp 或 ffprobe）
+            video_id: 视频标识
+            
+        Returns:
+            VideoSummary 对象（仅包含 detailed_summary 字段）
+        """
+        if not self.is_available():
+            logger.error("Qwen VL 服务不可用")
+            return None
+        
+        try:
+            logger.info(f"开始生成基于文本的视频总结: {video_id}")
+            
+            # 步骤 1: 提取视频元信息
+            video_title = video_metadata.get("title", "未知标题")
+            video_duration = video_metadata.get("duration", 0)
+            video_description = video_metadata.get("description", "")
+            video_uploader = video_metadata.get("uploader", "")
+            
+            # 格式化时长
+            duration_str = self._format_duration(video_duration)
+            
+            # 步骤 2: 拼接所有转录片段文本
+            if not transcript or not transcript.segments:
+                logger.warning("转录文本为空，无法生成总结")
+                return None
+            
+            full_transcript_text = " ".join([seg.text for seg in transcript.segments])
+            logger.info(f"完整转录文本长度: {len(full_transcript_text)} 字符")
+            
+            # 步骤 3: 构建提示词
+            prompt = f"""基于以下视频的元信息和完整转录文本，生成一份详细的内容总结：
+
+视频元信息：
+- 标题：{video_title}
+- 时长：{duration_str}
+"""
+            
+            if video_description:
+                # 限制描述长度
+                desc_preview = video_description[:500] + "..." if len(video_description) > 500 else video_description
+                prompt += f"- 描述：{desc_preview}\n"
+            
+            if video_uploader:
+                prompt += f"- 上传者/来源：{video_uploader}\n"
+            
+            prompt += f"""
+完整转录文本：
+{full_transcript_text}
+
+总结要求：
+1. 涵盖视频的核心主题和目标
+2. 按逻辑结构组织要点（如引言、主体、结论）
+3. 提取关键信息和亮点
+4. 使用清晰的段落形式
+5. 根据视频内容语言自动选择总结语言（中文视频用中文总结，英文视频用英文总结）
+6. 总结长度根据视频内容复杂度灵活调整，确保信息完整性
+"""
+            
+            logger.info(f"提示词长度: {len(prompt)} 字符")
+            
+            # 步骤 4: 调用 qwen3-max API
+            detailed_summary = await self._call_text_generation(
+                prompt=prompt,
+                max_tokens=2000,  # 增加以支持灵活长度
+                model="qwen-max"  # 使用 qwen3-max 模型
+            )
+            
+            if not detailed_summary:
+                logger.error("文本总结生成失败")
+                return None
+            
+            # 步骤 5: 创建 VideoSummary 对象
+            video_summary = VideoSummary(
+                video_id=video_id,
+                detailed_summary=detailed_summary
+            )
+            
+            logger.info(f"文本总结生成成功，长度: {len(detailed_summary)} 字符")
+            return video_summary
+            
+        except Exception as e:
+            logger.exception(f"生成文本总结失败: {e}")
+            return None
+    
+    def _format_duration(self, seconds: float) -> str:
+        """格式化时长"""
+        hours = int(seconds // 3600)
+        minutes = int((seconds % 3600) // 60)
+        secs = int(seconds % 60)
+        
+        parts = []
+        if hours > 0:
+            parts.append(f"{hours}小时")
+        if minutes > 0:
+            parts.append(f"{minutes}分钟")
+        if secs > 0 or not parts:
+            parts.append(f"{secs}秒")
+        
+        return " ".join(parts)
+    
+    async def analyze_keyframes_multimodal(
+        self,
+        keyframes: List[KeyframeMetadata],
+        context: Optional[str] = None
+    ) -> List[KeyframeDescriptionModel]:
+        """
+        多模态关键帧分析服务（独立服务，v0.2.0 新增）
+        按需调用，不在主流水线中执行
+        
+        Args:
+            keyframes: 关键帧列表（含 OSS URL）
+            context: 可选的上下文文本
+            
+        Returns:
+            关键帧描述列表
+        """
+        if not self.is_available():
+            logger.error("Qwen VL 服务不可用")
+            return []
+        
+        try:
+            logger.info(f"开始多模态关键帧分析，关键帧数量: {len(keyframes)}")
+            
+            keyframe_descriptions = []
+            
+            # 限制并发数量，避免 API 限流
+            max_concurrent = 3
+            semaphore = asyncio.Semaphore(max_concurrent)
+            
+            async def analyze_single_keyframe(kf: KeyframeMetadata) -> Optional[KeyframeDescriptionModel]:
+                """分析单个关键帧"""
+                async with semaphore:
+                    description_text = await self.analyze_keyframe(
+                        kf.oss_image_url, 
+                        context or ""
+                    )
+                    
+                    if description_text:
+                        return KeyframeDescriptionModel(
+                            frame_id=kf.frame_id,
+                            timestamp=kf.timestamp,
+                            description=description_text,
+                            oss_image_url=kf.oss_image_url,
+                            confidence=0.85  # 固定置信度
+                        )
+                    return None
+            
+            # 并发分析所有关键帧
+            tasks = [analyze_single_keyframe(kf) for kf in keyframes]
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+            
+            # 过滤成功的结果
+            for result in results:
+                if isinstance(result, KeyframeDescriptionModel):
+                    keyframe_descriptions.append(result)
+                elif isinstance(result, Exception):
+                    logger.warning(f"关键帧分析失败: {result}")
+            
+            logger.info(f"成功分析 {len(keyframe_descriptions)}/{len(keyframes)} 个关键帧")
+            return keyframe_descriptions
+            
+        except Exception as e:
+            logger.exception(f"多模态关键帧分析失败: {e}")
+            return []
     
     async def _analyze_keyframes_batch(
         self,
@@ -463,51 +646,39 @@ class QwenVLService:
         
         return summaries
     
-    async def _call_text_generation(self, prompt: str, max_tokens: int = 500) -> Optional[str]:
+    async def _call_text_generation(self, prompt: str, max_tokens: int = 500, model: Optional[str] = None) -> Optional[str]:
         """
-        调用文本生成 API
+        调用文本生成 API（纯文本任务）
         
         Args:
             prompt: 提示词
             max_tokens: 最大 token 数
+            model: 模型名称（默认使用 qwen-max）
             
         Returns:
             生成的文本
         """
         try:
-            messages = [
-                {
-                    "role": "user",
-                    "content": [{"text": prompt}]
-                }
-            ]
+            # 对于纯文本任务，使用 Generation API 而不是 MultiModalConversation
+            # 使用指定模型或默认为 qwen-max
+            target_model = model or "qwen-max"
             
-            logger.info(f"调用文本生成 API, max_tokens={max_tokens}, model={self.text_model}")
+            logger.info(f"调用文本生成 API, max_tokens={max_tokens}, model={target_model}")
             
-            # 使用 text_model (qwen-vl-plus) 进行文本总结
+            # 使用 Generation.call 进行纯文本生成
             response = await asyncio.to_thread(
-                MultiModalConversation.call,
-                model=self.text_model,
-                messages=messages,
+                Generation.call,
+                model=target_model,
+                prompt=prompt,
                 temperature=self.temperature,
-                max_length=max_tokens
+                max_tokens=max_tokens
             )
             
             logger.info(f"API 响应状态: {response.status_code if response else 'None'}")
             
             if response and response.status_code == 200:
-                if hasattr(response, 'output') and hasattr(response.output, 'choices'):
-                    content = response.output.choices[0].message.content
-                    
-                    # 处理 API 返回格式：可能是字符串或列表
-                    if isinstance(content, list):
-                        # 如果是列表格式 [{'text': '...'}]，提取第一个元素的 text
-                        result = content[0].get('text', '') if content else ''
-                    elif isinstance(content, str):
-                        result = content
-                    else:
-                        logger.error(f"API 返回了未知的 content 格式: {type(content)}")
-                        return None
+                if hasattr(response, 'output') and hasattr(response.output, 'text'):
+                    result = response.output.text
                     
                     logger.info(f"文本生成成功，长度: {len(result)} 字符")
                     logger.info(f"生成内容: {result[:200]}...")  # 只显示前200字符

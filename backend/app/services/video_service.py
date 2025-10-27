@@ -15,6 +15,8 @@ from typing import Dict, List, Any, Optional, Union
 from pathlib import Path
 from dataclasses import dataclass
 
+import yt_dlp
+
 from ..core.logging import logger
 from ..models.video import KeyframeInfo, VideoInfo
 
@@ -189,59 +191,47 @@ class AliyunVideoService:
             }
     
     async def _download_from_youtube(self, url: str, session_temp_dir: Path) -> Dict[str, Any]:
-        """从YouTube下载视频"""
+        """从YouTube下载视频（使用Python API而非命令行，确保所有配置被应用）"""
         try:
-            # 提取metadata
-            metadata_cmd = [
-                'yt-dlp',
-                '--dump-json',
-                '--no-warnings',
-                '--ignore-errors',
-                url
-            ]
-            
-            logger.info("提取YouTube视频metadata...")
-            metadata_process = await asyncio.create_subprocess_exec(
-                *metadata_cmd,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE
-            )
-            
-            stdout, stderr = await metadata_process.communicate()
-            
-            metadata = {}
-            if metadata_process.returncode == 0 and stdout:
-                try:
-                    metadata = json.loads(stdout.decode())
-                    logger.info(f"成功获取metadata: {metadata.get('title', 'N/A')}")
-                except json.JSONDecodeError:
-                    logger.warning("解析yt-dlp metadata JSON失败")
-            
-            # 下载视频
             base_filename = session_temp_dir / "downloaded_video"
-            video_output_template = str(base_filename) + ".%(ext)s"
             
-            video_cmd = [
-                'yt-dlp',
-                '-f', 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
-                '--merge-output-format', 'mp4',
-                '-o', video_output_template,
-                '--no-warnings',
-                '--ignore-errors',
-                url
-            ]
+            # 配置yt-dlp选项（包含HTTP headers、重试机制等）
+            opts = self.ytdl_opts.copy()
+            opts['outtmpl'] = str(base_filename) + '.%(ext)s'
+            opts['format'] = 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best'
+            opts['merge_output_format'] = 'mp4'
             
-            logger.info("开始下载YouTube视频...")
-            video_process = await asyncio.create_subprocess_exec(
-                *video_cmd,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE
-            )
+            logger.info("开始从YouTube下载视频（使用Python API）...")
+            logger.info(f"User-Agent: {opts['http_headers'].get('User-Agent', 'N/A')[:50]}...")
             
-            stdout, stderr = await video_process.communicate()
+            # 使用Python API下载（确保所有headers和配置被应用）
+            metadata = {}
+            video_path = None
+            
+            try:
+                with yt_dlp.YoutubeDL(opts) as ydl:
+                    logger.info(f"提取metadata...")
+                    info = ydl.extract_info(url, download=True)
+                    metadata = info
+                    logger.info(f"成功获取metadata: {info.get('title', 'N/A')}")
+            except yt_dlp.utils.DownloadError as e:
+                # 如果是403错误，尝试使用web客户端
+                if '403' in str(e):
+                    logger.warning(f"遇到403错误，尝试使用web客户端...")
+                    opts_web = opts.copy()
+                    opts_web['extractor_args'] = {
+                        'youtube': {
+                            'player_client': ['web_embedded'],  # 使用web_embedded客户端
+                        }
+                    }
+                    with yt_dlp.YoutubeDL(opts_web) as ydl:
+                        info = ydl.extract_info(url, download=True)
+                        metadata = info
+                        logger.info(f"使用web客户端成功获取: {info.get('title', 'N/A')}")
+                else:
+                    raise
             
             # 查找下载的视频文件
-            video_path = None
             for file_path in session_temp_dir.iterdir():
                 if file_path.suffix.lower() in ['.mp4', '.avi', '.mov', '.mkv']:
                     video_path = str(file_path)
@@ -255,13 +245,20 @@ class AliyunVideoService:
                     "metadata": metadata
                 }
             else:
-                error_msg = f"YouTube视频下载失败: {stderr.decode()}"
+                error_msg = f"YouTube视频下载失败：找不到下载的文件"
                 logger.error(error_msg)
                 return {
                     "status": "error",
                     "error": error_msg
                 }
                 
+        except yt_dlp.utils.DownloadError as e:
+            error_msg = f"YouTube视频下载失败: {str(e)}"
+            logger.error(error_msg)
+            return {
+                "status": "error",
+                "error": error_msg
+            }
         except Exception as e:
             error_msg = f"YouTube下载异常: {str(e)}"
             logger.exception(error_msg)

@@ -306,7 +306,6 @@ class AliyunVideoProcessingPipeline:
         self,
         video_file: Optional[str] = None,
         youtube_url: Optional[str] = None,
-        granularity: str = "standard",
         progress_callback: Optional[callable] = None
     ) -> Dict[str, Any]:
         """
@@ -393,18 +392,16 @@ class AliyunVideoProcessingPipeline:
                     progress_callback("生成视频 AI 总结...")
                 
                 try:
-                    video_summary = await self.llm_service.generate_video_summary(
-                        keyframes=metadata.keyframes,
-                        transcription=metadata.transcript,
-                        video_id=video_id,
-                        granularity=granularity
+                    video_summary = await self.llm_service.generate_text_based_summary(
+                        transcript=metadata.transcript,
+                        video_metadata=video_metadata,
+                        video_id=video_id
                     )
                     
                     if video_summary:
-                        logger.info(f"LLM 视频总结生成成功: {len(video_summary.brief_summary)} 字符")
+                        logger.info(f"LLM 视频总结生成成功: {len(video_summary.detailed_summary)} 字符")
                         
                         # 将总结上传到 OSS
-                        from dataclasses import asdict
                         summary_oss_url = await self.oss_service.upload_metadata(
                             asdict(video_summary), 
                             f"{video_id}_summary"

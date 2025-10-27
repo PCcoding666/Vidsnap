@@ -65,15 +65,13 @@ async def process_video_async(
     youtube_url: str,
     video_file: Optional[Any],
     language: str,
-    granularity: str,
-    num_keyframes: int,
     progress: gr.Progress = gr.Progress()
 ) -> Tuple:
     """
     异步处理视频
     
     Returns:
-        Tuple: (简要总结, 标准总结, 详细总结, 转录文本, 关键帧列表, 视频信息, 下载链接HTML, 状态消息)
+        Tuple: (详细总结, 转录文本, 关键帧列表, 视频信息, 下载链接HTML, 状态消息)
     """
     try:
         # 创建进度回调
@@ -86,12 +84,12 @@ async def process_video_async(
         
         if input_mode == "YouTube URL":
             if not youtube_url or not youtube_url.strip():
-                return ("", "", "", "", [], "", "", "❌ 错误：请输入有效的 YouTube URL")
+                return ("", "", [], "", "", "❌ 错误：请输入有效的 YouTube URL")
             yt_url = youtube_url.strip()
             progress_callback(f"📥 准备下载 YouTube 视频: {yt_url}")
         else:
             if video_file is None:
-                return ("", "", "", "", [], "", "", "❌ 错误：请上传视频文件")
+                return ("", "", [], "", "", "❌ 错误：请上传视频文件")
             
             # 处理上传的文件
             if hasattr(video_file, 'name'):
@@ -102,7 +100,7 @@ async def process_video_async(
             # 验证文件格式
             file_ext = Path(video_path).suffix.lower()
             if file_ext not in ['.mp4', '.avi', '.mov', '.mkv']:
-                return ("", "", "", "", [], "", "", f"❌ 错误：不支持的文件格式 {file_ext}，请上传 MP4、AVI、MOV 或 MKV 格式")
+                return ("", "", [], "", "", f"❌ 错误：不支持的文件格式 {file_ext}，请上传 MP4、AVI、MOV 或 MKV 格式")
             
             progress_callback(f"📤 准备处理上传的视频文件: {Path(video_path).name}")
         
@@ -118,19 +116,10 @@ async def process_video_async(
         }
         lang_code = lang_map.get(language, "auto")
         
-        # 设置粒度参数
-        gran_map = {
-            "简要": "brief",
-            "标准": "standard",
-            "详细": "detailed"
-        }
-        gran_code = gran_map.get(granularity, "standard")
-        
-        # 调用后端处理
+        # 调用后端处理（移除 granularity 参数）
         result = await pipeline.process_video_with_summary(
             video_file=video_path,
             youtube_url=yt_url,
-            granularity=gran_code,
             progress_callback=progress_callback
         )
         
@@ -138,7 +127,7 @@ async def process_video_async(
         if result["status"] != "success":
             error_msg = result.get("error", "未知错误")
             progress_callback(f"❌ 处理失败: {error_msg}")
-            return ("", "", "", "", [], "", "", f"❌ 处理失败: {error_msg}")
+            return ("", "", [], "", "", f"❌ 处理失败: {error_msg}")
         
         # 提取结果数据
         video_id = result["video_id"]
@@ -147,18 +136,13 @@ async def process_video_async(
         
         progress_callback("📊 整理结果数据...")
         
-        # 1. 提取总结内容
-        brief_summary = ""
-        standard_summary = ""
+        # 1. 提取总结内容（仅显示 detailed_summary）
         detailed_summary = ""
         
         if video_summary:
-            brief_summary = video_summary.brief_summary or "无简要总结"
-            standard_summary = video_summary.standard_summary or "无标准总结"
-            detailed_summary = video_summary.detailed_summary or ""
+            detailed_summary = video_summary.detailed_summary or "无详细总结"
         else:
-            brief_summary = "⚠️ LLM 总结服务不可用"
-            standard_summary = "⚠️ LLM 总结服务不可用，请检查 API 配置"
+            detailed_summary = "⚠️ LLM 总结服务不可用，请检查 API 配置"
         
         # 2. 提取转录文本
         transcript_text = ""
@@ -214,8 +198,6 @@ async def process_video_async(
         
         # 6. 生成状态消息
         status_msg = f"✅ 处理完成！视频ID: {video_id}"
-        if video_summary:
-            status_msg += f" | 生成了 {len(video_summary.keyframe_descriptions)} 个关键帧描述"
         
         progress_callback("✅ 全部完成！")
         
@@ -225,8 +207,6 @@ async def process_video_async(
         current_video_id = video_id
         
         return (
-            brief_summary,
-            standard_summary,
             detailed_summary,
             transcript_text,
             keyframes_gallery,
@@ -238,7 +218,7 @@ async def process_video_async(
     except Exception as e:
         error_msg = f"处理异常: {str(e)}\n{traceback.format_exc()}"
         logger.exception(error_msg)
-        return ("", "", "", "", [], "", "", f"❌ {error_msg}")
+        return ("", "", [], "", "", f"❌ {error_msg}")
 
 
 def process_video_wrapper(*args, **kwargs):
@@ -478,26 +458,11 @@ def create_gradio_interface():
                 
                 gr.Markdown("### 3️⃣ 处理参数")
                 
-                with gr.Row():
-                    language = gr.Dropdown(
-                        choices=["自动检测", "中文", "英文", "韩文"],
-                        value="自动检测",
-                        label="语言选择"
-                    )
-                    
-                    granularity = gr.Dropdown(
-                        choices=["简要", "标准", "详细"],
-                        value="标准",
-                        label="总结粒度"
-                    )
-                
-                num_keyframes = gr.Slider(
-                    minimum=5,
-                    maximum=20,
-                    value=10,
-                    step=1,
-                    label="关键帧数量",
-                    info="提取的关键帧数量（更多帧=更详细，但处理时间更长）"
+                language = gr.Dropdown(
+                    choices=["自动检测", "中文", "英文", "韩文"],
+                    value="自动检测",
+                    label="语言选择",
+                    info="音频转录语言（系统将自动生成详细总结）"
                 )
                 
                 gr.Markdown("### 4️⃣ 开始处理")
@@ -522,31 +487,19 @@ def create_gradio_interface():
                     with gr.Column(scale=1):
                         gr.Markdown("## 📝 内容总结")
                         
-                        brief_summary = gr.Textbox(
-                            label="📝 简要总结",
-                            lines=3,
-                            interactive=False,
-                            elem_classes=["summary-card", "brief-summary"]
-                        )
-                        
-                        standard_summary = gr.Textbox(
-                            label="📖 标准总结",
-                            lines=8,
-                            interactive=False,
-                            elem_classes=["summary-card", "standard-summary"]
-                        )
-                        
                         detailed_summary = gr.Textbox(
                             label="📚 详细总结",
-                            lines=12,
+                            lines=20,
                             interactive=False,
+                            show_copy_button=True,  # 添加复制按钮
                             elem_classes=["summary-card", "detailed-summary"]
                         )
                         
                         transcript_text = gr.Textbox(
                             label="🎤 音频转录",
                             lines=10,
-                            interactive=False
+                            interactive=False,
+                            show_copy_button=True  # 添加复制按钮
                         )
                     
                     # 右列：多媒体展示
@@ -630,13 +583,9 @@ def create_gradio_interface():
                 input_mode,
                 youtube_url,
                 video_file,
-                language,
-                granularity,
-                num_keyframes
+                language
             ],
             outputs=[
-                brief_summary,
-                standard_summary,
                 detailed_summary,
                 transcript_text,
                 keyframes_gallery,
