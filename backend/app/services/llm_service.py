@@ -366,49 +366,71 @@ class QwenVLService:
         Returns:
             包含不同粒度总结的字典
         """
-        # 准备素材
+        # 准备素材 - 使用完整转录文本而非截断
         transcript_text = " ".join([seg.text for seg in transcription.segments]) if transcription.segments else ""
+        
+        # 智能截取转录文本：优先保留开头和结尾，因为它们通常包含关键信息
+        def smart_truncate_transcript(text: str, max_length: int) -> str:
+            """智能截断转录文本，保留开头和结尾"""
+            if len(text) <= max_length:
+                return text
+            
+            # 如果文本过长，取开头60%和结尾40%
+            head_length = int(max_length * 0.6)
+            tail_length = int(max_length * 0.4)
+            
+            return text[:head_length] + "\n...\n" + text[-tail_length:]
+        
+        # 使用所有关键帧描述（不限制数量）
         keyframe_texts = "\n".join([
             f"[{kf.timestamp:.1f}s] {kf.description}" 
-            for kf in keyframe_descriptions[:10]  # 限制关键帧数量，避免上下文过长
+            for kf in keyframe_descriptions
         ])
         
         summaries = {}
         
         # 生成简要总结 (总是生成)
+        brief_transcript = smart_truncate_transcript(transcript_text, 800)  # 增加到800字符
+        brief_keyframes = "\n".join([
+            f"[{kf.timestamp:.1f}s] {kf.description[:100]}..." 
+            for kf in keyframe_descriptions[:5]  # 简要总结只用5个关键帧
+        ])
+        
         brief_prompt = f"""基于以下视频内容，用1-2句话简要总结视频的主要内容：
 
 关键帧描述：
-{keyframe_texts[:500]}
+{brief_keyframes}
 
-转录文本：
-{transcript_text[:500]}
+视频转录文本（完整对话内容）：
+{brief_transcript}
 
-请用简洁的中文回答："""
+请综合视觉内容和语音内容，用简洁的中文回答："""
         
         logger.info(f"简要总结 Prompt 长度: {len(brief_prompt)} 字符")
         brief_summary = await self._call_text_generation(brief_prompt, max_tokens=200)
         logger.info(f"简要总结生成结果: {brief_summary}")
-        logger.info(f"简要总结(repr): {repr(brief_summary)}")
         summaries["brief"] = brief_summary or "视频内容总结生成失败"
         
         # 生成标准总结
         if granularity in ["standard", "detailed"]:
+            standard_transcript = smart_truncate_transcript(transcript_text, 2000)  # 增加到2000字符
+            
             standard_prompt = f"""基于以下视频内容，生成一个段落级别的标准总结（约100-200字）：
 
 关键帧描述：
 {keyframe_texts}
 
-转录文本：
-{transcript_text[:1000]}
+视频完整转录文本（包含所有对话和旁白）：
+{standard_transcript}
 
-请包含：
-1. 视频的主题和目标
-2. 主要内容要点
-3. 关键信息或亮点
+请综合以下信息生成总结：
+1. 视频的主题和目标（从视觉和语音内容中提取）
+2. 主要内容要点（结合画面和对话）
+3. 关键信息或亮点（重要的视觉场景和语音信息）
 
 请用清晰的中文段落形式回答："""
             
+            logger.info(f"标准总结 Prompt 长度: {len(standard_prompt)} 字符")
             standard_summary = await self._call_text_generation(standard_prompt, max_tokens=500)
             summaries["standard"] = standard_summary or summaries["brief"]
         else:
@@ -416,23 +438,27 @@ class QwenVLService:
         
         # 生成详细总结
         if granularity == "detailed":
+            # 详细总结使用更多的转录文本
+            detailed_transcript = smart_truncate_transcript(transcript_text, 4000)  # 增加到4000字符
+            
             detailed_prompt = f"""基于以下视频内容，生成一个详细的分段总结（约300-500字）：
 
-关键帧描述：
+关键帧描述（包含所有关键场景）：
 {keyframe_texts}
 
-转录文本：
-{transcript_text[:2000]}
+视频完整转录文本（包含所有对话、旁白和音频信息）：
+{detailed_transcript}
 
-请按照以下结构组织总结：
-1. 视频概述
-2. 主要内容分段解析
-3. 关键信息和要点
-4. 总结与结论
+请按照以下结构组织总结，充分利用视频的视觉和音频信息：
+1. 视频概述（结合画面和开场白）
+2. 主要内容分段解析（按时间线结合关键帧和对应的对话内容）
+3. 关键信息和要点（重要的视觉元素和核心观点）
+4. 总结与结论（基于视频结尾的画面和总结性发言）
 
 请用详细的中文段落形式回答："""
             
-            detailed_summary = await self._call_text_generation(detailed_prompt, max_tokens=1000)
+            logger.info(f"详细总结 Prompt 长度: {len(detailed_prompt)} 字符")
+            detailed_summary = await self._call_text_generation(detailed_prompt, max_tokens=1500)  # 增加到1500
             summaries["detailed"] = detailed_summary or summaries["standard"]
         
         return summaries

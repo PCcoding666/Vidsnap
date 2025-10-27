@@ -298,17 +298,17 @@ def update_input_visibility(input_mode: str):
         )
 
 
-def start_chat_session() -> Tuple[str, str]:
+def start_chat_session() -> str:
     """
     启动聊天会话
     
     Returns:
-        (chat_status, chat_info)
+        状态信息
     """
     global current_chat_session_id, current_video_metadata, current_video_id
     
     if not current_video_id or not current_video_metadata:
-        return "❌ 错误", "请先处理视频后再启动聊天会话"
+        return "❌ 请先处理视频后再启动聊天会话"
     
     try:
         # 调用聊天服务启动会话
@@ -319,25 +319,14 @@ def start_chat_session() -> Tuple[str, str]:
         
         if result.get("status") == "success":
             current_chat_session_id = result["session_id"]
-            
-            info = f"""✅ 聊天会话已启动！
-
-📋 会话信息:
-- Session ID: {current_chat_session_id[:16]}...
-- Video ID: {result['video_id']}
-- 关键帧数量: {result['keyframes_count']}
-- 转录片段数量: {result['transcript_segments_count']}
-
-💬 现在可以开始提问了！
-"""
-            return "✅ 会话已启动", info
+            return f"✅ 聊天会话已启动！关键帧: {result['keyframes_count']}, 转录片段: {result['transcript_segments_count']}"
         else:
             error = result.get("error", "未知错误")
-            return "❌ 启动失败", f"启动失败: {error}"
+            return f"❌ 启动失败: {error}"
     
     except Exception as e:
         logger.exception(f"启动聊天会话失败: {e}")
-        return "❌ 错误", f"错误: {str(e)}"
+        return f"❌ 错误: {str(e)}"
 
 
 def ask_question(question: str, history: List[Tuple[str, str]]) -> Tuple[List[Tuple[str, str]], str]:
@@ -593,19 +582,11 @@ def create_gradio_interface():
                         size="sm"
                     )
                 
-                with gr.Row():
-                    with gr.Column(scale=1):
-                        chat_status = gr.Textbox(
-                            label="会话状态",
-                            interactive=False,
-                            max_lines=1
-                        )
-                    with gr.Column(scale=2):
-                        chat_info = gr.Textbox(
-                            label="会话信息",
-                            interactive=False,
-                            lines=6
-                        )
+                chat_status = gr.Textbox(
+                    label="会话状态",
+                    interactive=False,
+                    max_lines=1
+                )
                 
                 chatbot = gr.Chatbot(
                     label="对话历史",
@@ -668,7 +649,7 @@ def create_gradio_interface():
         # 绑定聊天功能
         chat_start_btn.click(
             fn=start_chat_session,
-            outputs=[chat_status, chat_info]
+            outputs=[chat_status]
         )
         
         send_btn.click(

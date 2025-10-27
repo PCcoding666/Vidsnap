@@ -157,42 +157,18 @@ class VideoChatService:
             return True
         return False
     
-    def _smart_truncate(self, text: str, max_length: int) -> str:
-        """
-        智能截断文本，保留开头和结尾
-        
-        Args:
-            text: 原始文本
-            max_length: 最大长度
-            
-        Returns:
-            截断后的文本
-        """
-        if len(text) <= max_length:
-            return text
-        
-        # 保留开头 60% 和结尾 40%
-        head_length = int(max_length * 0.6)
-        tail_length = int(max_length * 0.4)
-        
-        return text[:head_length] + "\n...(中间部分省略)...\n" + text[-tail_length:]
-    
-    def _retrieve_relevant_context(
+    def _get_full_transcript_text(
         self,
-        question: str,
         transcript: TranscriptMetadata,
-        top_k: int = 10,  # 增加到 10 个片段
     ) -> Dict[str, Any]:
         """
-        从转录文本中检索与问题相关的上下文
+        获取完整的转录文本内容
         
         Args:
-            question: 用户问题
             transcript: 转录元数据
-            top_k: 返回最相关的 K 个片段
             
         Returns:
-            包含上下文文本、片段索引和时间范围的字典
+            包含完整转录文本和所有片段时间范围的字典
         """
         if not transcript or not transcript.segments:
             return {
@@ -201,80 +177,27 @@ class VideoChatService:
                 "time_ranges": []
             }
         
-        # 改进：使用多种匹配策略
-        question_lower = question.lower()
+        # 组合完整的转录文本
+        context_text = " ".join(seg.text for seg in transcript.segments)
         
-        # 1. 提取关键词（忽略常用词）
-        stop_words = {"the", "a", "an", "is", "are", "was", "were", "in", "on", "at", 
-                      "的", "了", "吗", "吗", "呢", "吧", "吗", "怎么", "什么", "哪些", "怎样"}
-        question_tokens = set(q.lower() for q in question.split() if len(q) > 1 and q.lower() not in stop_words)
+        # 获取所有片段索引
+        segment_indices = list(range(len(transcript.segments)))
         
-        # 2. 计算每个片段的相关性得分
-        scored_segments = []
-        for i, seg in enumerate(transcript.segments):
-            text_lower = seg.text.lower()
-            
-            # 策略 1: 关键词匹配（基础分）
-            keyword_score = sum(1 for token in question_tokens if token in text_lower)
-            
-            # 策略 2: 完整短语匹配（高分）
-            # 提取 2-3 个词的短语
-            question_words = [w for w in question.split() if len(w) > 1]
-            phrase_score = 0
-            for j in range(len(question_words) - 1):
-                phrase = " ".join(question_words[j:j+2]).lower()
-                if phrase in text_lower:
-                    phrase_score += 3  # 短语匹配权重更高
-                if j < len(question_words) - 2:
-                    phrase3 = " ".join(question_words[j:j+3]).lower()
-                    if phrase3 in text_lower:
-                        phrase_score += 5  # 3词短语权重最高
-            
-            # 策略 3: 全文包含（极高分）
-            substring_score = 10 if question_lower in text_lower else 0
-            
-            # 总分
-            total_score = keyword_score + phrase_score + substring_score
-            
-            if total_score > 0:
-                scored_segments.append((total_score, i, seg))
-        
-        # 如果没有匹配，返回开头的几个片段
-        if not scored_segments:
-            logger.warning(f"未找到相关片段，返回开头 {top_k} 个片段")
-            indices = list(range(min(top_k, len(transcript.segments))))
-            selected_segments = [transcript.segments[i] for i in indices]
-        else:
-            # 按得分排序，取前 top_k 个
-            scored_segments.sort(key=lambda x: (-x[0], x[1]))
-            logger.info(f"找到 {len(scored_segments)} 个相关片段，最高得分: {scored_segments[0][0]}")
-            
-            indices = [i for _, i, _ in scored_segments[:top_k]]
-            indices.sort()  # 按时间顺序排序
-            selected_segments = [transcript.segments[i] for i in indices]
-        
-        # 组合上下文文本
-        context_text = " ".join(seg.text for seg in selected_segments)
-        
-        # 截断过长的文本（保留更多上下文）
-        max_context_length = 3000  # 增加到 3000 字符
-        context_text = self._smart_truncate(context_text, max_context_length)
-        
-        # 提取时间范围
+        # 提取所有时间范围
         time_ranges = [
             {
                 "start_time": seg.start_time,
                 "end_time": seg.end_time,
                 "text": seg.text[:100]  # 只保留前100字符作为预览
             }
-            for seg in selected_segments
+            for seg in transcript.segments
         ]
         
-        logger.info(f"检索到 {len(selected_segments)} 个相关片段，总长度: {len(context_text)} 字符")
+        logger.info(f"获取完整转录文本，总长度: {len(context_text)} 字符，片段数: {len(transcript.segments)}")
         
         return {
             "context_text": context_text,
-            "segment_indices": indices,
+            "segment_indices": segment_indices,
             "time_ranges": time_ranges
         }
     
@@ -346,11 +269,9 @@ class VideoChatService:
             }
         
         try:
-            # 步骤 1: 检索相关的转录上下文
-            logger.info(f"检索问题相关上下文: {question[:50]}...")
-            retrieval = self._retrieve_relevant_context(
-                question, session.transcript, top_k=top_k
-            )
+            # 步骤 1: 获取完整的转录文本
+            logger.info(f"获取完整转录文本用于问答: {question[:50]}...")
+            retrieval = self._get_full_transcript_text(session.transcript)
             
             # 步骤 2: 准备关键帧
             used_keyframes: List[KeyframeMetadata] = []
@@ -382,10 +303,10 @@ class VideoChatService:
             # 添加问题
             content_parts.append({"text": f"用户问题：{question}"})
             
-            # 添加转录上下文
+            # 添加完整转录文本
             if retrieval["context_text"]:
                 content_parts.append({
-                    "text": f"\n相关转录文本（用于定位视频时间段）：\n{retrieval['context_text']}"
+                    "text": f"\n完整视频转录文本：\n{retrieval['context_text']}"
                 })
             
             # 添加关键帧图像
@@ -399,15 +320,18 @@ class VideoChatService:
             
             # 步骤 4: 构建完整的对话历史
             system_prompt = (
-                "你是一个专业的视频助理，能够结合视频的转录文本和关键帧图像来回答用户问题。\n\n"
-                "回答要求：\n"
-                "1. **仅基于提供的转录文本进行回答**，不要编造或猜测信息\n"
-                "2. 对于事实性问题（如“支持哪些编辑器”），请直接引用转录文本中的原文\n"
-                "3. 如果问题涉及时间定位（如“在哪里讲了XXX”），请给出具体的时间范围（格式：MM:SS或HH:MM:SS）\n"
-                "4. 如果问题涉及视觉内容，请结合关键帧图像进行描述\n"
-                "5. 回答要简洁、准确、完整，使用中文\n"
-                "6. **如果转录文本中有明确的答案，请完整列出所有相关项**\n"
-                "7. 如果信息不足以回答问题，请说明“转录文本中未提及该信息”"
+                "你是一个专业的视频助理,能够结合视频的完整转录文本和关键帧图像来回答用户问题。\n\n"
+                "重要说明:\n"
+                "- 你已经获得了视频的完整转录文本,无需担心信息缺失\n"
+                "- 你可以对整个视频内容进行全面分析和回答\n\n"
+                "回答要求:\n"
+                "1. 仅基于提供的完整转录文本进行回答,不要编造或猜测信息\n"
+                "2. 对于事实性问题,请完整列出转录文本中的所有相关信息\n"
+                "3. 如果问题涉及时间定位,请分析整个转录文本,找出所有相关位置并给出时间范围\n"
+                "4. 如果问题涉及视觉内容,请结合关键帧图像进行描述\n"
+                "5. 回答要简洁、准确、完整,使用中文\n"
+                "6. 可以对视频内容进行总结、归纳、对比等分析\n"
+                "7. 如果转录文本中确实未提及相关信息,请明确说明\n"
             )
             
             messages: List[Dict[str, Any]] = [

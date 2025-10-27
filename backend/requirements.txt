@@ -12,6 +12,7 @@ httpx[socks]>=0.24.0  # 支持 SOCKS 代理
 # 视频处理 
 yt-dlp>=2024.10.7  # 更新到最新版本以支持最新的 YouTube 反爬虫机制
 ffmpeg-python>=0.2.0
+scenedetect[opencv]>=0.6.2  # PySceneDetect 场景检测库
 
 # 云存储服务
 oss2>=2.18.0

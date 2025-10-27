@@ -4,6 +4,24 @@ Handles environment variables and application settings.
 """
 import os
 from typing import Optional
+from pathlib import Path
+from dotenv import load_dotenv
+
+# 加载环境变量，优先从项目根目录的 .env 文件读取
+# 项目根目录 = backend的父目录
+project_root = Path(__file__).parent.parent.parent
+env_file = project_root / ".env"
+if env_file.exists():
+    load_dotenv(env_file)
+    print(f"✅ 已加载环境变量文件: {env_file}")
+else:
+    # 回退到 backend/.env
+    backend_env = project_root / "backend" / ".env"
+    if backend_env.exists():
+        load_dotenv(backend_env)
+        print(f"✅ 已加载环境变量文件: {backend_env}")
+    else:
+        print("⚠️ 未找到 .env 文件，将使用系统环境变量")
 
 
 class Settings:

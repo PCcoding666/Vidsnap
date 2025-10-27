@@ -1,6 +1,6 @@
 """
 改进的视频处理服务
-支持双输入源、ffmpeg场景检测关键帧提取、阿里云OSS存储
+支持双输入源、PySceneDetect场景检测（FFmpeg fallback）、阿里云OSS存储
 """
 import logging
 import uuid
@@ -272,7 +272,8 @@ class AliyunVideoService:
     
     async def extract_keyframes_scene_detection(self, video_path: str, video_id: str, session_temp_dir: Path) -> List[KeyframeInfo]:
         """
-        使用ffmpeg场景变化检测提取关键帧（最多10帧）
+        使用PySceneDetect进行场景检测提取关键帧（FFmpeg作为fallback）
+        最多提取10帧
         
         Args:
             video_path: 视频文件路径
@@ -291,11 +292,18 @@ class AliyunVideoService:
             keyframes_dir = session_temp_dir / "keyframes"
             keyframes_dir.mkdir(exist_ok=True)
             
-            # 步骤1: 使用ffmpeg检测场景变化
-            scene_timestamps = await self._detect_scenes_with_ffmpeg(video_path)
+            # 步骤1: 优先尝试PySceneDetect
+            logger.info("尝试使用PySceneDetect进行场景检测...")
+            scene_timestamps = await self._detect_scenes_with_pyscenedetect(video_path, threshold=27.0)
             
+            # 步骤2: 如果PySceneDetect失败，使用FFmpeg fallback
             if not scene_timestamps:
-                logger.warning("未检测到场景变化，使用均匀采样")
+                logger.info("回退到FFmpeg场景检测...")
+                scene_timestamps = await self._detect_scenes_with_ffmpeg(video_path)
+            
+            # 步骤3: 如果两种方法都失败，使用均匀采样
+            if not scene_timestamps:
+                logger.warning("场景检测失败，使用均匀采样")
                 scene_timestamps = await self._uniform_sampling(video_path, 10)
             
             # 限制最多10帧
@@ -305,7 +313,7 @@ class AliyunVideoService:
             keyframes = []
             from .oss_service import oss_service
             
-            # 步骤2: 在每个场景时间戳提取帧
+            # 步骤4: 在每个场景时间戳提取帧
             for i, timestamp in enumerate(selected_scenes):
                 frame_path = await self._extract_frame_at_timestamp(
                     video_path, timestamp, i, keyframes_dir
@@ -331,6 +339,70 @@ class AliyunVideoService:
             
         except Exception as e:
             logger.exception(f"关键帧提取失败: {e}")
+            return []
+    
+    async def _detect_scenes_with_pyscenedetect(self, video_path: str, threshold: float = 27.0) -> List[float]:
+        """
+        使用PySceneDetect进行高精度场景检测
+        
+        Args:
+            video_path: 视频文件路径
+            threshold: 场景检测阈值（默认27.0，范围0-100，值越小越敏感）
+            
+        Returns:
+            场景变化时间戳列表
+        """
+        try:
+            from scenedetect import VideoManager, SceneManager
+            from scenedetect.detectors import ContentDetector
+            
+            logger.info(f"使用PySceneDetect进行场景检测，阈值: {threshold}")
+            
+            # 初始化视频管理器和场景管理器
+            video_manager = VideoManager([video_path])
+            scene_manager = SceneManager()
+            
+            # 添加内容检测器
+            scene_manager.add_detector(ContentDetector(threshold=threshold))
+            
+            # 开始场景检测
+            video_manager.set_downscale_factor()  # 自动降采样以提升性能
+            video_manager.start()
+            
+            # 执行检测
+            scene_manager.detect_scenes(frame_source=video_manager)
+            
+            # 获取场景列表
+            scene_list = scene_manager.get_scene_list()
+            video_manager.release()
+            
+            # 提取每个场景的起始时间戳
+            timestamps = []
+            for scene in scene_list:
+                start_time = scene[0].get_seconds()
+                timestamps.append(start_time)
+            
+            # 过滤过于接近的时间戳（至少间隔2秒）
+            filtered_timestamps = []
+            last_timestamp = -999
+            
+            for timestamp in sorted(timestamps):
+                if timestamp - last_timestamp >= 2.0:
+                    filtered_timestamps.append(timestamp)
+                    last_timestamp = timestamp
+            
+            if filtered_timestamps:
+                logger.info(f"PySceneDetect检测到{len(filtered_timestamps)}个场景")
+                return filtered_timestamps
+            else:
+                logger.warning("PySceneDetect未检测到明显场景变化")
+                return []
+                
+        except ImportError:
+            logger.warning("PySceneDetect库未安装，将使用FFmpeg fallback")
+            return []
+        except Exception as e:
+            logger.exception(f"PySceneDetect场景检测失败: {e}")
             return []
     
     async def _detect_scenes_with_ffmpeg(self, video_path: str, threshold: float = 0.3) -> List[float]:

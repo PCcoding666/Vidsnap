@@ -9,6 +9,18 @@ import asyncio
 import tempfile
 from typing import Dict, Any, List, Optional
 from dataclasses import dataclass
+from pathlib import Path
+from dotenv import load_dotenv
+
+# 确保加载 .env 文件
+project_root = Path(__file__).parent.parent.parent.parent
+env_file = project_root / ".env"
+if env_file.exists():
+    load_dotenv(env_file, override=True)
+else:
+    backend_env = project_root / "backend" / ".env"
+    if backend_env.exists():
+        load_dotenv(backend_env, override=True)
 
 import dashscope
 from dashscope.audio.asr import Transcription
