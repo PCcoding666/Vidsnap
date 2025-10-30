@@ -309,7 +309,7 @@ def start_chat_session() -> str:
         return f"❌ 错误: {str(e)}"
 
 
-def ask_question(question: str, history: List[Tuple[str, str]]) -> Tuple[List[Tuple[str, str]], str]:
+def ask_question(question: str, history: List[Tuple[str, str]]) -> List[Tuple[str, str]]:
     """
     在聊天会话中提问
     
@@ -318,15 +318,17 @@ def ask_question(question: str, history: List[Tuple[str, str]]) -> Tuple[List[Tu
         history: 对话历史
         
     Returns:
-        (更新后的对话历史, 引用信息)
+        更新后的对话历史
     """
     global current_chat_session_id
     
     if not current_chat_session_id:
-        return history, "❌ 错误: 请先启动聊天会话"
+        error_msg = "❌ 错误: 请先启动聊天会话"
+        return history + [(question, error_msg)]
     
     if not question or not question.strip():
-        return history, "❌ 错误: 请输入问题"
+        error_msg = "❌ 错误: 请输入问题"
+        return history + [(question, error_msg)]
     
     try:
         # 异步调用聊天服务
@@ -341,42 +343,20 @@ def ask_question(question: str, history: List[Tuple[str, str]]) -> Tuple[List[Tu
         
         if result.get("status") == "success":
             answer = result["answer"]
-            references = result["references"]
             
             # 更新对话历史
             history = history + [(question, answer)]
             
-            # 格式化引用信息
-            ref_text = "📋 引用信息:\n\n"
-            
-            # 时间范围
-            if references["time_ranges"]:
-                ref_text += "🕒 相关时间段:\n"
-                for tr in references["time_ranges"][:5]:  # 最多显示5个
-                    start = format_timestamp(tr["start_time"])
-                    end = format_timestamp(tr["end_time"])
-                    text_preview = tr["text"][:50] + "..." if len(tr["text"]) > 50 else tr["text"]
-                    ref_text += f"  • {start} - {end}: {text_preview}\n"
-                ref_text += "\n"
-            
-            # 关键帧
-            if references["keyframes"]:
-                ref_text += "🖼️ 使用的关键帧:\n"
-                for kf in references["keyframes"]:
-                    timestamp = format_timestamp(kf["timestamp"])
-                    ref_text += f"  • Frame {kf['frame_id']} ({timestamp})\n"
-                ref_text += "\n"
-            
-            ref_text += f"💬 对话轮数: {result['history_length'] // 2}"
-            
-            return history, ref_text
+            return history
         else:
             error = result.get("error", "未知错误")
-            return history, f"❌ 提问失败: {error}"
+            error_msg = f"❌ 提问失败: {error}"
+            return history + [(question, error_msg)]
     
     except Exception as e:
         logger.exception(f"聊天提问失败: {e}")
-        return history, f"❌ 错误: {str(e)}"
+        error_msg = f"❌ 错误: {str(e)}"
+        return history + [(question, error_msg)]
 
 
 def create_gradio_interface():
@@ -559,12 +539,6 @@ def create_gradio_interface():
                         scale=1
                     )
                 
-                chat_references = gr.Textbox(
-                    label="引用信息",
-                    interactive=False,
-                    lines=8
-                )
-                
                 with gr.Row():
                     clear_chat_btn = gr.Button("🗑️ 清空对话", size="sm")
                 
@@ -604,7 +578,7 @@ def create_gradio_interface():
         send_btn.click(
             fn=ask_question,
             inputs=[question_input, chatbot],
-            outputs=[chatbot, chat_references]
+            outputs=[chatbot]
         ).then(
             fn=lambda: "",
             outputs=question_input
@@ -613,7 +587,7 @@ def create_gradio_interface():
         question_input.submit(
             fn=ask_question,
             inputs=[question_input, chatbot],
-            outputs=[chatbot, chat_references]
+            outputs=[chatbot]
         ).then(
             fn=lambda: "",
             outputs=question_input

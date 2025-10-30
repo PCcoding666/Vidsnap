@@ -7,7 +7,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from .core.logging import logger
-from .api.routes import video, analysis
+from .api.routes import video, analysis, auth  # 添加 auth 路由
 
 # 创建FastAPI应用
 app = FastAPI(
@@ -26,8 +26,9 @@ app.add_middleware(
 )
 
 # 包含路由
-app.include_router(video.router)
-app.include_router(analysis.router)
+app.include_router(auth.router)  # 认证路由(无需认证)
+app.include_router(video.router)  # 视频路由(需要认证)
+app.include_router(analysis.router)  # 分析路由
 
 @app.get("/")
 async def root():

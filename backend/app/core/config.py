@@ -39,6 +39,14 @@ class Settings:
     # 音频转录服务 API Key（优先级最高）
     TRANSCRIPT_SERVICE_API_KEY: str = os.getenv("TRANSCRIPT_SERVICE_API_KEY", "")
     
+    # Supabase 配置
+    # ⚠️ 安全警告: SUPABASE_SERVICE_KEY 拥有绕过 RLS 的完全数据库访问权限
+    # 仅在后端服务器环境使用,严禁暴露给前端或客户端
+    # 应通过环境变量注入,禁止硬编码到代码中
+    SUPABASE_URL: str = os.getenv("SUPABASE_URL", "")
+    SUPABASE_ANON_KEY: str = os.getenv("SUPABASE_ANON_KEY", "")
+    SUPABASE_SERVICE_KEY: str = os.getenv("SUPABASE_SERVICE_KEY", "")
+    
     # 应用配置
     TEMP_DIR: str = os.getenv("TEMP_DIR", "/tmp/video_analysis")
     
@@ -67,6 +75,15 @@ class Settings:
     @property
     def dashscope_available(self) -> bool:
         return bool(self.QWEN_API_KEY)
+    
+    @property
+    def supabase_available(self) -> bool:
+        """检查 Supabase 配置是否完整"""
+        return all([
+            self.SUPABASE_URL,
+            self.SUPABASE_ANON_KEY,
+            self.SUPABASE_SERVICE_KEY
+        ])
 
 
 # 创建配置实例

@@ -242,7 +242,7 @@ class VideoChatService:
         # 文本类：使用多模态模型 qwen-vl-plus，支持文本+关键帧多模态分析
         return {
             "model": self.llm_service.text_model,  # qwen-vl-plus (多模态模型)
-            "requires_keyframes": True,  # v0.2.0 优化：启用关键帧以支持多模态分析
+            "requires_keyframes": True,  # 强制启用关键帧以支持多模态分析
             "requires_audio": False,
             "strategy": "multimodal_text_qa"
         }

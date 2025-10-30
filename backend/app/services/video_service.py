@@ -270,7 +270,7 @@ class AliyunVideoService:
     async def extract_keyframes_scene_detection(self, video_path: str, video_id: str, session_temp_dir: Path) -> List[KeyframeInfo]:
         """
         使用PySceneDetect进行场景检测提取关键帧（FFmpeg作为fallback）
-        最多提取10帧
+        最多提取20帧
         
         Args:
             video_path: 视频文件路径
@@ -303,8 +303,8 @@ class AliyunVideoService:
                 logger.warning("场景检测失败，使用均匀采样")
                 scene_timestamps = await self._uniform_sampling(video_path, 10)
             
-            # 限制最多10帧
-            selected_scenes = scene_timestamps[:10]
+            # 限制最多20帧
+            selected_scenes = scene_timestamps[:20]
             logger.info(f"选择了{len(selected_scenes)}个场景时间戳进行关键帧提取")
             
             keyframes = []

@@ -24,6 +24,7 @@ from .video_service import video_service
 from .paraformer_service import paraformer_service  # 使用 Paraformer-v2 替代 SenseVoice
 from .oss_service import oss_service
 from .llm_service import llm_service
+from .supabase_service import supabase_service
 
 
 class AliyunVideoProcessingPipeline:
@@ -306,6 +307,7 @@ class AliyunVideoProcessingPipeline:
         self,
         video_file: Optional[str] = None,
         youtube_url: Optional[str] = None,
+        user_id: Optional[str] = None,
         progress_callback: Optional[callable] = None
     ) -> Dict[str, Any]:
         """
@@ -314,7 +316,7 @@ class AliyunVideoProcessingPipeline:
         Args:
             video_file: 上传的视频文件路径
             youtube_url: YouTube视频URL
-            granularity: 总结粒度 ("brief", "standard", "detailed")
+            user_id: 用户 ID(用于 Supabase 数据持久化)
             progress_callback: 进度回调函数
             
         Returns:
@@ -322,6 +324,8 @@ class AliyunVideoProcessingPipeline:
         """
         if progress_callback:
             progress_callback("开始处理视频...")
+        
+        video_id = None
         
         try:
             # 步骤1: 视频下载/上传和关键帧提取
@@ -341,6 +345,33 @@ class AliyunVideoProcessingPipeline:
             keyframes = video_result["keyframes"]
             video_metadata = video_result["video_metadata"]
             session_temp_dir = video_result["session_temp_dir"]
+            
+            # 【Supabase 集成点1】创建视频记录 (0% 初始化)
+            if supabase_service.is_available() and user_id:
+                try:
+                    video_data = {
+                        "video_id": video_id,
+                        "user_id": user_id,
+                        "title": video_info.title or "处理中...",
+                        "duration": video_info.duration,
+                        "source_type": "youtube" if youtube_url else "upload",
+                        "original_url": youtube_url or "",
+                        "oss_video_url": video_info.oss_video_url or "",
+                        "processing_status": "processing",
+                        "processing_progress": 0
+                    }
+                    supabase_service.create_video_record(video_data)
+                    logger.info(f"✅ Supabase: 创建视频记录 {video_id}")
+                except Exception as e:
+                    logger.error(f"⚠️ Supabase: 创建视频记录失败: {e}")
+            
+            # 【Supabase 集成点2】更新视频状态 (15% 视频上传完成)
+            if supabase_service.is_available() and user_id:
+                try:
+                    supabase_service.update_video_status(video_id, "processing", 15)
+                    supabase_service.update_video_urls(video_id, oss_video_url=video_info.oss_video_url)
+                except Exception as e:
+                    logger.error(f"⚠️ Supabase: 更新视频状态失败: {e}")
             
             # 确定视频文件路径
             if youtube_url:
@@ -365,6 +396,15 @@ class AliyunVideoProcessingPipeline:
             if progress_callback:
                 progress_callback("提取音频并进行转录...")
             
+            # 【Supabase 集成点3】更新进度 (45% 关键帧上传完成)
+            if supabase_service.is_available() and user_id:
+                try:
+                    supabase_service.update_video_status(video_id, "processing", 45)
+                    supabase_service.save_keyframes(video_id, keyframes)
+                    logger.info(f"✅ Supabase: 保存 {len(keyframes)} 个关键帧")
+                except Exception as e:
+                    logger.error(f"⚠️ Supabase: 保存关键帧失败: {e}")
+            
             # 启动音频转录任务
             audio_task = asyncio.create_task(
                 self.speech_service.extract_and_transcribe_audio(video_path, video_id)
@@ -376,6 +416,16 @@ class AliyunVideoProcessingPipeline:
             if not transcript_result:
                 logger.warning("音频转录失败，继续处理其他部分")
                 transcript_result = self._create_empty_transcript()
+            
+            # 【Supabase 集成点4】音频转录完成 (60%)
+            if supabase_service.is_available() and user_id:
+                try:
+                    supabase_service.update_video_status(video_id, "processing", 60)
+                    if transcript_result and hasattr(transcript_result, 'segments') and transcript_result.segments:
+                        supabase_service.save_transcript_segments(video_id, transcript_result.segments)
+                        logger.info(f"✅ Supabase: 保存 {len(transcript_result.segments)} 个转录段落")
+                except Exception as e:
+                    logger.error(f"⚠️ Supabase: 保存转录数据失败: {e}")
             
             # 步骤3: 生成统一metadata
             if progress_callback:
@@ -400,6 +450,21 @@ class AliyunVideoProcessingPipeline:
                     
                     if video_summary:
                         logger.info(f"LLM 视频总结生成成功: {len(video_summary.detailed_summary)} 字符")
+                        
+                        # 【Supabase 集成点5】LLM 总结完成 (80%)
+                        if supabase_service.is_available() and user_id:
+                            try:
+                                supabase_service.update_video_status(video_id, "processing", 80)
+                                # 保存三种粒度的总结
+                                if hasattr(video_summary, 'brief_summary'):
+                                    supabase_service.save_video_summary(video_id, "brief", video_summary.brief_summary)
+                                if hasattr(video_summary, 'standard_summary'):
+                                    supabase_service.save_video_summary(video_id, "standard", video_summary.standard_summary)
+                                if hasattr(video_summary, 'detailed_summary') and video_summary.detailed_summary:
+                                    supabase_service.save_video_summary(video_id, "detailed", video_summary.detailed_summary)
+                                logger.info(f"✅ Supabase: 保存视频总结(三种粒度)")
+                            except Exception as e:
+                                logger.error(f"⚠️ Supabase: 保存视频总结失败: {e}")
                         
                         # 将总结上传到 OSS
                         summary_oss_url = await self.oss_service.upload_metadata(
@@ -437,6 +502,14 @@ class AliyunVideoProcessingPipeline:
             if progress_callback:
                 progress_callback("处理完成！")
             
+            # 【Supabase 集成点6】处理完成 (100%)
+            if supabase_service.is_available() and user_id:
+                try:
+                    supabase_service.update_video_status(video_id, "completed", 100)
+                    logger.info(f"✅ Supabase: 视频处理完成 {video_id}")
+                except Exception as e:
+                    logger.error(f"⚠️ Supabase: 更新完成状态失败: {e}")
+            
             logger.info(f"视频处理完成: {video_id}")
             
             return {
@@ -453,13 +526,21 @@ class AliyunVideoProcessingPipeline:
             error_msg = f"视频处理管道异常: {str(e)}"
             logger.exception(error_msg)
             
+            # 【Supabase 集成点7】处理失败
+            if supabase_service.is_available() and user_id and video_id:
+                try:
+                    supabase_service.update_video_status(video_id, "failed", error_message=error_msg)
+                    logger.info(f"⚠️ Supabase: 标记视频处理失败 {video_id}")
+                except Exception as se:
+                    logger.error(f"⚠️ Supabase: 更新失败状态失败: {se}")
+            
             if progress_callback:
                 progress_callback(f"处理失败: {error_msg}")
             
             return {
                 "status": "error",
                 "error": error_msg,
-                "video_id": video_id if 'video_id' in locals() else None
+                "video_id": video_id
             }
 
 
