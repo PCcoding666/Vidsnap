@@ -1,0 +1,1191 @@
+# YouTube 视频智能总结系统 - 阶段一开发提示词
+
+## 项目背景
+
+这是一个基于阿里云 AI 服务的 YouTube 视频智能总结 SaaS 系统。当前状态：
+- **后端**：FastAPI (端口 8000) + Gradio 原型 (端口 7860)，已完成核心业务逻辑
+- **前端**：React + TypeScript + Vite (端口 8080)，仅有展示页面，未连接后端
+- **数据库**：Supabase (已集成认证和数据持久化)
+
+## 阶段一目标
+
+建立 React 前端与 FastAPI 后端的完整数据流，实现前后端打通。预计 2-3 周完成。
+
+---
+
+## 任务清单
+
+### 任务 1：创建 API 客户端基础设施
+
+#### 1.1 创建统一的 HTTP 客户端
+
+**文件路径**: `frontend/src/lib/api/client.ts`
+
+**需求**:
+1. 基于 axios 创建统一的 HTTP 客户端实例
+2. 配置基础 URL (从环境变量读取: `VITE_API_BASE_URL`)
+3. 实现请求拦截器：自动注入 Authorization Token
+4. 实现响应拦截器：统一错误处理、Token 过期自动刷新
+5. 导出类型安全的 API 客户端
+
+**技术要求**:
+- 使用 TypeScript 严格类型
+- Token 从 localStorage 读取 (key: `auth_token`)
+- Token 刷新失败时清除本地存储并跳转登录
+- 错误处理要覆盖网络错误、4xx、5xx
+
+**参考结构**:
+```typescript
+import axios from 'axios';
+
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+
+const apiClient = axios.create({
+  baseURL: API_BASE_URL,
+  timeout: 30000,
+  headers: {
+    'Content-Type': 'application/json',
+  },
+});
+
+// 请求拦截器
+apiClient.interceptors.request.use(
+  (config) => {
+    const token = localStorage.getItem('auth_token');
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+    return config;
+  },
+  (error) => Promise.reject(error)
+);
+
+// 响应拦截器
+apiClient.interceptors.response.use(
+  (response) => response,
+  async (error) => {
+    // 处理 401 错误、Token 刷新逻辑
+    // 处理其他错误
+    return Promise.reject(error);
+  }
+);
+
+export default apiClient;
+```
+
+---
+
+#### 1.2 创建 API 类型定义
+
+**文件路径**: `frontend/src/lib/api/types.ts`
+
+**需求**:
+定义所有 API 请求和响应的 TypeScript 类型，包括：
+
+1. **认证相关类型**
+```typescript
+export interface SignUpRequest {
+  email: string;
+  password: string;
+  username?: string;
+}
+
+export interface SignInRequest {
+  email: string;
+  password: string;
+}
+
+export interface AuthResponse {
+  user: UserResponse;
+  access_token: string;
+  refresh_token: string;
+}
+
+export interface UserResponse {
+  id: string;
+  email: string;
+  username?: string;
+  subscription_tier: 'free' | 'pro' | 'enterprise';
+}
+
+export interface OAuthURLResponse {
+  url: string;
+  provider: string;
+}
+```
+
+2. **视频处理类型**
+```typescript
+export interface VideoProcessRequest {
+  youtube_url?: string;
+  video_file?: File;
+}
+
+export interface VideoProcessResponse {
+  status: 'success' | 'error';
+  video_id: string;
+  metadata: VideoMetadata;
+  video_summary?: VideoSummary;
+  error?: string;
+}
+
+export interface VideoMetadata {
+  title: string;
+  duration: number;
+  video_id: string;
+  video_resolution?: string;
+  video_size?: number;
+  oss_video_url?: string;
+  metadata_oss_url?: string;
+  transcript?: Transcript;
+  keyframes?: Keyframe[];
+}
+
+export interface VideoSummary {
+  brief_summary: string;
+  standard_summary: string;
+  detailed_summary: string;
+}
+
+export interface Transcript {
+  language: string;
+  oss_audio_url?: string;
+  segments: TranscriptSegment[];
+}
+
+export interface TranscriptSegment {
+  start_time: number;
+  end_time: number;
+  text: string;
+  speaker?: string;
+}
+
+export interface Keyframe {
+  frame_id: number;
+  timestamp: number;
+  oss_image_url?: string;
+  scene_description: string;
+}
+```
+
+3. **通用类型**
+```typescript
+export interface ApiError {
+  detail: string;
+}
+
+export interface ServiceStatus {
+  status: 'success';
+  services: {
+    video_service: boolean;
+    speech_service: boolean;
+    oss_service: boolean;
+    llm_service: boolean;
+  };
+}
+```
+
+---
+
+#### 1.3 创建认证 API 模块
+
+**文件路径**: `frontend/src/lib/api/auth.ts`
+
+**需求**:
+封装所有认证相关的 API 调用，包括：
+
+1. 邮箱注册 `signUp()`
+2. 邮箱登录 `signIn()`
+3. 获取当前用户信息 `getCurrentUser()`
+4. 获取 Google OAuth URL `getGoogleOAuthUrl()`
+5. 处理 OAuth 回调 `handleOAuthCallback()`
+
+**技术要求**:
+- 使用 apiClient 发送请求
+- 所有函数返回 Promise
+- 使用前面定义的类型
+- 成功时自动保存 Token 到 localStorage
+
+**参考结构**:
+```typescript
+import apiClient from './client';
+import type { 
+  SignUpRequest, 
+  SignInRequest, 
+  AuthResponse,
+  UserResponse,
+  OAuthURLResponse 
+} from './types';
+
+export const authApi = {
+  async signUp(data: SignUpRequest): Promise<AuthResponse> {
+    const response = await apiClient.post<AuthResponse>('/auth/signup', data);
+    localStorage.setItem('auth_token', response.data.access_token);
+    localStorage.setItem('refresh_token', response.data.refresh_token);
+    return response.data;
+  },
+
+  async signIn(data: SignInRequest): Promise<AuthResponse> {
+    const response = await apiClient.post<AuthResponse>('/auth/signin', data);
+    localStorage.setItem('auth_token', response.data.access_token);
+    localStorage.setItem('refresh_token', response.data.refresh_token);
+    return response.data;
+  },
+
+  async getCurrentUser(): Promise<UserResponse> {
+    const response = await apiClient.get<UserResponse>('/auth/me');
+    return response.data;
+  },
+
+  async getGoogleOAuthUrl(redirectUrl: string): Promise<OAuthURLResponse> {
+    const response = await apiClient.get<OAuthURLResponse>(
+      `/auth/oauth/google?redirect_url=${encodeURIComponent(redirectUrl)}`
+    );
+    return response.data;
+  },
+
+  async handleOAuthCallback(code: string): Promise<AuthResponse> {
+    const response = await apiClient.post<AuthResponse>('/auth/oauth/callback', { code });
+    localStorage.setItem('auth_token', response.data.access_token);
+    localStorage.setItem('refresh_token', response.data.refresh_token);
+    return response.data;
+  },
+
+  logout() {
+    localStorage.removeItem('auth_token');
+    localStorage.removeItem('refresh_token');
+  },
+};
+```
+
+---
+
+#### 1.4 创建视频处理 API 模块
+
+**文件路径**: `frontend/src/lib/api/video.ts`
+
+**需求**:
+封装所有视频处理相关的 API 调用：
+
+1. 处理视频 `processVideo()`
+2. 获取服务状态 `getServiceStatus()`
+
+**技术要求**:
+- 支持 YouTube URL 和本地文件上传两种方式
+- 使用 FormData 上传文件
+- 支持上传进度回调（可选）
+
+**参考结构**:
+```typescript
+import apiClient from './client';
+import type { VideoProcessResponse, ServiceStatus } from './types';
+
+export const videoApi = {
+  async processVideo(params: {
+    youtubeUrl?: string;
+    videoFile?: File;
+    onUploadProgress?: (progress: number) => void;
+  }): Promise<VideoProcessResponse> {
+    const formData = new FormData();
+    
+    if (params.youtubeUrl) {
+      formData.append('youtube_url', params.youtubeUrl);
+    }
+    
+    if (params.videoFile) {
+      formData.append('video_file', params.videoFile);
+    }
+    
+    const response = await apiClient.post<VideoProcessResponse>(
+      '/video/process',
+      formData,
+      {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+        onUploadProgress: (progressEvent) => {
+          if (params.onUploadProgress && progressEvent.total) {
+            const progress = (progressEvent.loaded / progressEvent.total) * 100;
+            params.onUploadProgress(progress);
+          }
+        },
+      }
+    );
+    
+    return response.data;
+  },
+
+  async getServiceStatus(): Promise<ServiceStatus> {
+    const response = await apiClient.get<ServiceStatus>('/video/status');
+    return response.data;
+  },
+};
+```
+
+---
+
+### 任务 2：实现认证状态管理
+
+#### 2.1 创建认证 Context
+
+**文件路径**: `frontend/src/contexts/AuthContext.tsx`
+
+**需求**:
+1. 提供全局认证状态管理
+2. 封装登录、注册、登出逻辑
+3. 自动检查用户登录状态
+4. 提供 loading 状态
+
+**技术要求**:
+- 使用 React Context API
+- 页面加载时自动从 localStorage 恢复登录状态
+- Token 存在时自动调用 `/auth/me` 验证
+- 提供类型安全的 useAuth Hook
+
+**参考结构**:
+```typescript
+import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { authApi } from '@/lib/api/auth';
+import type { UserResponse } from '@/lib/api/types';
+
+interface AuthContextType {
+  user: UserResponse | null;
+  isAuthenticated: boolean;
+  isLoading: boolean;
+  signIn: (email: string, password: string) => Promise<void>;
+  signUp: (email: string, password: string, username?: string) => Promise<void>;
+  logout: () => void;
+  refreshUser: () => Promise<void>;
+}
+
+const AuthContext = createContext<AuthContextType | undefined>(undefined);
+
+export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
+  const [user, setUser] = useState<UserResponse | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+
+  // 初始化时检查登录状态
+  useEffect(() => {
+    const initAuth = async () => {
+      const token = localStorage.getItem('auth_token');
+      if (token) {
+        try {
+          const userData = await authApi.getCurrentUser();
+          setUser(userData);
+        } catch (error) {
+          console.error('Token 验证失败:', error);
+          authApi.logout();
+        }
+      }
+      setIsLoading(false);
+    };
+
+    initAuth();
+  }, []);
+
+  const signIn = async (email: string, password: string) => {
+    const response = await authApi.signIn({ email, password });
+    setUser(response.user);
+  };
+
+  const signUp = async (email: string, password: string, username?: string) => {
+    const response = await authApi.signUp({ email, password, username });
+    setUser(response.user);
+  };
+
+  const logout = () => {
+    authApi.logout();
+    setUser(null);
+  };
+
+  const refreshUser = async () => {
+    const userData = await authApi.getCurrentUser();
+    setUser(userData);
+  };
+
+  const value = {
+    user,
+    isAuthenticated: !!user,
+    isLoading,
+    signIn,
+    signUp,
+    logout,
+    refreshUser,
+  };
+
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+};
+
+export const useAuth = () => {
+  const context = useContext(AuthContext);
+  if (context === undefined) {
+    throw new Error('useAuth must be used within an AuthProvider');
+  }
+  return context;
+};
+```
+
+---
+
+#### 2.2 创建路由守卫组件
+
+**文件路径**: `frontend/src/components/ProtectedRoute.tsx`
+
+**需求**:
+创建受保护路由组件，未登录用户自动跳转到登录页
+
+**参考结构**:
+```typescript
+import { Navigate } from 'react-router-dom';
+import { useAuth } from '@/contexts/AuthContext';
+
+interface ProtectedRouteProps {
+  children: React.ReactNode;
+}
+
+export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
+  const { isAuthenticated, isLoading } = useAuth();
+
+  if (isLoading) {
+    return <div>Loading...</div>; // 可以替换为加载动画组件
+  }
+
+  if (!isAuthenticated) {
+    return <Navigate to="/login" replace />;
+  }
+
+  return <>{children}</>;
+};
+```
+
+---
+
+### 任务 3：创建核心页面
+
+#### 3.1 登录页面
+
+**文件路径**: `frontend/src/pages/Login.tsx`
+
+**需求**:
+1. 邮箱/密码登录表单
+2. Google OAuth 登录按钮
+3. 跳转到注册页面的链接
+4. 表单验证（邮箱格式、密码长度）
+5. 错误提示
+6. 登录成功后跳转到工作台
+
+**UI 要求**:
+- 使用 shadcn/ui 组件库（Button, Input, Card）
+- 简洁优雅的设计
+- 移动端响应式
+- 表单提交时显示 loading 状态
+
+**参考结构**:
+```typescript
+import { useState } from 'react';
+import { useNavigate, Link } from 'react-router-dom';
+import { useAuth } from '@/contexts/AuthContext';
+import { authApi } from '@/lib/api/auth';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Card } from '@/components/ui/card';
+import { useToast } from '@/hooks/use-toast';
+
+export default function Login() {
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const { signIn } = useAuth();
+  const navigate = useNavigate();
+  const { toast } = useToast();
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsLoading(true);
+
+    try {
+      await signIn(email, password);
+      toast({ title: '登录成功' });
+      navigate('/dashboard');
+    } catch (error: any) {
+      toast({
+        title: '登录失败',
+        description: error.response?.data?.detail || '邮箱或密码错误',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleGoogleLogin = async () => {
+    try {
+      const redirectUrl = `${window.location.origin}/auth/callback`;
+      const { url } = await authApi.getGoogleOAuthUrl(redirectUrl);
+      window.location.href = url;
+    } catch (error) {
+      toast({
+        title: 'OAuth 初始化失败',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-secondary/30">
+      <Card className="w-full max-w-md p-8">
+        <h1 className="text-3xl font-bold text-center mb-6">登录</h1>
+        
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium mb-2">邮箱</label>
+            <Input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="your@email.com"
+              required
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium mb-2">密码</label>
+            <Input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="至少 6 位字符"
+              required
+              minLength={6}
+            />
+          </div>
+
+          <Button type="submit" className="w-full" disabled={isLoading}>
+            {isLoading ? '登录中...' : '登录'}
+          </Button>
+        </form>
+
+        <div className="relative my-6">
+          <div className="absolute inset-0 flex items-center">
+            <div className="w-full border-t"></div>
+          </div>
+          <div className="relative flex justify-center text-sm">
+            <span className="px-2 bg-card">或</span>
+          </div>
+        </div>
+
+        <Button
+          type="button"
+          variant="outline"
+          className="w-full"
+          onClick={handleGoogleLogin}
+        >
+          使用 Google 登录
+        </Button>
+
+        <p className="text-center mt-6 text-sm text-muted-foreground">
+          还没有账号？{' '}
+          <Link to="/signup" className="text-primary hover:underline">
+            立即注册
+          </Link>
+        </p>
+      </Card>
+    </div>
+  );
+}
+```
+
+---
+
+#### 3.2 注册页面
+
+**文件路径**: `frontend/src/pages/Signup.tsx`
+
+**需求**:
+1. 邮箱/密码/用户名注册表单
+2. 表单验证
+3. 注册成功后自动登录并跳转
+4. 跳转到登录页面的链接
+
+**要求**: 参考登录页面的实现，使用相同的 UI 风格
+
+---
+
+#### 3.3 OAuth 回调页面
+
+**文件路径**: `frontend/src/pages/AuthCallback.tsx`
+
+**需求**:
+1. 从 URL 参数获取 `code`
+2. 调用后端处理 OAuth 回调
+3. 保存 Token 并跳转到工作台
+4. 错误处理
+
+**参考结构**:
+```typescript
+import { useEffect } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import { authApi } from '@/lib/api/auth';
+import { useAuth } from '@/contexts/AuthContext';
+import { useToast } from '@/hooks/use-toast';
+
+export default function AuthCallback() {
+  const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
+  const { refreshUser } = useAuth();
+  const { toast } = useToast();
+
+  useEffect(() => {
+    const handleCallback = async () => {
+      const code = searchParams.get('code');
+      
+      if (!code) {
+        toast({
+          title: 'OAuth 授权失败',
+          description: '未获取到授权码',
+          variant: 'destructive',
+        });
+        navigate('/login');
+        return;
+      }
+
+      try {
+        await authApi.handleOAuthCallback(code);
+        await refreshUser();
+        toast({ title: '登录成功' });
+        navigate('/dashboard');
+      } catch (error: any) {
+        toast({
+          title: 'OAuth 认证失败',
+          description: error.response?.data?.detail || '认证失败',
+          variant: 'destructive',
+        });
+        navigate('/login');
+      }
+    };
+
+    handleCallback();
+  }, [searchParams, navigate, refreshUser, toast]);
+
+  return (
+    <div className="min-h-screen flex items-center justify-center">
+      <div className="text-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
+        <p className="text-muted-foreground">正在处理登录...</p>
+      </div>
+    </div>
+  );
+}
+```
+
+---
+
+#### 3.4 工作台页面（Dashboard）
+
+**文件路径**: `frontend/src/pages/Dashboard.tsx`
+
+**需求**:
+1. 顶部导航栏：显示用户信息、登出按钮
+2. 侧边栏菜单：视频处理、历史记录、用户中心
+3. 主内容区：欢迎信息、快速操作
+4. 受保护路由（需要登录）
+
+**UI 要求**:
+- 响应式布局
+- 移动端可收起侧边栏
+- 简洁现代的设计
+
+**参考结构**:
+```typescript
+import { useState } from 'react';
+import { Outlet, Link, useNavigate } from 'react-router-dom';
+import { useAuth } from '@/contexts/AuthContext';
+import { Button } from '@/components/ui/button';
+import { Video, History, User, LogOut, Menu } from 'lucide-react';
+
+export default function Dashboard() {
+  const { user, logout } = useAuth();
+  const navigate = useNavigate();
+  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+
+  const handleLogout = () => {
+    logout();
+    navigate('/login');
+  };
+
+  const menuItems = [
+    { icon: Video, label: '视频处理', path: '/dashboard/process' },
+    { icon: History, label: '历史记录', path: '/dashboard/history' },
+    { icon: User, label: '用户中心', path: '/dashboard/profile' },
+  ];
+
+  return (
+    <div className="min-h-screen bg-secondary/30">
+      {/* 顶部导航栏 */}
+      <header className="bg-card border-b sticky top-0 z-10">
+        <div className="flex items-center justify-between px-4 py-3">
+          <div className="flex items-center gap-4">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+            >
+              <Menu className="h-5 w-5" />
+            </Button>
+            <h1 className="text-xl font-bold">YouTube 视频智能总结</h1>
+          </div>
+
+          <div className="flex items-center gap-4">
+            <span className="text-sm text-muted-foreground">
+              {user?.email}
+            </span>
+            <Button variant="ghost" size="sm" onClick={handleLogout}>
+              <LogOut className="h-4 w-4 mr-2" />
+              登出
+            </Button>
+          </div>
+        </div>
+      </header>
+
+      <div className="flex">
+        {/* 侧边栏 */}
+        {isSidebarOpen && (
+          <aside className="w-64 bg-card border-r min-h-screen p-4">
+            <nav className="space-y-2">
+              {menuItems.map((item) => (
+                <Link
+                  key={item.path}
+                  to={item.path}
+                  className="flex items-center gap-3 px-4 py-3 rounded-lg hover:bg-secondary transition-colors"
+                >
+                  <item.icon className="h-5 w-5" />
+                  <span>{item.label}</span>
+                </Link>
+              ))}
+            </nav>
+          </aside>
+        )}
+
+        {/* 主内容区 */}
+        <main className="flex-1 p-6">
+          <Outlet />
+        </main>
+      </div>
+    </div>
+  );
+}
+```
+
+---
+
+#### 3.5 视频处理页面
+
+**文件路径**: `frontend/src/pages/VideoProcess.tsx`
+
+**需求**:
+1. 输入方式切换：YouTube URL / 本地上传
+2. YouTube URL 输入框
+3. 文件上传组件（拖拽上传）
+4. 语言选择下拉框
+5. 处理按钮
+6. 处理进度显示
+7. 结果展示（总结、转录、关键帧）
+
+**UI 要求**:
+- 清晰的步骤指引
+- 实时进度反馈
+- 结果分区展示（总结、转录、关键帧）
+- 支持复制、下载
+
+**参考结构**:
+```typescript
+import { useState } from 'react';
+import { videoApi } from '@/lib/api/video';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Card } from '@/components/ui/card';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { useToast } from '@/hooks/use-toast';
+import type { VideoProcessResponse } from '@/lib/api/types';
+
+export default function VideoProcess() {
+  const [inputMode, setInputMode] = useState<'url' | 'upload'>('url');
+  const [youtubeUrl, setYoutubeUrl] = useState('');
+  const [videoFile, setVideoFile] = useState<File | null>(null);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [result, setResult] = useState<VideoProcessResponse | null>(null);
+  const { toast } = useToast();
+
+  const handleSubmit = async () => {
+    if (inputMode === 'url' && !youtubeUrl) {
+      toast({ title: '请输入 YouTube URL', variant: 'destructive' });
+      return;
+    }
+
+    if (inputMode === 'upload' && !videoFile) {
+      toast({ title: '请上传视频文件', variant: 'destructive' });
+      return;
+    }
+
+    setIsProcessing(true);
+    setUploadProgress(0);
+
+    try {
+      const response = await videoApi.processVideo({
+        youtubeUrl: inputMode === 'url' ? youtubeUrl : undefined,
+        videoFile: inputMode === 'upload' ? videoFile : undefined,
+        onUploadProgress: setUploadProgress,
+      });
+
+      setResult(response);
+      toast({ title: '处理完成！' });
+    } catch (error: any) {
+      toast({
+        title: '处理失败',
+        description: error.response?.data?.detail || error.message,
+        variant: 'destructive',
+      });
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  return (
+    <div className="max-w-6xl mx-auto space-y-6">
+      <h1 className="text-3xl font-bold">视频处理</h1>
+
+      <Card className="p-6">
+        <Tabs value={inputMode} onValueChange={(v) => setInputMode(v as any)}>
+          <TabsList className="grid w-full grid-cols-2">
+            <TabsTrigger value="url">YouTube URL</TabsTrigger>
+            <TabsTrigger value="upload">本地上传</TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="url" className="space-y-4">
+            <Input
+              placeholder="https://www.youtube.com/watch?v=..."
+              value={youtubeUrl}
+              onChange={(e) => setYoutubeUrl(e.target.value)}
+            />
+          </TabsContent>
+
+          <TabsContent value="upload" className="space-y-4">
+            <Input
+              type="file"
+              accept="video/mp4,video/avi,video/mov,video/mkv"
+              onChange={(e) => setVideoFile(e.target.files?.[0] || null)}
+            />
+          </TabsContent>
+        </Tabs>
+
+        <Button
+          className="w-full mt-4"
+          onClick={handleSubmit}
+          disabled={isProcessing}
+        >
+          {isProcessing ? `处理中 (${uploadProgress.toFixed(0)}%)...` : '开始分析'}
+        </Button>
+      </Card>
+
+      {/* 结果展示区域 */}
+      {result && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* 总结 */}
+          <Card className="p-6">
+            <h2 className="text-xl font-bold mb-4">视频总结</h2>
+            <div className="prose">
+              {result.video_summary?.detailed_summary}
+            </div>
+          </Card>
+
+          {/* 转录 */}
+          <Card className="p-6">
+            <h2 className="text-xl font-bold mb-4">音频转录</h2>
+            <div className="space-y-2 max-h-96 overflow-y-auto">
+              {result.metadata.transcript?.segments.map((seg, idx) => (
+                <div key={idx} className="text-sm">
+                  <span className="text-muted-foreground">
+                    [{formatTime(seg.start_time)}]
+                  </span>{' '}
+                  {seg.text}
+                </div>
+              ))}
+            </div>
+          </Card>
+
+          {/* 关键帧 */}
+          <Card className="p-6 lg:col-span-2">
+            <h2 className="text-xl font-bold mb-4">关键帧</h2>
+            <div className="grid grid-cols-3 gap-4">
+              {result.metadata.keyframes?.map((kf) => (
+                <div key={kf.frame_id}>
+                  <img
+                    src={kf.oss_image_url}
+                    alt={kf.scene_description}
+                    className="rounded-lg w-full"
+                  />
+                  <p className="text-xs text-muted-foreground mt-2">
+                    {kf.scene_description}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </Card>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function formatTime(seconds: number): string {
+  const mins = Math.floor(seconds / 60);
+  const secs = Math.floor(seconds % 60);
+  return `${mins}:${secs.toString().padStart(2, '0')}`;
+}
+```
+
+---
+
+### 任务 4：更新路由配置
+
+**文件路径**: `frontend/src/App.tsx`
+
+**需求**:
+1. 包裹 AuthProvider
+2. 添加所有新路由
+3. 配置受保护路由
+
+**修改内容**:
+```typescript
+import { Toaster } from "@/components/ui/toaster";
+import { Toaster as Sonner } from "@/components/ui/sonner";
+import { TooltipProvider } from "@/components/ui/tooltip";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { AuthProvider } from "@/contexts/AuthContext";
+import { ProtectedRoute } from "@/components/ProtectedRoute";
+
+import Index from "./pages/Index";
+import Login from "./pages/Login";
+import Signup from "./pages/Signup";
+import AuthCallback from "./pages/AuthCallback";
+import Dashboard from "./pages/Dashboard";
+import VideoProcess from "./pages/VideoProcess";
+import NotFound from "./pages/NotFound";
+
+const queryClient = new QueryClient();
+
+const App = () => (
+  <QueryClientProvider client={queryClient}>
+    <TooltipProvider>
+      <Toaster />
+      <Sonner />
+      <BrowserRouter>
+        <AuthProvider>
+          <Routes>
+            <Route path="/" element={<Index />} />
+            <Route path="/login" element={<Login />} />
+            <Route path="/signup" element={<Signup />} />
+            <Route path="/auth/callback" element={<AuthCallback />} />
+            
+            <Route
+              path="/dashboard"
+              element={
+                <ProtectedRoute>
+                  <Dashboard />
+                </ProtectedRoute>
+              }
+            >
+              <Route path="process" element={<VideoProcess />} />
+              <Route path="history" element={<div>历史记录（待开发）</div>} />
+              <Route path="profile" element={<div>用户中心（待开发）</div>} />
+            </Route>
+
+            <Route path="*" element={<NotFound />} />
+          </Routes>
+        </AuthProvider>
+      </BrowserRouter>
+    </TooltipProvider>
+  </QueryClientProvider>
+);
+
+export default App;
+```
+
+---
+
+### 任务 5：配置环境变量和代理
+
+#### 5.1 创建环境变量文件
+
+**文件路径**: `frontend/.env`
+
+**内容**:
+```
+VITE_API_BASE_URL=http://localhost:8000
+```
+
+---
+
+#### 5.2 配置 Vite 代理
+
+**文件路径**: `frontend/vite.config.ts`
+
+**修改内容**:
+在 server 配置中添加 proxy：
+
+```typescript
+import { defineConfig } from "vite";
+import react from "@vitejs/plugin-react-swc";
+import path from "path";
+import { componentTagger } from "lovable-tagger";
+
+export default defineConfig(({ mode }) => ({
+  server: {
+    host: "::",
+    port: 8080,
+    proxy: {
+      '/auth': {
+        target: 'http://localhost:8000',
+        changeOrigin: true,
+      },
+      '/video': {
+        target: 'http://localhost:8000',
+        changeOrigin: true,
+      },
+      '/analysis': {
+        target: 'http://localhost:8000',
+        changeOrigin: true,
+      },
+    },
+  },
+  plugins: [react(), mode === "development" && componentTagger()].filter(Boolean),
+  resolve: {
+    alias: {
+      "@": path.resolve(__dirname, "./src"),
+    },
+  },
+}));
+```
+
+---
+
+### 任务 6：启动后端 FastAPI 服务器
+
+#### 6.1 创建后端启动脚本
+
+**文件路径**: `backend/run_fastapi.sh`
+
+**内容**:
+```bash
+#!/bin/bash
+
+set -e
+
+echo "启动 FastAPI 服务器..."
+
+# 加载环境变量
+if [ -f "../.env" ]; then
+    export $(cat ../.env | grep -v '^#' | xargs)
+fi
+
+# 配置代理
+export https_proxy=http://127.0.0.1:33210
+export http_proxy=http://127.0.0.1:33210
+export all_proxy=socks5://127.0.0.1:33211
+
+# 启动服务器
+uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+```
+
+#### 6.2 赋予执行权限并启动
+
+```bash
+chmod +x backend/run_fastapi.sh
+./backend/run_fastapi.sh
+```
+
+---
+
+## 验收标准
+
+完成所有任务后，应达到以下效果：
+
+1. ✅ **认证功能**
+   - 邮箱注册/登录正常
+   - Google OAuth 登录正常
+   - Token 自动注入请求头
+   - 未登录自动跳转登录页
+
+2. ✅ **视频处理功能**
+   - YouTube URL 处理成功
+   - 本地文件上传成功
+   - 显示处理进度
+   - 正确展示结果（总结、转录、关键帧）
+
+3. ✅ **路由保护**
+   - Dashboard 需登录访问
+   - OAuth 回调正常处理
+   - 404 页面正常显示
+
+4. ✅ **用户体验**
+   - 界面简洁美观
+   - 错误提示清晰
+   - 加载状态明确
+   - 移动端响应式
+
+---
+
+## 技术要求总结
+
+- **前端框架**: React 18 + TypeScript
+- **构建工具**: Vite
+- **UI 组件**: shadcn/ui
+- **HTTP 客户端**: axios
+- **状态管理**: React Context + React Query
+- **路由**: react-router-dom v6
+- **表单处理**: 原生 React 状态
+- **类型安全**: 全部代码使用 TypeScript 严格模式
+
+---
+
+## 注意事项
+
+1. **不要创建文档文件**：专注于代码实现，不要创建 README、API 文档等
+2. **代码风格**：遵循 ESLint 配置，使用函数式组件和 Hooks
+3. **错误处理**：所有 API 调用都要有 try-catch 和用户友好的错误提示
+4. **类型安全**：不使用 any 类型（除非必要），充分利用 TypeScript
+5. **响应式设计**：所有页面都要支持移动端
+6. **用户体验**：加载状态、错误提示、成功反馈都要完善
+
+---
+
+## 开发顺序建议
+
+1. 先完成 API 客户端层（任务 1）
+2. 再实现认证状态管理（任务 2）
+3. 然后创建登录/注册页面（任务 3.1-3.3）
+4. 完成工作台和视频处理页面（任务 3.4-3.5）
+5. 最后更新路由和配置（任务 4-5）
+6. 启动后端并测试（任务 6）
+
+---
+
+## 测试清单
+
+开发完成后，请按以下清单进行测试：
+
+- [ ] 邮箱注册成功
+- [ ] 邮箱登录成功
+- [ ] Google OAuth 登录成功
+- [ ] 未登录访问 Dashboard 跳转到登录页
+- [ ] YouTube URL 视频处理成功
+- [ ] 本地文件上传处理成功
+- [ ] 处理结果正确展示
+- [ ] 登出功能正常
+- [ ] Token 过期自动刷新
+- [ ] 错误提示正确显示
+- [ ] 移动端布局正常
+
+完成所有测试后，阶段一即告完成！
