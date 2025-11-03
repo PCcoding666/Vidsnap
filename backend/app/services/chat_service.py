@@ -16,6 +16,7 @@ from ..models.analysis import (
     KeyframeMetadata,
 )
 from .llm_service import llm_service
+from .supabase_service import supabase_service
 from dashscope import MultiModalConversation
 
 
@@ -39,6 +40,9 @@ class ChatSession:
     keyframes: List[KeyframeMetadata]
     created_at: str = field(default_factory=lambda: datetime.now().isoformat())
     history: List[ChatMessage] = field(default_factory=list)
+    # 新增：缓存视频元数据与AI总结，确保VL模型访问完整上下文
+    video_meta: Dict[str, Any] = field(default_factory=dict)
+    summaries: Dict[str, str] = field(default_factory=dict)
 
 
 class VideoChatService:
@@ -85,14 +89,17 @@ class VideoChatService:
     def start_session(
         self,
         video_id: str,
-        metadata: Dict[str, Any]
+        metadata: Optional[Dict[str, Any]] = None
     ) -> Dict[str, Any]:
         """
         启动新的聊天会话
+        支持两种模式：
+        1. 直接传入 metadata（兼容旧用法）
+        2. 仅传入 video_id 时，自动从 Supabase 汇聚完整上下文（关键帧+转录+元数据+AI总结）
         
         Args:
             video_id: 视频 ID
-            metadata: 视频元数据（包含 transcript 和 keyframes）
+            metadata: 视频元数据（可选，包含 transcript 和 keyframes）
             
         Returns:
             包含 session_id 的响应
@@ -104,23 +111,54 @@ class VideoChatService:
             }
         
         try:
+            # 记录输入参数用于调试
+            logger.info(f"[DEBUG] start_session: video_id={video_id}, metadata={'provided' if metadata else 'None'}")
+            
+            # 若未提供 metadata 或 metadata 为空，自动从 Supabase 编译完整上下文
+            compiled = None
+            # 检查metadata是否为空或没有有效内容
+            has_valid_metadata = (
+                metadata and 
+                (metadata.get("transcript") or metadata.get("keyframes"))
+            )
+            
+            if not has_valid_metadata:
+                if supabase_service.is_available():
+                    logger.info(f"从 Supabase 自动加载视频上下文: {video_id}")
+                    compiled = supabase_service.get_compiled_metadata(video_id)
+                    if not compiled:
+                        logger.warning(f"未能从 Supabase 获取上下文: {video_id}，使用空上下文")
+                        compiled = {"transcript": {"segments": []}, "keyframes": [], "video": {}, "summaries": {}}
+                    else:
+                        logger.info(f"[DEBUG] 编译成功: keyframes={len(compiled.get('keyframes', []))}, segments={len(compiled.get('transcript', {}).get('segments', []))}")
+                else:
+                    logger.warning("Supabase 服务不可用，无法自动加载上下文")
+                    compiled = {"transcript": {"segments": []}, "keyframes": [], "video": {}, "summaries": {}}
+                metadata = {"transcript": compiled.get("transcript"), "keyframes": compiled.get("keyframes")}
+            else:
+                logger.info(f"[DEBUG] 使用传入的metadata")
+            
             # 解析 metadata
             transcript = self._dict_to_transcript_metadata(
-                metadata.get("transcript", {})
+                metadata.get("transcript", {}) or {} if metadata else {}
             )
             keyframes = self._dict_to_keyframes(
-                metadata.get("keyframes", [])
+                metadata.get("keyframes", []) or [] if metadata else []
             )
+            
+            logger.info(f"[DEBUG] 解析后: transcript_segments={len(transcript.segments)}, keyframes={len(keyframes)}")
             
             # 生成会话 ID
             session_id = str(uuid.uuid4())
             
-            # 创建会话
+            # 创建会话，附加视频元数据与AI总结以确保上下文完整性
             self.sessions[session_id] = ChatSession(
                 session_id=session_id,
                 video_id=video_id,
                 transcript=transcript,
                 keyframes=keyframes,
+                video_meta=(compiled or {}).get("video", {}),
+                summaries=(compiled or {}).get("summaries", {})
             )
             
             logger.info(
@@ -367,7 +405,10 @@ class VideoChatService:
             
             # 步骤 1: 获取完整的转录文本
             logger.info(f"获取完整转录文本用于问答: {question[:50]}...")
+            logger.info(f"[DEBUG] session.transcript: segments={len(session.transcript.segments) if session.transcript and session.transcript.segments else 0}")
             retrieval = self._get_full_transcript_text(session.transcript)
+            logger.info(f"[DEBUG] retrieval: context_text_length={len(retrieval['context_text'])}, segments={len(retrieval['segment_indices'])}")
+            logger.info(f"[DEBUG] context_text preview: {retrieval['context_text'][:200]}...")
             
             # 步骤 2: 准备关键帧（根据路由策略决定是否需要）
             used_keyframes: List[KeyframeMetadata] = []
@@ -397,10 +438,10 @@ class VideoChatService:
             
             logger.info(f"使用关键帧数量: {len(used_keyframes)}, 问题类型={question_type}, 需要关键帧={routing_strategy['requires_keyframes']}")
             
-            # 步骤 3: 构建多模态消息（v0.2.0 优化：传递关键帧 URL）
+            # 步骤 3: 构建多模态消息（传递关键帧URL + 视频元数据 + AI总结）
             content_parts: List[Dict[str, Any]] = []
             
-            # 添加问题
+            # 添加用户问题
             content_parts.append({"text": f"用户问题：{question}"})
             
             # 添加完整转录文本
@@ -409,7 +450,7 @@ class VideoChatService:
                     "text": f"\n完整视频转录文本：\n{retrieval['context_text']}"
                 })
             
-            # 添加关键帧图像（v0.2.0 新增：支持多模态输入，如果路由策略要求）
+            # 添加关键帧图像（如果路由策略要求）
             if routing_strategy["requires_keyframes"] and used_keyframes:
                 content_parts.append({"text": "\n相关关键帧："})
                 for kf in used_keyframes:
@@ -419,6 +460,30 @@ class VideoChatService:
                             content_parts.append({
                                 "text": f"关键帧 {kf.frame_id} ({kf.timestamp:.1f}s): {kf.scene_description}"
                             })
+            
+            # 添加视频元数据（标题、时长、来源）
+            if session.video_meta:
+                title = session.video_meta.get("title") or ""
+                duration = session.video_meta.get("duration") or 0.0
+                source = session.video_meta.get("source_type") or ""
+                if title or duration or source:
+                    content_parts.append({
+                        "text": f"\n视频元信息：标题《{title}》 | 时长 {duration:.1f} 秒 | 来源 {source}"
+                    })
+            
+            # 添加已生成的 AI 总结（若有）
+            if session.summaries:
+                brief = session.summaries.get("brief")
+                standard = session.summaries.get("standard")
+                detailed = session.summaries.get("detailed")
+                if brief:
+                    content_parts.append({"text": f"\n已有AI简要总结：{brief}"})
+                if standard:
+                    content_parts.append({"text": f"\n已有AI标准总结：{standard}"})
+                if detailed:
+                    # 详细总结可能较长，限制传入长度避免超长上下文
+                    preview = detailed[:1200] + ("..." if len(detailed) > 1200 else "")
+                    content_parts.append({"text": f"\n已有AI详细总结(截断)：{preview}"})
             
             # 步骤 4: 构建完整的对话历史
             system_prompt = (
@@ -455,6 +520,24 @@ class VideoChatService:
             
             # 步骤 5: 调用 Qwen3-VL-Plus 进行对话
             logger.info(f"调用 LLM 生成回答，使用模型: {self.llm_service.text_model}")
+            
+            # [DEBUG] 打印完整的messages结构
+            logger.info(f"[DEBUG] ========== 发送给LLM的完整消息 ==========")
+            logger.info(f"[DEBUG] 总消息数: {len(messages)}")
+            for idx, msg in enumerate(messages):
+                logger.info(f"[DEBUG] Message[{idx}]: role={msg['role']}")
+                content = msg.get('content', [])
+                if isinstance(content, list):
+                    logger.info(f"[DEBUG]   - Content parts: {len(content)} 个")
+                    for cidx, part in enumerate(content):
+                        if 'text' in part:
+                            text_preview = part['text'][:300] if len(part['text']) > 300 else part['text']
+                            logger.info(f"[DEBUG]   - Part[{cidx}] TEXT ({len(part['text'])} 字符): {text_preview}...")
+                        elif 'image' in part:
+                            logger.info(f"[DEBUG]   - Part[{cidx}] IMAGE: {part['image']}")
+                else:
+                    logger.info(f"[DEBUG]   - Content: {str(content)[:200]}")
+            logger.info(f"[DEBUG] ===========================================")
             
             response = await asyncio.to_thread(
                 MultiModalConversation.call,

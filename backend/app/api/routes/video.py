@@ -174,6 +174,80 @@ async def get_video_history(
         raise HTTPException(status_code=500, detail=f"获取视频历史失败: {str(e)}")
 
 
+@router.get("/details/{video_id}")
+async def get_video_details(
+    video_id: str,
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security)
+):
+    """
+    Get detailed information for a specific video.
+    
+    认证: 可选（但只能访问自己的视频）
+    
+    Args:
+        video_id: 视频ID
+        credentials: 认证凭证
+        
+    Returns:
+        视频详细信息
+    """
+    # 处理认证
+    user_id = None
+    if credentials and supabase_service.is_available():
+        try:
+            user = supabase_service.verify_token(credentials.credentials)
+            if user:
+                user_id = user.get("id")
+        except Exception as e:
+            logger.warning(f"⚠️ Token验证失败: {e}")
+    
+    if not supabase_service.is_available():
+        raise HTTPException(
+            status_code=503,
+            detail="数据库服务不可用"
+        )
+    
+    try:
+        # 获取视频基本信息
+        video = supabase_service.get_video_by_id(video_id)
+        if not video:
+            raise HTTPException(
+                status_code=404,
+                detail=f"视频不存在: {video_id}"
+            )
+        
+        # 检查权限（如果有用户登录）
+        if user_id and str(video.get("user_id")) != str(user_id):
+            raise HTTPException(
+                status_code=403,
+                detail="无权访问该视频"
+            )
+        
+        # 获取完整的元数据（包括关键帧、转录、总结）
+        metadata = supabase_service.get_compiled_metadata(video_id)
+        if not metadata:
+            raise HTTPException(
+                status_code=404,
+                detail=f"视频元数据不存在: {video_id}"
+            )
+        
+        # 获取总结信息
+        summaries = supabase_service.get_video_summaries(video_id)
+        
+        return {
+            "status": "success",
+            "video_id": video_id,
+            "metadata": metadata,
+            "video_summary": summaries,
+            "summary_generated": bool(summaries)
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception(f"获取视频详情失败: {e}")
+        raise HTTPException(status_code=500, detail=f"获取视频详情失败: {str(e)}")
+
+
 @router.get("/status")
 async def get_service_status():
     """

@@ -516,9 +516,12 @@ class SupabaseService:
             是否保存成功
         """
         if not self.is_available():
+            logger.warning(f"[DEBUG] Supabase不可用，无法保存转录段落: {video_id}")
             return False
         
         try:
+            logger.info(f"[DEBUG] 开始保存 {len(segments)} 个转录段落: {video_id}")
+            
             # 转换为字典列表
             segments_data = []
             for i, seg in enumerate(segments):
@@ -533,8 +536,11 @@ class SupabaseService:
                     "speaker_id": seg_dict.get("speaker_id")
                 })
             
+            logger.info(f"[DEBUG] 准备插入 {len(segments_data)} 条记录")
+            
             # 批量插入
-            self.admin_client.table("transcript_segments").insert(segments_data).execute()
+            result = self.admin_client.table("transcript_segments").insert(segments_data).execute()
+            logger.info(f"[DEBUG] 插入结果: {bool(result.data)}")
             
             # 更新 transcripts 表的 total_segments
             self.admin_client.table("transcripts").upsert({
@@ -546,6 +552,7 @@ class SupabaseService:
             return True
         except Exception as e:
             logger.error(f"❌ 保存转录段落失败: {e}")
+            logger.exception(e)
             return False
     
     def save_video_summary(
@@ -610,6 +617,121 @@ class SupabaseService:
         except Exception as e:
             logger.error(f"❌ 查询用户视频列表失败: {e}")
             return []
+    
+    def get_keyframes(self, video_id: str) -> List[Dict[str, Any]]:
+        """获取指定视频的关键帧列表"""
+        if not self.is_available():
+            return []
+        try:
+            res = self.admin_client.table("keyframes") \
+                .select("frame_id,timestamp,oss_image_url,scene_description") \
+                .eq("video_id", video_id) \
+                .order("timestamp", desc=False) \
+                .execute()
+            return res.data or []
+        except Exception as e:
+            logger.error(f"❌ 获取关键帧失败: {e}")
+            return []
+
+    def get_transcript_segments(self, video_id: str) -> List[Dict[str, Any]]:
+        """获取指定视频的转录段落列表"""
+        if not self.is_available():
+            return []
+        try:
+            res = self.admin_client.table("transcript_segments") \
+                .select("segment_index,text,start_time,end_time,confidence") \
+                .eq("video_id", video_id) \
+                .order("segment_index", desc=False) \
+                .execute()
+            return res.data or []
+        except Exception as e:
+            logger.error(f"❌ 获取转录段落失败: {e}")
+            return []
+    
+    def get_video_summaries(self, video_id: str) -> Dict[str, str]:
+        """获取指定视频的各粒度总结内容"""
+        if not self.is_available():
+            return {}
+        try:
+            res = self.admin_client.table("video_summaries") \
+                .select("summary_type,content") \
+                .eq("video_id", video_id) \
+                .execute()
+            summaries = {}
+            for row in res.data or []:
+                summaries[row.get("summary_type")] = row.get("content") or ""
+            return summaries
+        except Exception as e:
+            logger.error(f"❌ 获取视频总结失败: {e}")
+            return {}
+
+    def get_compiled_metadata(self, video_id: str) -> Optional[Dict[str, Any]]:
+        """
+        汇聚视频完整上下文：关键帧、转录文本、视频元数据、AI总结
+        确保聊天对话中VL模型能访问完整的分析历史信息
+        
+        Returns:
+            {
+              "transcript": { oss_audio_url, language, overall_confidence, segments: [...] },
+              "keyframes": [...],
+              "video": { title, duration, oss_video_url, original_url, source_type },
+              "summaries": { brief?, standard?, detailed? }
+            }
+        """
+        if not self.is_available():
+            logger.warning(f"[DEBUG] Supabase不可用，无法编译metadata: {video_id}")
+            return None
+        try:
+            logger.info(f"[DEBUG] 开始编译视频上下文: {video_id}")
+            video = self.get_video_by_id(video_id) or {}
+            logger.info(f"[DEBUG] 获取video: {bool(video)}")
+            
+            keyframes = self.get_keyframes(video_id)
+            logger.info(f"[DEBUG] 获取keyframes: {len(keyframes)}")
+            
+            segments = self.get_transcript_segments(video_id)
+            logger.info(f"[DEBUG] 获取segments: {len(segments)} 个转录段")
+            if segments:
+                logger.info(f"[DEBUG] 第一个segment示例: {segments[0]}")
+            
+            summaries = self.get_video_summaries(video_id)
+            logger.info(f"[DEBUG] 获取summaries: {list(summaries.keys()) if summaries else []}")
+
+            transcript = {
+                "oss_audio_url": video.get("oss_audio_url") or "",
+                "language": "zh-CN",
+                "overall_confidence": 0.0,
+                "segments": [
+                    {
+                        "text": s.get("text") or "",
+                        "start_time": float(s.get("start_time") or 0.0),
+                        "end_time": float(s.get("end_time") or 0.0),
+                        "confidence": float(s.get("confidence") or 0.0),
+                    } for s in segments
+                ],
+            }
+            logger.info(f"[DEBUG] 组装transcript: segments={len(transcript['segments'])}")
+
+            video_meta = {
+                "title": video.get("title") or "未知标题",
+                "duration": float(video.get("duration") or 0.0),
+                "oss_video_url": video.get("oss_video_url") or "",
+                "original_url": video.get("original_url") or "",
+                "source_type": video.get("source_type") or "unknown",
+            }
+
+            compiled = {
+                "transcript": transcript,
+                "keyframes": keyframes,
+                "video": video_meta,
+                "summaries": summaries,
+            }
+            logger.info(f"✅ 编译视频上下文成功: {video_id} | 关键帧={len(keyframes)} 转录段={len(segments)}")
+            return compiled
+        except Exception as e:
+            logger.error(f"❌ 编译视频上下文失败: {e}")
+            logger.exception(e)
+            return None
 
 
 # 创建全局实例
