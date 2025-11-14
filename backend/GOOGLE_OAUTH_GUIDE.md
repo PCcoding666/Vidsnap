@@ -179,6 +179,95 @@ The Google OAuth Client ID and Secret are already configured in Supabase. No add
 
 ---
 
+## API Endpoints
+
+### Get Google OAuth URL
+
+```bash
+GET /auth/oauth/google?redirect_url={frontend-callback-url}
+```
+
+**Example:**
+```bash
+curl "http://localhost:8000/auth/oauth/google?redirect_url=http://localhost:5173/auth/callback"
+```
+
+**Response:**
+```json
+{
+  "url": "https://your-project.supabase.co/auth/v1/authorize?...",
+  "provider": "google"
+}
+```
+
+### Handle OAuth Callback
+
+```bash
+POST /auth/oauth/callback
+Content-Type: application/json
+
+{
+  "code": "Authorization code (from callback URL)"
+}
+```
+
+**Response:**
+```json
+{
+  "user": {
+    "id": "uuid",
+    "email": "user@gmail.com",
+    "username": "user",
+    "subscription_tier": "free"
+  },
+  "access_token": "eyJhbGc...",
+  "refresh_token": "v1.MRTY..."
+}
+```
+
+---
+
+## OAuth Flow Diagram
+
+```
+┌──────────┐        ┌──────────┐        ┌──────────┐        ┌──────────┐
+│   User   │        │ Frontend │        │ Backend  │        │  Google  │
+└────┬─────┘        └────┬─────┘        └────┬─────┘        └────┬─────┘
+     │                   │                   │                   │
+     │ 1. Click login    │                   │                   │
+     │──────────────────>│                   │                   │
+     │                   │                   │                   │
+     │                   │ 2. GET /oauth/google                 │
+     │                   │──────────────────>│                   │
+     │                   │                   │                   │
+     │                   │ 3. Return OAuth URL                  │
+     │                   │<──────────────────│                   │
+     │                   │                   │                   │
+     │ 4. Redirect to Google                 │                   │
+     │──────────────────────────────────────────────────────────>│
+     │                   │                   │                   │
+     │ 5. Authorize and return code          │                   │
+     │<──────────────────────────────────────────────────────────│
+     │                   │                   │                   │
+     │ 6. Redirect to callback page          │                   │
+     │──────────────────>│                   │                   │
+     │                   │                   │                   │
+     │                   │ 7. POST /oauth/callback              │
+     │                   │──────────────────>│                   │
+     │                   │     (code)        │                   │
+     │                   │                   │                   │
+     │                   │ 8. Verify and create session         │
+     │                   │                   │                   │
+     │                   │ 9. Return Token   │                   │
+     │                   │<──────────────────│                   │
+     │                   │                   │                   │
+     │ 10. Login success  │                   │                   │
+     │<──────────────────│                   │                   │
+     │                   │                   │                   │
+```
+
+---
+
 ## Step 6: Test OAuth Flow
 
 ### 6.1 Start Backend Service
