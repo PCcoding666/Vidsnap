@@ -3,7 +3,8 @@ Main application entry point.
 """
 import os
 import logging
-from fastapi import FastAPI
+import time
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 
 from .core.logging import logger
@@ -15,6 +16,25 @@ app = FastAPI(
     description="支持视频处理、音频转录和内容分析的API服务",
     version="1.0.0"
 )
+
+# 添加请求日志中间件
+@app.middleware("http")
+async def log_requests(request: Request, call_next):
+    start_time = time.time()
+
+    # 记录请求开始
+    logger.info(f"🔵 收到请求: {request.method} {request.url.path}")
+    logger.info(f"   客户端: {request.client.host if request.client else 'Unknown'}")
+    logger.info(f"   Headers: {dict(request.headers)}")
+
+    # 处理请求
+    response = await call_next(request)
+
+    # 记录请求完成
+    process_time = time.time() - start_time
+    logger.info(f"✅ 请求完成: {request.method} {request.url.path} - 状态码: {response.status_code} - 耗时: {process_time:.2f}s")
+
+    return response
 
 # 添加CORS中间件
 app.add_middleware(

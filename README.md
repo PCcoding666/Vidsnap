@@ -237,14 +237,11 @@ pytest app/tests/test_supabase_service.py
 ## 📚 文档
 
 ### 用户认证
-- [Supabase 快速入门](backend/SUPABASE_QUICKSTART.md)
-- [Supabase 集成指南](backend/SUPABASE_README.md)
-- [Google OAuth 配置](backend/GOOGLE_OAUTH_SETUP_GUIDE.md)
-- [Google OAuth 快速参考](backend/GOOGLE_OAUTH_QUICKREF.md)
+- [Supabase 指南](backend/SUPABASE_GUIDE.md)
+- [Google OAuth 指南](backend/GOOGLE_OAUTH_GUIDE.md)
 
 ### 视频处理
-- [Gradio 快速入门](backend/GRADIO_QUICKSTART.md)
-- [Gradio 使用指南](backend/GRADIO_USER_GUIDE.md)
+- [Gradio 指南](backend/GRADIO_GUIDE.md)
 - [Paraformer 快速参考](backend/PARAFORMER_QUICKREF.md)
 - [Qwen3-VL 集成指南](backend/app/tests/docs/QWEN3_VL_INTEGRATION_GUIDE.md)
 
@@ -255,7 +252,7 @@ pytest app/tests/test_supabase_service.py
 ### 测试文档
 - [阶段一测试指南](app/tests/docs/PHASE_1_TEST_GUIDE.md)
 - [系统集成测试](app/tests/docs/SYSTEM_INTEGRATION_TEST_REPORT.md)
-- [Supabase 验证指南](app/tests/docs/SUPABASE_VERIFICATION_GUIDE.md)
+- [Supabase 验证指南](app/tests/docs/SUPABASE_VERIFICATION.md)
 
 ## 📦 技术栈
 

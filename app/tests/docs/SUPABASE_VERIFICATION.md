@@ -2,14 +2,15 @@
 
 ## 📋 概述
 
-你现在拥有完整的 Supabase 数据持久化验证工具包。这个工具包包含：
+本文档介绍如何验证 Supabase 中的数据持久化是否正常工作。验证脚本会检查以下内容：
 
-| 工具 | 位置 | 用途 |
-|------|------|------|
-| `verify_supabase_persistence.py` | `backend/app/tests/` | Python 验证脚本（核心功能） |
-| `run_supabase_verification.sh` | `backend/app/tests/` | Shell 包装脚本（快速调用） |
-| `SUPABASE_VERIFICATION_GUIDE.md` | `app/tests/docs/` | 详细使用指南 |
-| `SUPABASE_VERIFICATION_QUICK_REFERENCE.md` | `app/tests/docs/` | 快速命令参考 |
+1. **Supabase 连接** - 测试与数据库的连接
+2. **用户认证数据** - 检查 `profiles` 表
+3. **用户配额数据** - 检查 `user_quotas` 表
+4. **视频记录数据** - 检查 `videos` 表
+5. **关键帧数据** - 检查 `keyframes` 表
+6. **转录段落数据** - 检查 `transcript_segments` 表
+7. **视频总结数据** - 检查 `video_summaries` 表
 
 ---
 

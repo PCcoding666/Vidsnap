@@ -18,65 +18,36 @@
 
 ## 🚀 快速开始
 
-### 系统要求
-
-- **操作系统**: macOS / Linux / Windows
-- **Python**: 3.8 或更高版本
-- **内存**: 至少 4GB RAM
-- **网络**: 稳定的互联网连接（用于访问阿里云 API）
-- **浏览器**: Chrome / Firefox / Safari / Edge（最新版本）
-
-### 安装步骤
-
-#### 1. 安装依赖
+### 1. 安装依赖（首次运行）
 
 ```bash
 cd backend
 pip install -r requirements.txt
 ```
 
-确保安装了以下核心依赖：
-- `gradio>=4.0.0` - Web 界面框架
-- `fastapi>=0.100.0` - API 框架
-- `oss2>=2.18.0` - 阿里云 OSS SDK
-- `dashscope>=1.14.0` - 阿里云 DashScope SDK
+### 2. 确保环境变量已配置
 
-#### 2. 环境变量配置
-
-在项目根目录创建 `.env` 文件并配置以下变量：
+检查项目根目录的 `.env` 文件是否包含：
 
 ```bash
-# 阿里云 OSS 配置（必需）
-OSS_ACCESS_KEY_ID=your_access_key_id
-OSS_ACCESS_KEY_SECRET=your_access_key_secret
-OSS_BUCKET=your_bucket_name
+# 必需配置
+OSS_ACCESS_KEY_ID=your_key
+OSS_ACCESS_KEY_SECRET=your_secret
+OSS_BUCKET=your_bucket
 OSS_ENDPOINT=oss-cn-beijing.aliyuncs.com
 
-# API 密钥配置（至少配置一个）
-QWEN_API_KEY=your_qwen_api_key                           # 推荐：用于 SenseVoice 和 Qwen VL
-DASHSCOPE_API_KEY=your_dashscope_api_key                 # 备选：兼容旧配置
-TRANSCRIPT_SERVICE_API_KEY=your_transcript_api_key       # 最高优先级
-
-# 可选配置
-LOG_LEVEL=INFO
+# API 密钥（至少一个）
+QWEN_API_KEY=your_api_key
 ```
 
-**API 密钥优先级**：
-1. `TRANSCRIPT_SERVICE_API_KEY`（最高优先级）
-2. `QWEN_API_KEY`（推荐使用）
-3. `DASHSCOPE_API_KEY`（向后兼容）
-
-#### 3. 启动应用
-
-**方式一：使用启动脚本（推荐）**
+### 3. 启动应用
 
 ```bash
 cd backend
-chmod +x run_gradio.sh
 ./run_gradio.sh
 ```
 
-**方式二：直接运行 Python**
+或者使用 Python 直接运行：
 
 ```bash
 cd backend
@@ -86,30 +57,36 @@ export all_proxy=socks5://127.0.0.1:33211
 python3 gradio_app.py
 ```
 
-#### 4. 访问界面
+### 4. 访问界面
 
-启动成功后，在浏览器中访问：
-- **本地访问**: http://127.0.0.1:7860
-- **网络访问**: http://0.0.0.0:7860
+在浏览器中打开：**http://127.0.0.1:7860**
 
-### 启动选项
+---
+## 📖 使用流程
 
-```bash
-# 默认启动
-./run_gradio.sh
+### YouTube 视频分析
 
-# 生成公网链接（用于远程访问）
-./run_gradio.sh --share
+1. 选择"YouTube URL"模式
+2. 粘贴视频链接（例如：`https://www.youtube.com/watch?v=xxxxx`）
+3. 选择参数：
+   - 语言：自动检测
+   - 粒度：标准
+   - 关键帧：10
+4. 点击"🚀 开始分析"
+5. 等待处理完成（约 2-5 分钟）
+6. 在"结果展示"标签页查看：
+   - 📝 简要总结
+   - 📖 标准总结
+   - 🎤 音频转录
+   - 🖼️ 关键帧
 
-# 自定义端口
-./run_gradio.sh --port 8080
+### 本地视频上传
 
-# 自定义主机
-./run_gradio.sh --host 127.0.0.1
-
-# 查看帮助
-./run_gradio.sh --help
-```
+1. 选择"本地视频上传"模式
+2. 点击上传区域选择文件（支持 MP4/AVI/MOV/MKV）
+3. 配置参数
+4. 点击"🚀 开始分析"
+5. 查看结果
 
 ---
 
