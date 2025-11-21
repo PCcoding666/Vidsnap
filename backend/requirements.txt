@@ -5,10 +5,6 @@
 fastapi>=0.100.0
 uvicorn>=0.23.0
 
-# Web界面
-gradio>=4.0.0
-httpx[socks]>=0.24.0  # 支持 SOCKS 代理
-
 # 视频处理 
 yt-dlp>=2024.10.7  # 更新到最新版本以支持最新的 YouTube 反爬虫机制
 ffmpeg-python>=0.2.0

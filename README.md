@@ -20,7 +20,6 @@
 ### 用户界面
 - 🌐 **营销主页**: 现代化 React 前端（shadcn/ui + Tailwind CSS）
 - 📱 **响应式设计**: 支持桌面端和移动端
-- 🎨 **Gradio 界面**: 快速交互式处理界面
 - 🔄 **实时反馈**: 处理进度实时显示
 
 ## 🚀 快速开始
@@ -82,21 +81,7 @@ cd ../frontend && npm install
 ./app/tests/run_frontend.sh
 ```
 
-### 方式二：Gradio 快速处理界面
-
-适合快速测试和单次视频处理：
-
-```bash
-cd backend
-pip install -r requirements.txt
-./run_gradio.sh
-
-# 访问: http://127.0.0.1:7860
-```
-
-📚 **详细文档**: [Gradio 快速入门](backend/GRADIO_QUICKSTART.md) | [完整使用指南](backend/GRADIO_USER_GUIDE.md)
-
-### 方式三：仅启动 FastAPI 后端
+### 方式二：仅启动 FastAPI 后端
 
 适合 API 开发和测试：
 
@@ -148,7 +133,6 @@ uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 │   │   └── tests/             # 单元测试
 │   ├── sql/                   # 数据库 Schema
 │   ├── scripts/               # 工具脚本
-│   ├── gradio_app.py          # Gradio 界面
 │   └── requirements.txt       # Python 依赖
 │
 ├── app/tests/                 # 集成测试
@@ -241,7 +225,6 @@ pytest app/tests/test_supabase_service.py
 - [Google OAuth 指南](backend/GOOGLE_OAUTH_GUIDE.md)
 
 ### 视频处理
-- [Gradio 指南](backend/GRADIO_GUIDE.md)
 - [Paraformer 快速参考](backend/PARAFORMER_QUICKREF.md)
 - [Qwen3-VL 集成指南](backend/app/tests/docs/QWEN3_VL_INTEGRATION_GUIDE.md)
 
@@ -270,7 +253,6 @@ pytest app/tests/test_supabase_service.py
 
 ### 后端技术
 - **FastAPI** - 高性能 Web 框架
-- **Gradio** - 快速 ML 界面原型
 - **Pydantic** - 数据验证
 - **yt-dlp** - YouTube 视频下载
 - **FFmpeg** - 媒体处理

@@ -2,11 +2,11 @@
 
 ## 🚀 快速开始（3步）
 
-### 步骤 1：启动 Gradio 界面
+### 步骤 1：启动 FastAPI 后端
 
 ```bash
 cd backend
-./run_gradio.sh
+uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
 在浏览器中打开：http://localhost:7860

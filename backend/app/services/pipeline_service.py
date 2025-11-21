@@ -6,6 +6,7 @@
 import logging
 import asyncio
 import json
+import time  # 新增：用于性能监控
 from datetime import datetime
 from typing import Dict, List, Any, Optional, Union
 from dataclasses import asdict
@@ -44,23 +45,23 @@ class AliyunVideoProcessingPipeline:
                           youtube_url: Optional[str] = None,
                           progress_callback: Optional[callable] = None) -> Dict[str, Any]:
         """
-        处理视频的完整流程
+        处理视频的完整流程（不包含 LLM 总结）
         
         Args:
             video_file: 上传的视频文件路径
             youtube_url: YouTube视频URL
-            progress_callback: 进度回调函数
+            progress_callback: 进度回调函数（可选，主要用于日志记录）
             
         Returns:
             处理结果
         """
-        if progress_callback:
-            progress_callback("开始处理视频...")
+        self._log_progress("开始处理视频...", progress_callback)
+        
+        video_id = None
         
         try:
-            # 步骤1: 视频下载/上传和关键帧提取
-            if progress_callback:
-                progress_callback("处理视频文件和提取关键帧...")
+            # 步骤1: 视频下载/上传（不包含关键帧提取）
+            self._log_progress("处理视频文件...", progress_callback)
             
             video_result = await self.video_service.process_video_dual_source(
                 video_file=video_file,
@@ -72,56 +73,68 @@ class AliyunVideoProcessingPipeline:
             
             video_id = video_result["video_id"]
             video_info = video_result["video_info"]
-            keyframes = video_result["keyframes"]
+            video_path = video_result["video_path"]  # 新增：用于并发任务
             video_metadata = video_result["video_metadata"]
             session_temp_dir = video_result["session_temp_dir"]
             
-            # 确定视频文件路径
-            if youtube_url:
-                # 查找下载的视频文件
-                session_path = Path(session_temp_dir)
-                video_path = None
-                for file_path in session_path.iterdir():
-                    if file_path.suffix.lower() in ['.mp4', '.avi', '.mov', '.mkv']:
-                        video_path = str(file_path)
-                        break
-            else:
-                video_path = video_file
+            # 步骤2: 并发执行关键帧提取和音频转录
+            self._log_progress("并发执行关键帧提取和音频转录...", progress_callback)
             
-            if not video_path:
+            # 记录并发执行开始时间
+            concurrent_start_time = time.time()
+            
+            try:
+                # 使用 asyncio.gather() 并发执行两个任务
+                logger.info(f"开始并发任务: 关键帧提取 + 音频转录 (video_id={video_id})")
+                
+                keyframes, transcript_result = await asyncio.gather(
+                    self.video_service.extract_keyframes_scene_detection(
+                        video_path, video_id, Path(session_temp_dir)
+                    ),
+                    self.speech_service.extract_and_transcribe_audio(
+                        video_path, video_id
+                    ),
+                    return_exceptions=False  # 任何异常会立即抛出
+                )
+                
+                # 计算并发执行总耗时
+                concurrent_duration = time.time() - concurrent_start_time
+                
+                logger.info(
+                    f"并发执行完成 - 总耗时: {concurrent_duration:.2f}s | "
+                    f"关键帧数量: {len(keyframes) if keyframes else 0} | "
+                    f"转录段落: {len(transcript_result.segments) if transcript_result and hasattr(transcript_result, 'segments') else 0}"
+                )
+                
+            except Exception as e:
+                error_msg = f"并发任务执行失败: {str(e)}"
+                logger.error(error_msg)
+                logger.exception(e)
+                
                 return {
                     "status": "error",
-                    "error": "找不到视频文件用于音频提取",
+                    "error": error_msg,
                     "video_id": video_id
                 }
             
-            # 步骤2: 并行处理音频转录
-            if progress_callback:
-                progress_callback("提取音频并进行转录...")
-            
-            # 启动音频转录任务
-            audio_task = asyncio.create_task(
-                self.speech_service.extract_and_transcribe_audio(video_path, video_id)
-            )
-            
-            # 等待音频转录完成
-            transcript_result = await audio_task
+            # 步骤3: 验证并发结果并降级处理
+            if not keyframes:
+                logger.warning("关键帧提取失败，使用空列表继续")
+                keyframes = []
             
             if not transcript_result:
-                logger.warning("音频转录失败，继续处理其他部分")
+                logger.warning("音频转录失败，使用空转录对象继续")
                 transcript_result = self._create_empty_transcript()
             
             # 步骤3: 生成统一metadata
-            if progress_callback:
-                progress_callback("生成metadata...")
+            self._log_progress("生成metadata...", progress_callback)
             
             metadata = await self._generate_unified_metadata(
                 video_info, keyframes, transcript_result, video_metadata
             )
             
             # 步骤4: 上传metadata到OSS
-            if progress_callback:
-                progress_callback("上传metadata到OSS...")
+            self._log_progress("上传metadata到OSS...", progress_callback)
             
             metadata_oss_url = await self.oss_service.upload_metadata(
                 asdict(metadata), video_id
@@ -131,14 +144,12 @@ class AliyunVideoProcessingPipeline:
                 metadata.metadata_oss_url = metadata_oss_url
             
             # 步骤5: 清理临时文件
-            if progress_callback:
-                progress_callback("清理临时文件...")
+            self._log_progress("清理临时文件...", progress_callback)
             
             self.video_service.cleanup_session(session_temp_dir)
             
             # 完成
-            if progress_callback:
-                progress_callback("处理完成！")
+            self._log_progress("处理完成！", progress_callback)
             
             logger.info(f"视频处理完成: {video_id}")
             
@@ -154,8 +165,7 @@ class AliyunVideoProcessingPipeline:
             error_msg = f"视频处理管道异常: {str(e)}"
             logger.exception(error_msg)
             
-            if progress_callback:
-                progress_callback(f"处理失败: {error_msg}")
+            self._log_progress(f"处理失败: {error_msg}", progress_callback)
             
             return {
                 "status": "error",
@@ -294,6 +304,21 @@ class AliyunVideoProcessingPipeline:
             logger.exception(f"转录搜索失败: {e}")
             return []
     
+    def _log_progress(self, message: str, callback: Optional[callable] = None):
+        """
+        记录处理进度
+        
+        Args:
+            message: 进度消息
+            callback: 可选的回调函数（用于外部集成）
+        """
+        logger.info(f"[进度] {message}")
+        if callback:
+            try:
+                callback(message)
+            except Exception as e:
+                logger.warning(f"进度回调执行失败: {e}")
+    
     def check_services_availability(self) -> Dict[str, bool]:
         """检查所有服务的可用性"""
         return {
@@ -317,20 +342,18 @@ class AliyunVideoProcessingPipeline:
             video_file: 上传的视频文件路径
             youtube_url: YouTube视频URL
             user_id: 用户 ID(用于 Supabase 数据持久化)
-            progress_callback: 进度回调函数
+            progress_callback: 进度回调函数（可选，主要用于日志记录）
             
         Returns:
             处理结果（包含视频总结）
         """
-        if progress_callback:
-            progress_callback("开始处理视频...")
+        self._log_progress("开始处理视频...", progress_callback)
         
         video_id = None
         
         try:
-            # 步骤1: 视频下载/上传和关键帧提取
-            if progress_callback:
-                progress_callback("处理视频文件和提取关键帧...")
+            # 步骤1: 视频下载/上传（不包含关键帧提取）
+            self._log_progress("处理视频文件...", progress_callback)
             
             video_result = await self.video_service.process_video_dual_source(
                 video_file=video_file,
@@ -342,7 +365,7 @@ class AliyunVideoProcessingPipeline:
             
             video_id = video_result["video_id"]
             video_info = video_result["video_info"]
-            keyframes = video_result["keyframes"]
+            video_path = video_result["video_path"]  # 新增：用于并发任务
             video_metadata = video_result["video_metadata"]
             session_temp_dir = video_result["session_temp_dir"]
             
@@ -373,63 +396,89 @@ class AliyunVideoProcessingPipeline:
                 except Exception as e:
                     logger.error(f"⚠️ Supabase: 更新视频状态失败: {e}")
             
-            # 确定视频文件路径
-            if youtube_url:
-                # 查找下载的视频文件
-                session_path = Path(session_temp_dir)
-                video_path = None
-                for file_path in session_path.iterdir():
-                    if file_path.suffix.lower() in ['.mp4', '.avi', '.mov', '.mkv']:
-                        video_path = str(file_path)
-                        break
-            else:
-                video_path = video_file
+            # 步骤2: 并发执行关键帧提取和音频转录
+            self._log_progress("并发执行关键帧提取和音频转录...", progress_callback)
             
-            if not video_path:
+            # 【Supabase 集成点3】更新进度 (20% 准备并发执行)
+            if supabase_service.is_available() and user_id:
+                try:
+                    supabase_service.update_video_status(video_id, "processing", 20)
+                except Exception as e:
+                    logger.error(f"⚠️ Supabase: 更新进度失败: {e}")
+            
+            # 记录并发执行开始时间
+            concurrent_start_time = time.time()
+            
+            try:
+                # 使用 asyncio.gather() 并发执行两个任务
+                logger.info(f"开始并发任务: 关键帧提取 + 音频转录 (video_id={video_id})")
+                
+                keyframes, transcript_result = await asyncio.gather(
+                    self.video_service.extract_keyframes_scene_detection(
+                        video_path, video_id, Path(session_temp_dir)
+                    ),
+                    self.speech_service.extract_and_transcribe_audio(
+                        video_path, video_id
+                    ),
+                    return_exceptions=False  # 任何异常会立即抛出
+                )
+                
+                # 计算并发执行总耗时
+                concurrent_duration = time.time() - concurrent_start_time
+                
+                logger.info(
+                    f"并发执行完成 - 总耗时: {concurrent_duration:.2f}s | "
+                    f"关键帧数量: {len(keyframes) if keyframes else 0} | "
+                    f"转录段落: {len(transcript_result.segments) if transcript_result and hasattr(transcript_result, 'segments') else 0}"
+                )
+                
+            except Exception as e:
+                error_msg = f"并发任务执行失败: {str(e)}"
+                logger.error(error_msg)
+                logger.exception(e)
+                
+                # 【Supabase 集成点7】并发任务失败
+                if supabase_service.is_available() and user_id and video_id:
+                    try:
+                        supabase_service.update_video_status(video_id, "failed", error_message=error_msg)
+                        logger.info(f"⚠️ Supabase: 标记视频处理失败 {video_id}")
+                    except Exception as se:
+                        logger.error(f"⚠️ Supabase: 更新失败状态失败: {se}")
+                
                 return {
                     "status": "error",
-                    "error": "找不到视频文件用于音频提取",
+                    "error": error_msg,
                     "video_id": video_id
                 }
             
-            # 步骤2: 并行处理音频转录
-            if progress_callback:
-                progress_callback("提取音频并进行转录...")
-            
-            # 【Supabase 集成点3】更新进度 (45% 关键帧上传完成)
-            if supabase_service.is_available() and user_id:
-                try:
-                    supabase_service.update_video_status(video_id, "processing", 45)
-                    supabase_service.save_keyframes(video_id, keyframes)
-                    logger.info(f"✅ Supabase: 保存 {len(keyframes)} 个关键帧")
-                except Exception as e:
-                    logger.error(f"⚠️ Supabase: 保存关键帧失败: {e}")
-            
-            # 启动音频转录任务
-            audio_task = asyncio.create_task(
-                self.speech_service.extract_and_transcribe_audio(video_path, video_id)
-            )
-            
-            # 等待音频转录完成
-            transcript_result = await audio_task
+            # 步骤3: 验证并发结果并降级处理
+            if not keyframes:
+                logger.warning("关键帧提取失败，使用空列表继续")
+                keyframes = []
             
             if not transcript_result:
-                logger.warning("音频转录失败，继续处理其他部分")
+                logger.warning("音频转录失败，使用空转录对象继续")
                 transcript_result = self._create_empty_transcript()
             
-            # 【Supabase 集成点4】音频转录完成 (60%)
+            # 【Supabase 集成点4】并发任务完成 (60%)
             if supabase_service.is_available() and user_id:
                 try:
                     supabase_service.update_video_status(video_id, "processing", 60)
+                    
+                    # 保存关键帧
+                    if keyframes:
+                        supabase_service.save_keyframes(video_id, keyframes)
+                        logger.info(f"✅ Supabase: 保存 {len(keyframes)} 个关键帧")
+                    
+                    # 保存转录数据
                     if transcript_result and hasattr(transcript_result, 'segments') and transcript_result.segments:
                         supabase_service.save_transcript_segments(video_id, transcript_result.segments)
                         logger.info(f"✅ Supabase: 保存 {len(transcript_result.segments)} 个转录段落")
                 except Exception as e:
-                    logger.error(f"⚠️ Supabase: 保存转录数据失败: {e}")
+                    logger.error(f"⚠️ Supabase: 保存并发结果失败: {e}")
             
             # 步骤3: 生成统一metadata
-            if progress_callback:
-                progress_callback("生成metadata...")
+            self._log_progress("生成metadata...", progress_callback)
             
             metadata = await self._generate_unified_metadata(
                 video_info, keyframes, transcript_result, video_metadata
@@ -438,8 +487,7 @@ class AliyunVideoProcessingPipeline:
             # 步骤4: 生成 LLM 视频总结
             video_summary = None
             if self.llm_service.is_available():
-                if progress_callback:
-                    progress_callback("生成视频 AI 总结...")
+                self._log_progress("生成视频 AI 总结...", progress_callback)
                 
                 try:
                     video_summary = await self.llm_service.generate_text_based_summary(
@@ -482,8 +530,7 @@ class AliyunVideoProcessingPipeline:
                 logger.warning("LLM 服务不可用，跳过视频总结生成")
             
             # 步骤5: 上传metadata到OSS
-            if progress_callback:
-                progress_callback("上传metadata到OSS...")
+            self._log_progress("上传metadata到OSS...", progress_callback)
             
             metadata_oss_url = await self.oss_service.upload_metadata(
                 asdict(metadata), video_id
@@ -493,14 +540,12 @@ class AliyunVideoProcessingPipeline:
                 metadata.metadata_oss_url = metadata_oss_url
             
             # 步骤6: 清理临时文件
-            if progress_callback:
-                progress_callback("清理临时文件...")
+            self._log_progress("清理临时文件...", progress_callback)
             
             self.video_service.cleanup_session(session_temp_dir)
             
             # 完成
-            if progress_callback:
-                progress_callback("处理完成！")
+            self._log_progress("处理完成！", progress_callback)
             
             # 【Supabase 集成点6】处理完成 (100%)
             if supabase_service.is_available() and user_id:
@@ -534,8 +579,7 @@ class AliyunVideoProcessingPipeline:
                 except Exception as se:
                     logger.error(f"⚠️ Supabase: 更新失败状态失败: {se}")
             
-            if progress_callback:
-                progress_callback(f"处理失败: {error_msg}")
+            self._log_progress(f"处理失败: {error_msg}", progress_callback)
             
             return {
                 "status": "error",

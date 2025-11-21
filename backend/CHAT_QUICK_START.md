@@ -34,7 +34,7 @@ cd backend
 
 ### 技术栈
 - **LLM**: Qwen3-VL-Plus (qwen-vl-plus)
-- **框架**: FastAPI + Gradio
+- **框架**: FastAPI + React
 - **输入**: 转录文本 + 关键帧图像
 
 ---
@@ -132,7 +132,8 @@ QWEN_API_KEY=sk-xxx...  # 必需
 ### 依赖项
 - Python 3.8+
 - FastAPI
-- Gradio
+- React
+- shadcn/ui
 - requests
 - dashscope
 

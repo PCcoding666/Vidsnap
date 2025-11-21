@@ -2,7 +2,7 @@
 
 ## ✅ 迁移完成
 
-主 Gradio 应用已从 **SenseVoice** 迁移到 **Paraformer-v2**
+主 FastAPI 应用已从 **SenseVoice** 迁移到 **Paraformer-v2**
 
 ---
 
@@ -40,8 +40,8 @@
 # 1. 进入目录
 cd backend
 
-# 2. 启动 Gradio
-./run_gradio.sh
+# 2. 启动 FastAPI 后端
+uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 
 # 3. 访问
 open http://127.0.0.1:7860

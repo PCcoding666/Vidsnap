@@ -165,11 +165,7 @@ class AliyunVideoService:
                     "video_id": video_id
                 }
             
-            # 步骤3: 提取关键帧（使用场景检测）
-            logger.info("提取关键帧...")
-            keyframes = await self.extract_keyframes_scene_detection(video_path, video_id, session_temp_dir)
-            
-            # 步骤4: 生成视频信息
+            # 步骤3: 生成视频信息（关键帧提取延迟到 Pipeline 层并发执行）
             video_info = VideoInfo(
                 video_id=video_id,
                 title=title,
@@ -180,11 +176,13 @@ class AliyunVideoService:
                 original_url=original_url
             )
             
+            logger.info(f"视频处理完成（不包含关键帧提取）: {video_path}")
+            
             return {
                 "status": "success",
                 "video_id": video_id,
                 "video_info": video_info,
-                "keyframes": keyframes,
+                "video_path": video_path,  # 新增：用于后续并发任务
                 "video_metadata": video_metadata,
                 "session_temp_dir": str(session_temp_dir)
             }

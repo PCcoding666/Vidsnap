@@ -6,23 +6,23 @@
 
 | 服务 | 访问地址 | 状态 |
 |------|---------|------|
-| **后端 Gradio 应用** | http://127.0.0.1:7860 | ✅ 运行中 |
+| **后端 FastAPI** | http://127.0.0.1:8000 | ✅ 运行中 |
 | **前端 React 应用** | http://localhost:8080 | ✅ 运行中 |
 
 ---
 
 ## 🧪 测试场景
 
-### 场景 1: 后端 Gradio 界面测试
+### 场景 1: 前端 React 应用测试
 
 #### 访问地址
 ```
-http://127.0.0.1:7860
+http://localhost:8080
 ```
 
 #### 测试步骤
 
-**1️⃣ YouTube 视频分析**
+**1️⃣ 主页功能测试**
 
 1. 打开 Gradio 界面
 2. 选择「📥 输入与配置」标签页
@@ -142,7 +142,7 @@ lsof -ti:7860 | xargs kill -9
 
 # 重新启动
 cd backend
-./run_gradio.sh
+uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
 ---
@@ -181,7 +181,7 @@ npm run dev
 cat /Users/chengpeng/Downloads/MyProject/My_Youtube_Summarizer/.env
 
 # 查看后端日志
-# Gradio 界面会显示详细错误信息
+# FastAPI 后端会显示详细错误信息
 ```
 
 ---
@@ -206,13 +206,13 @@ cat /Users/chengpeng/Downloads/MyProject/My_Youtube_Summarizer/.env
 
 | 功能模块 | 测试项 | 状态 | 备注 |
 |---------|--------|------|------|
-| Gradio 后端 | 界面访问 | ⬜ |  |
-| Gradio 后端 | YouTube 视频下载 | ⬜ |  |
-| Gradio 后端 | 本地视频上传 | ⬜ |  |
-| Gradio 后端 | 关键帧提取 | ⬜ |  |
-| Gradio 后端 | 音频转录 | ⬜ |  |
-| Gradio 后端 | AI 总结生成 | ⬜ |  |
-| Gradio 后端 | 智能问答 | ⬜ |  |
+| React 前端 | 界面访问 | ⬜ |  |
+| React 前端 | YouTube 视频下载 | ⬜ |  |
+| React 前端 | 本地视频上传 | ⬜ |  |
+| React 前端 | 关键帧提取 | ⬜ |  |
+| React 前端 | 音频转录 | ⬜ |  |
+| React 前端 | AI 总结生成 | ⬜ |  |
+| React 前端 | 智能问答 | ⬜ |  |
 | React 前端 | 页面访问 | ⬜ |  |
 | React 前端 | 响应式布局 | ⬜ |  |
 | React 前端 | 路由跳转 | ⬜ |  |
@@ -265,7 +265,7 @@ cat /Users/chengpeng/Downloads/MyProject/My_Youtube_Summarizer/.env
 ## 📞 技术支持
 
 - **项目文档**: `/backend/app/tests/docs/`
-- **Gradio 快速参考**: `/backend/GRADIO_QUICKSTART.md`
+- **API 文档**: `/backend/README.md`
 - **Supabase 集成指南**: `/backend/SUPABASE_QUICKSTART.md`
 - **聊天功能指南**: `/backend/HOW_TO_USE_CHAT.md`
 
