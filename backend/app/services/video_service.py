@@ -34,14 +34,14 @@ class AliyunVideoService:
         self.temp_dir.mkdir(parents=True, exist_ok=True)
         logger.info(f"阿里云视频服务初始化完成，临时目录: {self.temp_dir}")
         
-        # yt-dlp下载选项 (2024 最新配置)
+        # yt-dlp下载选项 (2025.11最新配置 - 绕过机器人检测)
         self.ytdl_opts = {
             # 基础配置
             'noplaylist': True,
             'retries': 10,
             'fragment_retries': 10,
-            'extractor_retries': 3,  # 提取器重试
-            'file_access_retries': 3,  # 文件访问重试
+            'extractor_retries': 3,
+            'file_access_retries': 3,
             'socket_timeout': 60,
             'nocheckcertificate': True,
             'ignoreerrors': False,
@@ -56,27 +56,34 @@ class AliyunVideoService:
             'geo_bypass': True,
             'geo_bypass_country': 'US',
             
-            # 2024 最新 HTTP 头配置
+            # 2025.11 最新 HTTP 头配置（更真实的浏览器模拟）
             'http_headers': {
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
-                'Accept': '*/*',
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
                 'Accept-Language': 'en-US,en;q=0.9',
                 'Accept-Encoding': 'gzip, deflate, br',
-                'Sec-Fetch-Dest': 'empty',
-                'Sec-Fetch-Mode': 'cors',
-                'Sec-Fetch-Site': 'same-origin',
-                'Sec-Ch-Ua': '"Chromium";v="131", "Not_A Brand";v="24"',
+                'Sec-Fetch-Dest': 'document',
+                'Sec-Fetch-Mode': 'navigate',
+                'Sec-Fetch-Site': 'none',
+                'Sec-Fetch-User': '?1',
+                'Sec-Ch-Ua': '"Chromium";v="131", "Not_A Brand";v="24", "Google Chrome";v="131"',
                 'Sec-Ch-Ua-Mobile': '?0',
                 'Sec-Ch-Ua-Platform': '"Windows"',
+                'Upgrade-Insecure-Requests': '1',
             },
             
-            # YouTube 特定优化配置
+            # YouTube 特定优化配置（2025.11更新 - 使用tv_downgraded客户端绕过bot检测）
             'extractor_args': {
                 'youtube': {
-                    'player_client': ['android', 'web'],  # 多客户端降级策略
-                    'skip': ['hls'],  # 跳过某些流格式
+                    # 多客户端降级策略：优先使用tv客户端，然后android，最后web
+                    'player_client': ['tv_embedded', 'android', 'web'],
+                    'skip': ['hls', 'dash'],  # 跳过某些流格式
+                    'player_skip': ['webpage', 'configs'],  # 跳过网页解析，直接使用API
                 }
-            }
+            },
+            
+            # 禁用缓存以避免旧的bot检测数据
+            'no_cache_dir': True,
         }
     
     def _generate_video_id(self) -> str:
@@ -191,7 +198,7 @@ class AliyunVideoService:
             }
     
     async def _download_from_youtube(self, url: str, session_temp_dir: Path) -> Dict[str, Any]:
-        """从YouTube下载视频（使用Python API而非命令行，确保所有配置被应用）"""
+        """从YouTube下载视频（使用多种策略绕过bot检测）"""
         try:
             base_filename = session_temp_dir / "downloaded_video"
             
@@ -201,35 +208,70 @@ class AliyunVideoService:
             opts['format'] = 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best'
             opts['merge_output_format'] = 'mp4'
             
-            logger.info("开始从YouTube下载视频（使用Python API）...")
+            logger.info("开始从 YouTube 下载视频（使用多种策略绕过bot检测）...")
             logger.info(f"User-Agent: {opts['http_headers'].get('User-Agent', 'N/A')[:50]}...")
             
-            # 使用Python API下载（确保所有headers和配置被应用）
+            # 使用Python API下载（尝试多种客户端策略）
             metadata = {}
             video_path = None
+            download_success = False
             
+            # 策略1: tv_embedded 客户端（最佳）
             try:
-                with yt_dlp.YoutubeDL(opts) as ydl:
-                    logger.info(f"提取metadata...")
+                logger.info("尝试策略1: tv_embedded 客户端...")
+                opts_tv = opts.copy()
+                opts_tv['extractor_args'] = {
+                    'youtube': {
+                        'player_client': ['tv_embedded'],
+                        'skip': ['hls', 'dash'],
+                        'player_skip': ['webpage', 'configs'],
+                    }
+                }
+                with yt_dlp.YoutubeDL(opts_tv) as ydl:
                     info = ydl.extract_info(url, download=True)
                     metadata = info
-                    logger.info(f"成功获取metadata: {info.get('title', 'N/A')}")
-            except yt_dlp.utils.DownloadError as e:
-                # 如果是403错误，尝试使用web客户端
-                if '403' in str(e):
-                    logger.warning(f"遇到403错误，尝试使用web客户端...")
+                    download_success = True
+                    logger.info(f"✅ tv_embedded 成功: {info.get('title', 'N/A')}")
+            except Exception as e:
+                logger.warning(f"⚠️ tv_embedded 失败: {str(e)[:150]}")
+                
+            # 策略2: android 客户端
+            if not download_success:
+                try:
+                    logger.info("尝试策略2: android 客户端...")
+                    opts_android = opts.copy()
+                    opts_android['extractor_args'] = {
+                        'youtube': {
+                            'player_client': ['android'],
+                            'skip': ['hls', 'dash'],
+                        }
+                    }
+                    with yt_dlp.YoutubeDL(opts_android) as ydl:
+                        info = ydl.extract_info(url, download=True)
+                        metadata = info
+                        download_success = True
+                        logger.info(f"✅ android 成功: {info.get('title', 'N/A')}")
+                except Exception as e:
+                    logger.warning(f"⚠️ android 失败: {str(e)[:150]}")
+            
+            # 策略3: web_embedded 客户端
+            if not download_success:
+                try:
+                    logger.info("尝试策略3: web_embedded 客户端...")
                     opts_web = opts.copy()
                     opts_web['extractor_args'] = {
                         'youtube': {
-                            'player_client': ['web_embedded'],  # 使用web_embedded客户端
+                            'player_client': ['web_embedded'],
                         }
                     }
                     with yt_dlp.YoutubeDL(opts_web) as ydl:
                         info = ydl.extract_info(url, download=True)
                         metadata = info
-                        logger.info(f"使用web客户端成功获取: {info.get('title', 'N/A')}")
-                else:
-                    raise
+                        download_success = True
+                        logger.info(f"✅ web_embedded 成功: {info.get('title', 'N/A')}")
+                except Exception as e:
+                    logger.error(f"❗ 所有策略均失败: {str(e)}")
+                    raise Exception(f"YouTube 视频下载失败：{str(e)}")
             
             # 查找下载的视频文件
             for file_path in session_temp_dir.iterdir():

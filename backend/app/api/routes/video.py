@@ -74,22 +74,26 @@ async def process_video(
             temp_dir = tempfile.gettempdir()
             video_path = os.path.join(temp_dir, video_file.filename)
             
+            logger.info(f"📤 开始保存上传的视频文件: {video_file.filename}, 大小: {video_file.size if hasattr(video_file, 'size') else 'unknown'}")
+            
             # 保存文件
             with open(video_path, "wb") as buffer:
                 content = await video_file.read()
                 buffer.write(content)
             
-            logger.info(f"已保存上传的视频文件: {video_path}")
+            logger.info(f"✅ 已保存上传的视频文件: {video_path}, 文件大小: {os.path.getsize(video_path)} bytes")
         
         # 获取用户 ID
         # user_id 已在上面处理过
         
         # 处理视频(传递 user_id 用于 Supabase 集成)
+        logger.info(f"🚀 开始处理视频管道: youtube_url={youtube_url}, video_file={video_path}, user_id={user_id}")
         result = await pipeline.process_video_with_summary(
             youtube_url=youtube_url,
             video_file=video_path,
             user_id=user_id
         )
+        logger.info(f"📊 视频处理管道返回结果: status={result.get('status')}, video_id={result.get('video_id')}")
         
         # 如果处理成功,递增配额使用
         if result.get("status") == "success" and supabase_service.is_available() and user_id:
@@ -109,8 +113,25 @@ async def process_video(
         return result
         
     except Exception as e:
-        logger.exception(f"视频处理失败: {e}")
-        raise HTTPException(status_code=500, detail=f"视频处理失败: {str(e)}")
+        error_message = str(e)
+        logger.exception(f"❌ 视频处理失败: {e}")
+        logger.error(f"❌ 错误类型: {type(e).__name__}")
+        logger.error(f"❌ 错误详情: {error_message}")
+        
+         # 检测是否是YouTube机器人检测错误
+        if 'Sign in to confirm you\'re not a bot' in error_message or 'Please sign in' in error_message:
+            friendly_message = (
+                "YouTube 检测到非人类访问,无法下载视频。\n\n"
+                "💡 解决方案：\n"
+                "1. 使用文件上传功能直接上传视频文件\n"
+                "2. 在本地下载 YouTube 视频后再上传\n"
+                "3. 尝试使用其他视频链接"
+            )
+            raise HTTPException(status_code=503, detail=friendly_message)
+        
+        # 提供更详细的错误信息
+        detailed_error = f"视频处理失败: {type(e).__name__} - {error_message}"
+        raise HTTPException(status_code=500, detail=detailed_error)
 
 
 @router.get("/history")
