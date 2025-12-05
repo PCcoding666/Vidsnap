@@ -1,16 +1,17 @@
 """
 Video processing API routes.
 """
-from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Depends, status
+from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Depends, status, Request
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from typing import Optional, Dict, Any
 import logging
 import tempfile
 import os
+import time
 
 from ...services.pipeline_service import pipeline
 from ...services.supabase_service import supabase_service
-from ...core.logging import logger
+from ...core.logging import logger, get_context_logger
 
 router = APIRouter(prefix="/video", tags=["video"])
 security = HTTPBearer(auto_error=False)  # auto_error=False 允许无token访问
@@ -18,6 +19,7 @@ security = HTTPBearer(auto_error=False)  # auto_error=False 允许无token访问
 
 @router.post("/process")
 async def process_video(
+    request: Request,
     youtube_url: Optional[str] = Form(None),
     video_file: Optional[UploadFile] = File(None),
     credentials: Optional[HTTPAuthorizationCredentials] = Depends(security)
@@ -28,6 +30,7 @@ async def process_video(
     认证: 可选（如果提供token则验证，否则使用匿名模式）
     
     Args:
+        request: FastAPI Request对象
         youtube_url: YouTube video URL
         video_file: Uploaded video file
         credentials: 可选的认证凭证
@@ -35,7 +38,22 @@ async def process_video(
     Returns:
         Processing result
     """
-    logger.info("收到视频处理请求")
+    # 创建带请求ID的上下文日志记录器
+    ctx_logger = get_context_logger()
+    start_time = time.time()
+    
+    # 记录请求详情
+    ctx_logger.info(
+        "🎬 收到视频处理请求",
+        client_host=request.client.host if request.client else "unknown",
+        user_agent=request.headers.get("user-agent", "unknown"),
+        youtube_url=youtube_url if youtube_url else None,
+        has_file=video_file is not None,
+        file_name=video_file.filename if video_file else None,
+    )
+    
+    # 记录初始资源使用情况
+    ctx_logger.log_resource_usage("请求开始")
     
     # 处理认证（可选）
     user_id = None
@@ -47,76 +65,138 @@ async def process_video(
                 # 检查配额
                 quota_ok = supabase_service.check_user_quota(str(user_id))
                 if not quota_ok:
+                    ctx_logger.warning("❌ 用户配额已耗尽", user_id=user_id, user_email=user.get('email'))
                     raise HTTPException(
                         status_code=status.HTTP_429_TOO_MANY_REQUESTS,
                         detail="已达到本月视频处理上限或存储空间已满，请升级订阅或等待下月重置"
                     )
-                logger.info(f"✅ 用户认证成功: {user.get('email')}")
+                ctx_logger.info("✅ 用户认证成功", user_id=user_id, user_email=user.get('email'))
         except HTTPException:
             raise
         except Exception as e:
-            logger.warning(f"⚠️ Token验证失败，使用匿名模式: {e}")
+            ctx_logger.warning(f"⚠️ Token验证失败，使用匿名模式: {e}")
     else:
-        logger.info("👤 使用匿名模式处理视频")
+        ctx_logger.info("👤 使用匿名模式处理视频")
     
     # 验证输入
     if not youtube_url and not video_file:
+        ctx_logger.error("❌ 请求验证失败: 未提供视频源")
         raise HTTPException(status_code=400, detail="必须提供YouTube URL或上传视频文件")
     
     if youtube_url and video_file:
+        ctx_logger.error("❌ 请求验证失败: 同时提供了YouTube URL和文件")
         raise HTTPException(status_code=400, detail="不能同时提供YouTube URL和上传视频文件")
     
     try:
         # 保存上传的文件（如果有的话）
         video_path = None
         if video_file:
+            upload_start = time.time()
+            
+            # 获取文件大小
+            file_size = 0
+            if hasattr(video_file, 'size'):
+                file_size = video_file.size
+            
             # 生成临时文件路径
             temp_dir = tempfile.gettempdir()
             video_path = os.path.join(temp_dir, video_file.filename)
             
-            logger.info(f"📤 开始保存上传的视频文件: {video_file.filename}, 大小: {video_file.size if hasattr(video_file, 'size') else 'unknown'}")
+            ctx_logger.info(
+                f"📤 开始保存上传的视频文件",
+                file_name=video_file.filename,
+                file_size=file_size,
+                temp_path=video_path,
+                content_type=video_file.content_type
+            )
             
             # 保存文件
+            bytes_written = 0
             with open(video_path, "wb") as buffer:
                 content = await video_file.read()
+                bytes_written = len(content)
                 buffer.write(content)
             
-            logger.info(f"✅ 已保存上传的视频文件: {video_path}, 文件大小: {os.path.getsize(video_path)} bytes")
+            upload_duration = (time.time() - upload_start) * 1000
+            actual_file_size = os.path.getsize(video_path)
+            
+            ctx_logger.log_file_operation(
+                "文件上传完成",
+                video_path,
+                file_size=actual_file_size,
+                upload_duration_ms=upload_duration,
+                upload_speed_mbps=round(actual_file_size / 1024 / 1024 / (upload_duration / 1000), 2)
+            )
+            
+            # 记录上传后资源使用
+            ctx_logger.log_resource_usage("文件上传完成")
         
         # 获取用户 ID
         # user_id 已在上面处理过
         
         # 处理视频(传递 user_id 用于 Supabase 集成)
-        logger.info(f"🚀 开始处理视频管道: youtube_url={youtube_url}, video_file={video_path}, user_id={user_id}")
+        pipeline_start = time.time()
+        ctx_logger.info(
+            "🚀 开始处理视频管道",
+            youtube_url=youtube_url,
+            video_file=video_path,
+            user_id=user_id
+        )
+        
         result = await pipeline.process_video_with_summary(
             youtube_url=youtube_url,
             video_file=video_path,
             user_id=user_id
         )
-        logger.info(f"📊 视频处理管道返回结果: status={result.get('status')}, video_id={result.get('video_id')}")
+        
+        pipeline_duration = (time.time() - pipeline_start) * 1000
+        ctx_logger.log_performance(
+            "视频处理管道",
+            status=result.get('status'),
+            video_id=result.get('video_id'),
+            duration_ms=pipeline_duration
+        )
+        
+        # 记录管道处理后资源使用
+        ctx_logger.log_resource_usage("管道处理完成")
         
         # 如果处理成功,递增配额使用
         if result.get("status") == "success" and supabase_service.is_available() and user_id:
             try:
                 supabase_service.increment_video_usage(user_id)
+                ctx_logger.info("✅ 配额使用已更新", user_id=user_id)
             except Exception as e:
-                logger.error(f"⚠️ 递增配额使用失败: {e}")
+                ctx_logger.error(f"⚠️ 递增配额使用失败: {e}", user_id=user_id)
         
         # 清理临时文件
         if video_path and os.path.exists(video_path):
             try:
                 os.remove(video_path)
-                logger.debug(f"已清理临时文件: {video_path}")
+                ctx_logger.debug(f"🗑️ 已清理临时文件", file_path=video_path)
             except Exception as e:
-                logger.warning(f"清理临时文件失败: {e}")
+                ctx_logger.warning(f"⚠️ 清理临时文件失败: {e}", file_path=video_path)
+        
+        # 记录总体性能
+        total_duration = (time.time() - start_time) * 1000
+        ctx_logger.log_performance(
+            "视频处理请求完成",
+            total_duration_ms=total_duration,
+            status=result.get('status'),
+            video_id=result.get('video_id')
+        )
         
         return result
         
     except Exception as e:
         error_message = str(e)
-        logger.exception(f"❌ 视频处理失败: {e}")
-        logger.error(f"❌ 错误类型: {type(e).__name__}")
-        logger.error(f"❌ 错误详情: {error_message}")
+        ctx_logger.exception(
+            f"❌ 视频处理失败",
+            error_type=type(e).__name__,
+            error_message=error_message,
+            youtube_url=youtube_url,
+            video_file=video_path if video_file else None,
+            user_id=user_id
+        )
         
          # 检测是否是YouTube机器人检测错误
         if 'Sign in to confirm you\'re not a bot' in error_message or 'Please sign in' in error_message:

@@ -1,0 +1,21 @@
+[Unit]
+Description=Vidsnap Backend API Service
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/root/my_youtube_summarizer/backend
+Environment="PATH=/root/miniconda3/bin:/usr/local/bin:/usr/bin:/bin"
+Environment="https_proxy=http://127.0.0.1:33210"
+Environment="http_proxy=http://127.0.0.1:33210"
+Environment="all_proxy=socks5://127.0.0.1:33211"
+EnvironmentFile=/root/my_youtube_summarizer/.env
+ExecStart=/root/miniconda3/bin/uvicorn app.main:app --host 0.0.0.0 --port 8000 --log-level info
+Restart=always
+RestartSec=10
+StandardOutput=append:/root/my_youtube_summarizer/backend/logs/service.log
+StandardError=append:/root/my_youtube_summarizer/backend/logs/service-error.log
+
+[Install]
+WantedBy=multi-user.target
