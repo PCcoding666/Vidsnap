@@ -18,6 +18,7 @@ from dataclasses import dataclass
 import yt_dlp
 
 from ..core.logging import logger
+from ..core.config import settings
 from ..models.video import KeyframeInfo, VideoInfo
 
 
@@ -34,7 +35,14 @@ class AliyunVideoService:
         self.temp_dir.mkdir(parents=True, exist_ok=True)
         logger.info(f"阿里云视频服务初始化完成，临时目录: {self.temp_dir}")
         
-        # yt-dlp下载选项 (2025.11最新配置 - 绕过机器人检测)
+        # 代理配置
+        self.proxy = settings.YOUTUBE_PROXY if settings.YOUTUBE_PROXY else None
+        if self.proxy:
+            logger.info(f"YouTube 代理已启用: {self.proxy}")
+        else:
+            logger.info("YouTube 代理未配置，使用直连")
+        
+        # yt-dlp下载选项 (2025.12 最新配置 - 代理 + Android 客户端)
         self.ytdl_opts = {
             # 基础配置
             'noplaylist': True,
@@ -49,7 +57,10 @@ class AliyunVideoService:
             'quiet': False,
             'no_warnings': False,
             'default_search': 'auto',
-            'source_address': '0.0.0.0',
+            'source_address': '0.0.0.0',  # 强制 IPv4
+            
+            # YouTube 代理配置
+            # 通过环境变量 YOUTUBE_PROXY 设置，例如: http://127.0.0.1:7890
             
             # 绕过限制配置
             'age_limit': None,
@@ -72,13 +83,12 @@ class AliyunVideoService:
                 'Upgrade-Insecure-Requests': '1',
             },
             
-            # YouTube 特定优化配置（2025.11更新 - 使用tv_downgraded客户端绕过bot检测）
+            # YouTube 特定优化配置（2025.12更新 - 使用android客户端绕过bot检测）
             'extractor_args': {
                 'youtube': {
-                    # 多客户端降级策略：优先使用tv客户端，然后android，最后web
-                    'player_client': ['tv_embedded', 'android', 'web'],
-                    'skip': ['hls', 'dash'],  # 跳过某些流格式
-                    'player_skip': ['webpage', 'configs'],  # 跳过网页解析，直接使用API
+                    # Android 客户端最稳定，配合代理使用
+                    'player_client': ['android', 'web'],
+                    'skip': ['hls', 'dash'],
                 }
             },
             
@@ -206,6 +216,11 @@ class AliyunVideoService:
             opts['format'] = 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best'
             opts['merge_output_format'] = 'mp4'
             
+            # 应用代理配置
+            if self.proxy:
+                opts['proxy'] = self.proxy
+                logger.info(f"使用代理下载: {self.proxy}")
+            
             logger.info("开始从 YouTube 下载视频（使用多种策略绕过bot检测）...")
             logger.info(f"User-Agent: {opts['http_headers'].get('User-Agent', 'N/A')[:50]}...")
             
@@ -214,59 +229,57 @@ class AliyunVideoService:
             video_path = None
             download_success = False
             
-            # 策略1: tv_embedded 客户端（最佳）
+            # 策略1: android 客户端（最稳定，配合代理）
             try:
-                logger.info("尝试策略1: tv_embedded 客户端...")
-                opts_tv = opts.copy()
-                opts_tv['extractor_args'] = {
+                logger.info("尝试策略1: android 客户端...")
+                opts_android = opts.copy()
+                opts_android['extractor_args'] = {
                     'youtube': {
-                        'player_client': ['tv_embedded'],
+                        'player_client': ['android'],
                         'skip': ['hls', 'dash'],
-                        'player_skip': ['webpage', 'configs'],
                     }
                 }
-                with yt_dlp.YoutubeDL(opts_tv) as ydl:
+                with yt_dlp.YoutubeDL(opts_android) as ydl:
                     info = ydl.extract_info(url, download=True)
                     metadata = info
                     download_success = True
-                    logger.info(f"✅ tv_embedded 成功: {info.get('title', 'N/A')}")
+                    logger.info(f"✅ android 成功: {info.get('title', 'N/A')}")
             except Exception as e:
-                logger.warning(f"⚠️ tv_embedded 失败: {str(e)[:150]}")
+                logger.warning(f"⚠️ android 失败: {str(e)[:150]}")
                 
-            # 策略2: android 客户端
+            # 策略2: web 客户端
             if not download_success:
                 try:
-                    logger.info("尝试策略2: android 客户端...")
-                    opts_android = opts.copy()
-                    opts_android['extractor_args'] = {
-                        'youtube': {
-                            'player_client': ['android'],
-                            'skip': ['hls', 'dash'],
-                        }
-                    }
-                    with yt_dlp.YoutubeDL(opts_android) as ydl:
-                        info = ydl.extract_info(url, download=True)
-                        metadata = info
-                        download_success = True
-                        logger.info(f"✅ android 成功: {info.get('title', 'N/A')}")
-                except Exception as e:
-                    logger.warning(f"⚠️ android 失败: {str(e)[:150]}")
-            
-            # 策略3: web_embedded 客户端
-            if not download_success:
-                try:
-                    logger.info("尝试策略3: web_embedded 客户端...")
+                    logger.info("尝试策略2: web 客户端...")
                     opts_web = opts.copy()
                     opts_web['extractor_args'] = {
                         'youtube': {
-                            'player_client': ['web_embedded'],
+                            'player_client': ['web'],
                         }
                     }
                     with yt_dlp.YoutubeDL(opts_web) as ydl:
                         info = ydl.extract_info(url, download=True)
                         metadata = info
                         download_success = True
-                        logger.info(f"✅ web_embedded 成功: {info.get('title', 'N/A')}")
+                        logger.info(f"✅ web 成功: {info.get('title', 'N/A')}")
+                except Exception as e:
+                    logger.warning(f"⚠️ web 失败: {str(e)[:150]}")
+            
+            # 策略3: tv_embedded 客户端
+            if not download_success:
+                try:
+                    logger.info("尝试策略3: tv_embedded 客户端...")
+                    opts_tv = opts.copy()
+                    opts_tv['extractor_args'] = {
+                        'youtube': {
+                            'player_client': ['tv_embedded'],
+                        }
+                    }
+                    with yt_dlp.YoutubeDL(opts_tv) as ydl:
+                        info = ydl.extract_info(url, download=True)
+                        metadata = info
+                        download_success = True
+                        logger.info(f"✅ tv_embedded 成功: {info.get('title', 'N/A')}")
                 except Exception as e:
                     logger.error(f"❗ 所有策略均失败: {str(e)}")
                     raise Exception(f"YouTube 视频下载失败：{str(e)}")

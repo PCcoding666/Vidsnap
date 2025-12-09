@@ -50,6 +50,11 @@ class Settings:
     # 应用配置
     TEMP_DIR: str = os.getenv("TEMP_DIR", "/tmp/video_analysis")
     
+    # YouTube 代理配置
+    # 服务器部署时设置为 http://127.0.0.1:7890 (Clash 代理)
+    # 本地开发可设置为 http://127.0.0.1:33210 (本地代理) 或留空禁用
+    YOUTUBE_PROXY: str = os.getenv("YOUTUBE_PROXY", "")
+    
     @property
     def DASHSCOPE_API_KEY(self) -> str:
         """
