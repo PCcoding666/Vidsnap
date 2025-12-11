@@ -140,6 +140,9 @@ class AliyunVideoService:
             logger.info(f"开始处理视频，ID: {video_id}")
             
             # 步骤1: 获取视频文件
+            audio_path = None  # 初始化音频路径
+            audio_oss_url = None  # 初始化音频OSS URL
+            
             if youtube_url:
                 logger.info(f"从YouTube下载视频: {youtube_url}")
                 video_result = await self._download_from_youtube(youtube_url, session_temp_dir)
@@ -154,6 +157,7 @@ class AliyunVideoService:
             else:  # 用户上传文件
                 logger.info(f"处理用户上传的视频: {video_file}")
                 video_path = video_file
+                # 用户上传的是完整视频，后续需要提取音频
                 video_metadata = await self._extract_video_metadata(video_path)
                 source_type = "upload"
                 original_url = None
@@ -192,7 +196,7 @@ class AliyunVideoService:
                 "status": "success",
                 "video_id": video_id,
                 "video_info": video_info,
-                "video_path": video_path,  # 新增：用于后续并发任务
+                "video_path": video_path,
                 "video_metadata": video_metadata,
                 "session_temp_dir": str(session_temp_dir)
             }
@@ -206,14 +210,15 @@ class AliyunVideoService:
             }
     
     async def _download_from_youtube(self, url: str, session_temp_dir: Path) -> Dict[str, Any]:
-        """从YouTube下载视频（使用多种策略绕过bot检测）"""
+        """从YouTube下载视频(使用默认格式,让yt-dlp自动选择最佳策略)"""
         try:
             base_filename = session_temp_dir / "downloaded_video"
             
-            # 配置yt-dlp选项（包含HTTP headers、重试机制等）
+            # 配置yt-dlp选项(包含HTTP headers、重试机制等)
             opts = self.ytdl_opts.copy()
             opts['outtmpl'] = str(base_filename) + '.%(ext)s'
-            opts['format'] = 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best'
+            # 使用默认格式,优先720p以下
+            opts['format'] = 'bestvideo[height<=720]+bestaudio/best[height<=720]/best'
             opts['merge_output_format'] = 'mp4'
             
             # 应用代理配置
@@ -229,43 +234,40 @@ class AliyunVideoService:
             video_path = None
             download_success = False
             
-            # 策略1: android 客户端（最稳定，配合代理）
+            # 策略1: 默认模式(不指定客户端,让yt-dlp自动选择)
             try:
-                logger.info("尝试策略1: android 客户端...")
-                opts_android = opts.copy()
-                opts_android['extractor_args'] = {
-                    'youtube': {
-                        'player_client': ['android'],
-                        'skip': ['hls', 'dash'],
-                    }
-                }
-                with yt_dlp.YoutubeDL(opts_android) as ydl:
+                logger.info("尝试策略1: 默认模式(自动选择最佳客户端)...")
+                opts_default = opts.copy()
+                # 不指定player_client
+                opts_default.pop('extractor_args', None)
+                
+                with yt_dlp.YoutubeDL(opts_default) as ydl:
                     info = ydl.extract_info(url, download=True)
                     metadata = info
                     download_success = True
-                    logger.info(f"✅ android 成功: {info.get('title', 'N/A')}")
+                    logger.info(f"✅ 默认模式成功: {info.get('title', 'N/A')}")
             except Exception as e:
-                logger.warning(f"⚠️ android 失败: {str(e)[:150]}")
+                logger.warning(f"⚠️ 默认模式失败: {str(e)[:150]}")
                 
-            # 策略2: web 客户端
+            # 策略2: android 客户端(fallback)
             if not download_success:
                 try:
-                    logger.info("尝试策略2: web 客户端...")
-                    opts_web = opts.copy()
-                    opts_web['extractor_args'] = {
+                    logger.info("尝试策略2: android 客户端...")
+                    opts_android = opts.copy()
+                    opts_android['extractor_args'] = {
                         'youtube': {
-                            'player_client': ['web'],
+                            'player_client': ['android'],
                         }
                     }
-                    with yt_dlp.YoutubeDL(opts_web) as ydl:
+                    with yt_dlp.YoutubeDL(opts_android) as ydl:
                         info = ydl.extract_info(url, download=True)
                         metadata = info
                         download_success = True
-                        logger.info(f"✅ web 成功: {info.get('title', 'N/A')}")
+                        logger.info(f"✅ android 成功: {info.get('title', 'N/A')}")
                 except Exception as e:
-                    logger.warning(f"⚠️ web 失败: {str(e)[:150]}")
+                    logger.warning(f"⚠️ android 失败: {str(e)[:150]}")
             
-            # 策略3: tv_embedded 客户端
+            # 策略3: tv_embedded 客户端(fallback)
             if not download_success:
                 try:
                     logger.info("尝试策略3: tv_embedded 客户端...")
@@ -282,11 +284,11 @@ class AliyunVideoService:
                         logger.info(f"✅ tv_embedded 成功: {info.get('title', 'N/A')}")
                 except Exception as e:
                     logger.error(f"❗ 所有策略均失败: {str(e)}")
-                    raise Exception(f"YouTube 视频下载失败：{str(e)}")
+                    raise Exception(f"YouTube 视频下载失败:{str(e)}")
             
             # 查找下载的视频文件
             for file_path in session_temp_dir.iterdir():
-                if file_path.suffix.lower() in ['.mp4', '.avi', '.mov', '.mkv']:
+                if file_path.suffix.lower() in ['.mp4', '.avi', '.mov', '.mkv', '.webm']:
                     video_path = str(file_path)
                     break
             

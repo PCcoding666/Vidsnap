@@ -73,7 +73,7 @@ class AliyunVideoProcessingPipeline:
             
             video_id = video_result["video_id"]
             video_info = video_result["video_info"]
-            video_path = video_result["video_path"]  # 新增：用于并发任务
+            video_path = video_result["video_path"]
             video_metadata = video_result["video_metadata"]
             session_temp_dir = video_result["session_temp_dir"]
             
@@ -92,7 +92,7 @@ class AliyunVideoProcessingPipeline:
                         video_path, video_id, Path(session_temp_dir)
                     ),
                     self.speech_service.extract_and_transcribe_audio(
-                        video_path, video_id
+                        video_path, video_id, None
                     ),
                     return_exceptions=False  # 任何异常会立即抛出
                 )
@@ -366,6 +366,8 @@ class AliyunVideoProcessingPipeline:
             video_id = video_result["video_id"]
             video_info = video_result["video_info"]
             video_path = video_result["video_path"]  # 新增：用于并发任务
+            audio_path = video_result.get("audio_path")  # 分离的音频路径(如果有)
+            audio_oss_url = video_result.get("audio_oss_url")  # 分离的音频OSS URL(如果有)
             video_metadata = video_result["video_metadata"]
             session_temp_dir = video_result["session_temp_dir"]
             
@@ -418,7 +420,7 @@ class AliyunVideoProcessingPipeline:
                         video_path, video_id, Path(session_temp_dir)
                     ),
                     self.speech_service.extract_and_transcribe_audio(
-                        video_path, video_id
+                        audio_path if audio_path else video_path, video_id, audio_oss_url
                     ),
                     return_exceptions=False  # 任何异常会立即抛出
                 )

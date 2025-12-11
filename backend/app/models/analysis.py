@@ -72,18 +72,14 @@ class VideoMetadata:
     duration: float
     oss_video_url: str
     source_type: str  # "upload" 或 "youtube"
-    original_url: Optional[str]
-    
-    # 处理时间
     upload_time: str
     processing_completed_time: str
-    
-    # 媒体内容
     keyframes: List[KeyframeMetadata]
     transcript: TranscriptMetadata
-    
-    # 处理状态
     processing_status: str
+    
+    # 可选字段
+    original_url: Optional[str] = None
     metadata_oss_url: Optional[str] = None
     
     # 技术信息
