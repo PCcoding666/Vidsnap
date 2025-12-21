@@ -1,0 +1,29 @@
+{
+  "processing": {
+    "startTitle": "Start Processing Video",
+    "downloadingYoutube": "Downloading and analyzing YouTube video...",
+    "uploadingVideo": "Uploading and analyzing video file...",
+    "completeTitle": "✅ Processing Complete",
+    "completeDescription": "Video successfully analyzed, generated {{count}} keyframes",
+    "failedTitle": "❌ Processing Failed",
+    "failedDescription": "An error occurred during video processing, please try again",
+    "dataConversionFailed": "Data conversion failed: {{message}}",
+    "processingFailed": "Processing failed"
+  },
+  "video": {
+    "untitled": "Untitled Video",
+    "unknownDuration": "Unknown",
+    "noSummaryAvailable": "No summary available",
+    "keyframe": "Keyframe {{number}}"
+  },
+  "status": {
+    "processing": "Still processing, please wait",
+    "failed": "Processing failed",
+    "completed": "Completed"
+  },
+  "common": {
+    "processing": "Processing...",
+    "error": "Error",
+    "success": "Success"
+  }
+}

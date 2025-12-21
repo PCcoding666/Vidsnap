@@ -1,0 +1,29 @@
+{
+  "processing": {
+    "startTitle": "开始处理视频",
+    "downloadingYoutube": "正在下载并分析 YouTube 视频...",
+    "uploadingVideo": "正在上传并分析视频文件...",
+    "completeTitle": "✅ 处理完成",
+    "completeDescription": "视频分析成功，生成了 {{count}} 个关键帧",
+    "failedTitle": "❌ 处理失败",
+    "failedDescription": "视频处理过程中发生错误，请重试",
+    "dataConversionFailed": "数据转换失败: {{message}}",
+    "processingFailed": "处理失败"
+  },
+  "video": {
+    "untitled": "未命名视频",
+    "unknownDuration": "未知",
+    "noSummaryAvailable": "暂无摘要",
+    "keyframe": "关键帧 {{number}}"
+  },
+  "status": {
+    "processing": "仍在处理中，请稍候",
+    "failed": "处理失败",
+    "completed": "已完成"
+  },
+  "common": {
+    "processing": "处理中...",
+    "error": "错误",
+    "success": "成功"
+  }
+}
