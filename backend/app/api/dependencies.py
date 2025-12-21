@@ -1,21 +1,29 @@
 """
 API dependencies and middleware.
+本地 PostgreSQL 认证模式 - Supabase 已禁用
 """
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 import logging
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 
 from ..core.logging import logger
-from ..services.supabase_service import supabase_service
+from ..core.config import settings
 
 # 安全方案
 security = HTTPBearer()
 
 
+# ============================================
+# Supabase 服务导入已禁用
+# ============================================
+# from ..services.supabase_service import supabase_service
+
+
 async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)) -> Dict[str, Any]:
     """
     验证 JWT Token 并返回当前用户信息
+    使用本地 FastAPI-Users JWT 认证
     
     Args:
         credentials: HTTP Authorization 凭证
@@ -26,13 +34,11 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
     Raises:
         HTTPException: Token 无效或过期
     """
-    if not supabase_service.is_available():
-        # 如果 Supabase 不可用,跳过认证(降级模式)
-        logger.warning("⚠️ Supabase 不可用,跳过认证")
-        return {"id": "anonymous", "email": "anonymous@example.com"}
-    
     token = credentials.credentials
-    user = supabase_service.verify_token(token)
+    
+    # 使用本地 FastAPI-Users JWT 认证
+    from ..core.auth import verify_jwt_token
+    user = verify_jwt_token(token)
     
     if not user:
         raise HTTPException(
@@ -41,13 +47,51 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
             headers={"WWW-Authenticate": "Bearer"},
         )
     
-    logger.debug(f"✅ 用户认证成功: {user['email']}")
+    logger.debug(f"✅ 用户认证成功: {user.get('email')}")
     return user
+    
+    # ============================================
+    # Supabase 认证代码已禁用
+    # ============================================
+    # from ..services.supabase_service import supabase_service
+    # 
+    # if not supabase_service.is_available():
+    #     logger.warning("⚠️ Supabase 不可用,跳过认证")
+    #     return {"id": "anonymous", "email": "anonymous@example.com"}
+    # 
+    # user = supabase_service.verify_token(token)
+    # 
+    # if not user:
+    #     raise HTTPException(
+    #         status_code=status.HTTP_401_UNAUTHORIZED,
+    #         detail="无效的认证令牌",
+    #         headers={"WWW-Authenticate": "Bearer"},
+    #     )
+    # 
+    # logger.debug(f"✅ 用户认证成功 (Supabase): {user['email']}")
+    # return user
+
+
+async def get_current_user_optional(
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(HTTPBearer(auto_error=False))
+) -> Optional[Dict[str, Any]]:
+    """
+    可选的用户认证
+    如果提供了 Token 则验证，否则返回 None
+    """
+    if credentials is None:
+        return None
+    
+    try:
+        return await get_current_user(credentials)
+    except HTTPException:
+        return None
 
 
 async def check_quota(current_user: Dict[str, Any] = Depends(get_current_user)) -> Dict[str, Any]:
     """
     检查用户配额是否充足
+    使用本地数据库服务
     
     Args:
         current_user: 当前用户信息
@@ -58,14 +102,17 @@ async def check_quota(current_user: Dict[str, Any] = Depends(get_current_user)) 
     Raises:
         HTTPException: 配额已达上限
     """
-    if not supabase_service.is_available():
-        return current_user  # 服务不可用时不限制
-    
     user_id = current_user.get("id")
     if user_id == "anonymous" or not user_id:
         return current_user  # 匿名用户或无效 ID 不限制
     
-    quota_ok = supabase_service.check_user_quota(str(user_id))
+    # 使用本地数据库服务检查配额
+    from ..services.database_service import database_service
+    
+    if not database_service.is_available():
+        return current_user
+    
+    quota_ok = await database_service.check_user_quota(str(user_id))
     
     if not quota_ok:
         raise HTTPException(
@@ -74,6 +121,24 @@ async def check_quota(current_user: Dict[str, Any] = Depends(get_current_user)) 
         )
     
     return current_user
+    
+    # ============================================
+    # Supabase 配额检查代码已禁用
+    # ============================================
+    # from ..services.supabase_service import supabase_service
+    # 
+    # if not supabase_service.is_available():
+    #     return current_user
+    # 
+    # quota_ok = supabase_service.check_user_quota(str(user_id))
+    # 
+    # if not quota_ok:
+    #     raise HTTPException(
+    #         status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+    #         detail="已达到本月视频处理上限或存储空间已满,请升级订阅或等待下月重置"
+    #     )
+    # 
+    # return current_user
 
 
 # 保留旧的 verify_token 函数以保持向后兼容

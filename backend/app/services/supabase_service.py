@@ -1,320 +1,119 @@
 """
-Supabase Service - 用户认证和数据持久化服务
-提供用户注册、登录、Token 验证、视频元数据存储等功能
+Supabase Service 兼容层
+========================================
+Supabase 已禁用，此模块作为兼容层代理到本地数据库
+
+所有对 supabase_service 的调用都会被转发到本地 PostgreSQL
+这样可以保持业务代码不变，同时使用本地数据库
 """
 import logging
 from typing import Optional, Dict, Any, List
 from datetime import datetime, timezone
-from dataclasses import asdict
+import uuid
 
-try:
-    from supabase import create_client, Client
-    from supabase.lib.client_options import ClientOptions
-    SUPABASE_AVAILABLE = True
-except ImportError:
-    SUPABASE_AVAILABLE = False
-    Client = None
-
-from app.core.config import settings
+from sqlalchemy import create_engine, text, select, update, delete
+from sqlalchemy.orm import sessionmaker
 
 logger = logging.getLogger(__name__)
 
+# 全局同步引擎和会话工厂
+_sync_engine = None
+_sync_session_factory = None
 
-class SupabaseService:
-    """Supabase 服务类"""
+
+def _get_sync_session():
+    """获取同步数据库会话"""
+    global _sync_engine, _sync_session_factory
+    
+    if _sync_engine is None:
+        from app.core.config import settings
+        sync_url = settings.DATABASE_URL.replace("+asyncpg", "").replace("postgresql+asyncpg", "postgresql")
+        _sync_engine = create_engine(
+            sync_url,
+            pool_size=5,
+            max_overflow=10,
+            pool_pre_ping=True,
+            pool_recycle=3600
+        )
+        _sync_session_factory = sessionmaker(bind=_sync_engine)
+    
+    return _sync_session_factory()
+
+
+def _get_models():
+    """获取所有模型"""
+    from app.models.database import (
+        YouTubeSubscription, AutoAnalyzedVideo, Video, Profile, UserQuota,
+        Keyframe, TranscriptSegment, VideoSummary, Transcript
+    )
+    return {
+        "youtube_subscriptions": YouTubeSubscription,
+        "auto_analyzed_videos": AutoAnalyzedVideo,
+        "videos": Video,
+        "profiles": Profile,
+        "user_quotas": UserQuota,
+        "keyframes": Keyframe,
+        "transcript_segments": TranscriptSegment,
+        "video_summaries": VideoSummary,
+        "transcripts": Transcript,
+    }
+
+
+class SupabaseServiceProxy:
+    """
+    Supabase 服务代理类
+    
+    将所有调用转发到本地 PostgreSQL
+    保持与原 SupabaseService 相同的接口
+    """
     
     def __init__(self):
-        """初始化 Supabase 客户端"""
-        self.anon_client: Optional[Client] = None
-        self.admin_client: Optional[Client] = None
-        
-        if not SUPABASE_AVAILABLE:
-            logger.warning("⚠️ Supabase 库未安装,相关功能不可用")
-            return
-        
-        if not settings.supabase_available:
-            logger.warning("⚠️ Supabase 配置不完整,跳过初始化")
-            return
-        
-        try:
-            # 创建匿名客户端(用于前端认证和用户数据访问)
-            self.anon_client = create_client(
-                settings.SUPABASE_URL,
-                settings.SUPABASE_ANON_KEY
-            )
-            
-            # 创建管理客户端(用于后端管理操作,绕过 RLS)
-            options = ClientOptions(
-                auto_refresh_token=False,
-                persist_session=False
-            )
-            self.admin_client = create_client(
-                settings.SUPABASE_URL,
-                settings.SUPABASE_SERVICE_KEY,
-                options
-            )
-            
-            logger.info(f"✅ Supabase 服务初始化成功: {settings.SUPABASE_URL}")
-        except Exception as e:
-            logger.error(f"❌ Supabase 初始化失败: {e}")
+        """初始化"""
+        self._available = True
+        logger.info("⚠️ Supabase 已禁用，使用本地数据库代理")
     
     def is_available(self) -> bool:
-        """检查 Supabase 服务是否可用"""
-        return (
-            SUPABASE_AVAILABLE and 
-            settings.supabase_available and 
-            self.anon_client is not None and 
-            self.admin_client is not None
-        )
+        """检查数据库服务是否可用"""
+        return self._available
+    
+    # ========================================================================
+    # 兼容属性 - 模拟 Supabase 客户端
+    # ========================================================================
+    
+    @property
+    def admin_client(self):
+        """模拟 admin_client 属性，返回链式调用代理"""
+        return _AdminClientProxy()
+    
+    @property
+    def anon_client(self):
+        """模拟 anon_client 属性"""
+        return self.admin_client
     
     # ========================================================================
     # 用户认证相关方法
     # ========================================================================
     
-    def sign_up_user(
-        self, 
-        email: str, 
-        password: str, 
-        username: Optional[str] = None
-    ) -> Dict[str, Any]:
-        """
-        用户注册
-        
-        Args:
-            email: 用户邮箱
-            password: 密码(明文,由 Supabase 加密)
-            username: 用户名(可选,未提供则自动生成)
-        
-        Returns:
-            {
-                "user": {"id": "uuid", "email": "...", "username": "..."},
-                "access_token": "...",
-                "refresh_token": "..."
-            }
-        
-        Raises:
-            Exception: 邮箱已存在或其他错误
-        """
-        if not self.is_available():
-            raise Exception("Supabase 服务不可用")
-        
-        try:
-            # 使用管理员客户端创建用户(绕过邮箱验证)
-            auth_response = self.admin_client.auth.admin.create_user({
-                "email": email,
-                "password": password,
-                "email_confirm": True
-            })
-            
-            user_id = auth_response.user.id
-            logger.info(f"✅ 创建用户成功: {email} (ID: {user_id})")
-            
-            # 触发器会自动创建 profiles 和 user_quotas 记录
-            # 如果需要自定义 username,更新 profiles
-            if username:
-                self.admin_client.table("profiles").update({
-                    "username": username
-                }).eq("id", user_id).execute()
-            
-            # 使用匿名客户端登录获取 Token
-            sign_in_response = self.anon_client.auth.sign_in_with_password({
-                "email": email,
-                "password": password
-            })
-            
-            # 查询用户资料
-            profile = self.admin_client.table("profiles").select("*").eq("id", user_id).single().execute()
-            
-            return {
-                "user": {
-                    "id": user_id,
-                    "email": email,
-                    "username": profile.data.get("username"),
-                    "subscription_tier": profile.data.get("subscription_tier", "free")
-                },
-                "access_token": sign_in_response.session.access_token,
-                "refresh_token": sign_in_response.session.refresh_token
-            }
-        except Exception as e:
-            error_msg = str(e)
-            if "already been registered" in error_msg.lower() or "duplicate" in error_msg.lower():
-                raise Exception("该邮箱已被注册")
-            logger.error(f"❌ 用户注册失败: {e}")
-            raise
-    
-    def sign_in_user(self, email: str, password: str) -> Dict[str, Any]:
-        """
-        用户登录
-        
-        Args:
-            email: 用户邮箱
-            password: 密码
-        
-        Returns:
-            {
-                "user": {...},
-                "access_token": "...",
-                "refresh_token": "..."
-            }
-        
-        Raises:
-            Exception: 认证失败
-        """
-        if not self.is_available():
-            raise Exception("Supabase 服务不可用")
-        
-        try:
-            # 使用匿名客户端登录
-            response = self.anon_client.auth.sign_in_with_password({
-                "email": email,
-                "password": password
-            })
-            
-            user_id = response.user.id
-            
-            # 查询用户资料
-            profile = self.admin_client.table("profiles").select("*").eq("id", user_id).single().execute()
-            
-            return {
-                "user": {
-                    "id": user_id,
-                    "email": email,
-                    "username": profile.data.get("username"),
-                    "subscription_tier": profile.data.get("subscription_tier", "free")
-                },
-                "access_token": response.session.access_token,
-                "refresh_token": response.session.refresh_token
-            }
-        except Exception as e:
-            logger.error(f"❌ 用户登录失败: {e}")
-            raise Exception("邮箱或密码错误")
-    
-    def get_google_oauth_url(self, redirect_url: str) -> str:
-        """
-        获取 Google OAuth 登录 URL
-        
-        Args:
-            redirect_url: OAuth 回调 URL (前端处理回调的地址)
-        
-        Returns:
-            Google OAuth 登录链接
-        """
-        if not self.is_available():
-            raise Exception("Supabase 服务不可用")
-        
-        try:
-            # Supabase 会自动处理 OAuth 流程
-            # 返回 OAuth URL 供前端使用
-            data = self.anon_client.auth.sign_in_with_oauth({
-                "provider": "google",
-                "options": {
-                    "redirect_to": redirect_url
-                }
-            })
-            
-            logger.info(f"✅ 生成 Google OAuth URL: {redirect_url}")
-            return data.url
-        except Exception as e:
-            logger.error(f"❌ 生成 Google OAuth URL 失败: {e}")
-            raise Exception(f"OAuth 初始化失败: {str(e)}")
-    
-    def exchange_oauth_code(self, code: str) -> Dict[str, Any]:
-        """
-        交换 OAuth 授权码获取用户信息和 Token
-        
-        Args:
-            code: OAuth 授权码(从回调 URL 参数获取)
-        
-        Returns:
-            {
-                "user": {...},
-                "access_token": "...",
-                "refresh_token": "..."
-            }
-        """
-        if not self.is_available():
-            raise Exception("Supabase 服务不可用")
-        
-        try:
-            # 使用授权码交换 session
-            response = self.anon_client.auth.exchange_code_for_session(code)
-            
-            # 检查响应类型
-            if not hasattr(response, 'user') or not hasattr(response, 'session'):
-                logger.error(f"❌ OAuth 响应格式错误: {type(response)}, {response}")
-                raise Exception(f"OAuth 响应格式错误: 期望对象包含 user 和 session 属性,实际收到: {type(response)}")
-            
-            if not response.user or not response.session:
-                raise Exception("OAuth 认证失败: 用户信息或会话为空")
-            
-            user_id = response.user.id
-            email = response.user.email
-            
-            # 查询或创建用户资料
-            # Google OAuth 用户首次登录时,Supabase 会自动创建 auth.users 记录
-            # 但需要确保 profiles 表也有对应记录(通过触发器自动创建)
-            try:
-                profile = self.admin_client.table("profiles").select("*").eq("id", user_id).single().execute()
-            except Exception:
-                # 如果 profile 不存在,手动创建(作为备用方案)
-                username = email.split("@")[0]
-                self.admin_client.table("profiles").insert({
-                    "id": user_id,
-                    "email": email,
-                    "username": username,
-                    "subscription_tier": "free"
-                }).execute()
-                profile = self.admin_client.table("profiles").select("*").eq("id", user_id).single().execute()
-            
-            logger.info(f"✅ Google OAuth 登录成功: {email}")
-            
-            return {
-                "user": {
-                    "id": user_id,
-                    "email": email,
-                    "username": profile.data.get("username"),
-                    "subscription_tier": profile.data.get("subscription_tier", "free")
-                },
-                "access_token": response.session.access_token,
-                "refresh_token": response.session.refresh_token
-            }
-        except Exception as e:
-            logger.error(f"❌ OAuth 授权码交换失败: {e}")
-            raise Exception(f"OAuth 认证失败: {str(e)}")
-    
     def verify_token(self, token: str) -> Optional[Dict[str, Any]]:
-        """
-        验证 JWT Token
-        
-        Args:
-            token: JWT Token
-        
-        Returns:
-            {"id": "uuid", "email": "..."} 或 None(Token 无效)
-        """
-        if not self.is_available():
-            return None
-        
-        try:
-            response = self.anon_client.auth.get_user(token)
-            return {
-                "id": response.user.id,
-                "email": response.user.email
-            }
-        except Exception as e:
-            logger.warning(f"⚠️ Token 验证失败: {e}")
-            return None
+        """验证 JWT Token"""
+        from app.core.auth import verify_jwt_token
+        return verify_jwt_token(token)
     
     def get_user_profile(self, user_id: str) -> Optional[Dict[str, Any]]:
         """获取用户资料"""
-        if not self.is_available():
-            return None
-        
         try:
-            response = self.admin_client.table("profiles").select("*").eq("id", user_id).single().execute()
-            return response.data
+            with _get_sync_session() as session:
+                models = _get_models()
+                Profile = models["profiles"]
+                result = session.execute(
+                    select(Profile).where(Profile.id == user_id)
+                )
+                profile = result.scalar_one_or_none()
+                if profile:
+                    return _model_to_dict(profile)
+                return None
         except Exception as e:
-            logger.error(f"❌ 获取用户资料失败: {e}")
+            logger.error(f"获取用户资料失败: {e}")
             return None
     
     # ========================================================================
@@ -322,83 +121,115 @@ class SupabaseService:
     # ========================================================================
     
     def check_user_quota(self, user_id: str) -> bool:
-        """
-        检查用户配额是否充足
-        
-        Args:
-            user_id: 用户 ID
-        
-        Returns:
-            True: 配额充足, False: 已达上限
-        """
-        if not self.is_available():
-            return True  # 服务不可用时不限制
+        """检查用户配额"""
+        # 如果 user_id 为空，直接返回 True（允许处理）
+        if not user_id:
+            logger.warning("⚠️ user_id 为空，跳过配额检查")
+            return True
         
         try:
-            quota = self.admin_client.table("user_quotas").select("*").eq("user_id", user_id).single().execute()
-            data = quota.data
+            # 确保 user_id 是有效的 UUID 字符串
+            from uuid import UUID
+            try:
+                UUID(str(user_id))
+            except ValueError:
+                logger.warning(f"⚠️ user_id 格式无效: {user_id}，跳过配额检查")
+                return True
             
-            videos_ok = data["monthly_videos_used"] < data["monthly_video_limit"]
-            storage_ok = data["used_storage_mb"] < data["total_storage_mb"]
-            
-            if not videos_ok:
-                logger.warning(f"⚠️ 用户 {user_id} 已达视频处理上限")
-            if not storage_ok:
-                logger.warning(f"⚠️ 用户 {user_id} 存储空间已满")
-            
-            return videos_ok and storage_ok
+            with _get_sync_session() as session:
+                models = _get_models()
+                UserQuota = models["user_quotas"]
+                result = session.execute(
+                    select(UserQuota).where(UserQuota.user_id == user_id)
+                )
+                quota = result.scalar_one_or_none()
+                if quota:
+                    # 使用正确的字段名：monthly_videos_used, monthly_video_limit
+                    return quota.monthly_videos_used < quota.monthly_video_limit
+                return True
         except Exception as e:
-            logger.error(f"❌ 检查配额失败: {e}")
-            return True  # 出错时不限制
+            logger.error(f"检查配额失败: {e}")
+            return True
     
     def increment_video_usage(self, user_id: str):
-        """递增用户的视频使用次数"""
-        if not self.is_available():
-            return
-        
+        """递增视频使用次数"""
         try:
-            self.admin_client.rpc("increment_monthly_videos", {"p_user_id": user_id}).execute()
-            logger.info(f"✅ 用户 {user_id} 视频使用次数 +1")
+            with _get_sync_session() as session:
+                models = _get_models()
+                UserQuota = models["user_quotas"]
+                result = session.execute(
+                    select(UserQuota).where(UserQuota.user_id == user_id)
+                )
+                quota = result.scalar_one_or_none()
+                if quota:
+                    quota.monthly_videos_used += 1
+                    quota.updated_at = datetime.now(timezone.utc)
+                    session.commit()
         except Exception as e:
-            logger.error(f"❌ 递增视频使用次数失败: {e}")
+            logger.error(f"递增视频使用失败: {e}")
     
     def update_storage_usage(self, user_id: str, size_mb: int):
-        """更新用户的存储使用量"""
-        if not self.is_available():
-            return
-        
+        """更新存储使用量"""
         try:
-            self.admin_client.rpc("update_storage_usage", {
-                "p_user_id": user_id, 
-                "p_size_mb": size_mb
-            }).execute()
-            logger.info(f"✅ 用户 {user_id} 存储使用量 +{size_mb}MB")
+            with _get_sync_session() as session:
+                models = _get_models()
+                UserQuota = models["user_quotas"]
+                result = session.execute(
+                    select(UserQuota).where(UserQuota.user_id == user_id)
+                )
+                quota = result.scalar_one_or_none()
+                if quota:
+                    quota.storage_used_mb += size_mb
+                    quota.updated_at = datetime.now(timezone.utc)
+                    session.commit()
         except Exception as e:
-            logger.error(f"❌ 更新存储使用量失败: {e}")
+            logger.error(f"更新存储使用失败: {e}")
     
     # ========================================================================
     # 视频记录管理
     # ========================================================================
     
     def create_video_record(self, video_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-        """
-        创建视频记录
-        
-        Args:
-            video_data: 视频数据字典
-        
-        Returns:
-            插入的完整记录
-        """
-        if not self.is_available():
-            return None
-        
+        """创建或更新视频记录 (UPSERT)"""
         try:
-            response = self.admin_client.table("videos").insert(video_data).execute()
-            logger.info(f"✅ 创建视频记录: {video_data.get('video_id')}")
-            return response.data[0] if response.data else None
+            with _get_sync_session() as session:
+                models = _get_models()
+                Video = models["videos"]
+                
+                if "video_id" not in video_data:
+                    video_data["video_id"] = str(uuid.uuid4())
+                
+                video_id = video_data["video_id"]
+                
+                # 检查是否已存在
+                existing = session.execute(
+                    select(Video).where(Video.video_id == video_id)
+                ).scalar_one_or_none()
+                
+                if existing:
+                    # 更新现有记录
+                    for key, value in video_data.items():
+                        if key not in ("video_id", "created_at") and hasattr(existing, key):
+                            setattr(existing, key, value)
+                    existing.updated_at = datetime.now(timezone.utc)
+                    session.commit()
+                    session.refresh(existing)
+                    logger.info(f"✅ 更新视频记录: {video_id}")
+                    return _model_to_dict(existing)
+                else:
+                    # 创建新记录
+                    video_data["created_at"] = datetime.now(timezone.utc)
+                    video_data["updated_at"] = datetime.now(timezone.utc)
+                    video = Video(**video_data)
+                    session.add(video)
+                    session.commit()
+                    session.refresh(video)
+                    logger.info(f"✅ 创建视频记录: {video_id}")
+                    return _model_to_dict(video)
         except Exception as e:
-            logger.error(f"❌ 创建视频记录失败: {e}")
+            logger.error(f"创建/更新视频记录失败: {e}")
+            import traceback
+            traceback.print_exc()
             return None
     
     def update_video_status(
@@ -408,151 +239,136 @@ class SupabaseService:
         progress: Optional[int] = None,
         error_message: Optional[str] = None
     ) -> Optional[Dict[str, Any]]:
-        """
-        更新视频处理状态
-        
-        Args:
-            video_id: 视频 ID
-            status: 处理状态 (pending/processing/completed/failed)
-            progress: 处理进度 (0-100)
-            error_message: 错误信息(仅 status='failed' 时)
-        
-        Returns:
-            更新后的记录
-        """
-        if not self.is_available():
-            return None
-        
+        """更新视频处理状态"""
         try:
-            update_data = {
-                "processing_status": status,
-                "updated_at": datetime.now(timezone.utc).isoformat()
-            }
-            
-            if progress is not None:
-                update_data["processing_progress"] = progress
-            
-            # 设置开始/完成时间
-            if status == "processing":
-                update_data["processing_started_at"] = datetime.now(timezone.utc).isoformat()
-            elif status == "completed":
-                update_data["processing_completed_at"] = datetime.now(timezone.utc).isoformat()
-            elif status == "failed" and error_message:
-                update_data["error_message"] = error_message
-            
-            response = self.admin_client.table("videos").update(update_data).eq("video_id", video_id).execute()
-            logger.info(f"✅ 更新视频状态: {video_id} -> {status} ({progress}%)")
-            return response.data[0] if response.data else None
+            with _get_sync_session() as session:
+                models = _get_models()
+                Video = models["videos"]
+                result = session.execute(
+                    select(Video).where(Video.video_id == video_id)
+                )
+                video = result.scalar_one_or_none()
+                if video:
+                    video.status = status
+                    if progress is not None:
+                        video.progress = progress
+                    if error_message is not None:
+                        video.error_message = error_message
+                    video.updated_at = datetime.now(timezone.utc)
+                    session.commit()
+                    return _model_to_dict(video)
+                return None
         except Exception as e:
-            logger.error(f"❌ 更新视频状态失败: {e}")
+            logger.error(f"更新视频状态失败: {e}")
             return None
     
-    def update_video_urls(self, video_id: str, oss_video_url: Optional[str] = None, oss_audio_url: Optional[str] = None):
+    def update_video_urls(
+        self, 
+        video_id: str, 
+        oss_video_url: Optional[str] = None, 
+        oss_audio_url: Optional[str] = None
+    ):
         """更新视频的 OSS URL"""
-        if not self.is_available():
-            return
-        
         try:
-            update_data = {}
-            if oss_video_url:
-                update_data["oss_video_url"] = oss_video_url
-            if oss_audio_url:
-                update_data["oss_audio_url"] = oss_audio_url
-            
-            if update_data:
-                self.admin_client.table("videos").update(update_data).eq("video_id", video_id).execute()
-                logger.info(f"✅ 更新视频 URL: {video_id}")
+            with _get_sync_session() as session:
+                models = _get_models()
+                Video = models["videos"]
+                result = session.execute(
+                    select(Video).where(Video.video_id == video_id)
+                )
+                video = result.scalar_one_or_none()
+                if video:
+                    if oss_video_url:
+                        video.oss_video_url = oss_video_url
+                    if oss_audio_url:
+                        video.oss_audio_url = oss_audio_url
+                    video.updated_at = datetime.now(timezone.utc)
+                    session.commit()
         except Exception as e:
-            logger.error(f"❌ 更新视频 URL 失败: {e}")
+            logger.error(f"更新视频URL失败: {e}")
     
     # ========================================================================
     # 批量数据保存
     # ========================================================================
     
     def save_keyframes(self, video_id: str, keyframes: List[Any]) -> bool:
-        """
-        批量保存关键帧数据
-        
-        Args:
-            video_id: 视频 ID
-            keyframes: KeyframeInfo dataclass 列表
-        
-        Returns:
-            是否保存成功
-        """
-        if not self.is_available():
-            return False
-        
+        """批量保存关键帧数据"""
         try:
-            # 转换为字典列表
-            keyframes_data = []
-            for kf in keyframes:
-                kf_dict = asdict(kf) if hasattr(kf, '__dataclass_fields__') else kf
-                keyframes_data.append({
-                    "video_id": video_id,
-                    "frame_id": kf_dict.get("frame_id"),
-                    "timestamp": kf_dict.get("timestamp"),
-                    "oss_image_url": kf_dict.get("oss_image_url"),
-                    "scene_description": kf_dict.get("scene_description", "")
-                })
-            
-            # 批量插入
-            self.admin_client.table("keyframes").insert(keyframes_data).execute()
-            logger.info(f"✅ 保存 {len(keyframes_data)} 个关键帧: {video_id}")
-            return True
+            with _get_sync_session() as session:
+                models = _get_models()
+                Keyframe = models["keyframes"]
+                
+                for kf in keyframes:
+                    # 支持 dataclass 和 dict 两种格式
+                    if hasattr(kf, '__dict__'):
+                        kf_data = vars(kf) if hasattr(kf, '__dict__') else kf
+                    else:
+                        kf_data = kf
+                    
+                    keyframe = Keyframe(
+                        video_id=video_id,
+                        frame_id=kf_data.get("frame_id", 0),
+                        timestamp=kf_data.get("timestamp", 0.0),
+                        oss_image_url=kf_data.get("oss_image_url", ""),
+                        scene_description=kf_data.get("scene_description")
+                    )
+                    session.add(keyframe)
+                
+                session.commit()
+                logger.info(f"✅ 保存关键帧: {video_id}, 数量: {len(keyframes)}")
+                return True
         except Exception as e:
-            logger.error(f"❌ 保存关键帧失败: {e}")
+            logger.error(f"保存关键帧失败: {e}")
             return False
     
     def save_transcript_segments(self, video_id: str, segments: List[Any]) -> bool:
-        """
-        批量保存转录段落
-        
-        Args:
-            video_id: 视频 ID
-            segments: TranscriptSegment 列表
-        
-        Returns:
-            是否保存成功
-        """
-        if not self.is_available():
-            logger.warning(f"[DEBUG] Supabase不可用，无法保存转录段落: {video_id}")
-            return False
-        
+        """批量保存转录段落"""
         try:
-            logger.info(f"[DEBUG] 开始保存 {len(segments)} 个转录段落: {video_id}")
-            
-            # 转换为字典列表
-            segments_data = []
-            for i, seg in enumerate(segments):
-                seg_dict = asdict(seg) if hasattr(seg, '__dataclass_fields__') else seg
-                segments_data.append({
-                    "video_id": video_id,
-                    "segment_index": i,
-                    "text": seg_dict.get("text"),
-                    "start_time": seg_dict.get("start_time"),
-                    "end_time": seg_dict.get("end_time"),
-                    "confidence": seg_dict.get("confidence"),
-                    "speaker_id": seg_dict.get("speaker_id")
-                })
-            
-            logger.info(f"[DEBUG] 准备插入 {len(segments_data)} 条记录")
-            
-            # 批量插入
-            result = self.admin_client.table("transcript_segments").insert(segments_data).execute()
-            logger.info(f"[DEBUG] 插入结果: {bool(result.data)}")
-            
-            # 更新 transcripts 表的 total_segments
-            self.admin_client.table("transcripts").upsert({
-                "video_id": video_id,
-                "total_segments": len(segments_data)
-            }).execute()
-            
-            logger.info(f"✅ 保存 {len(segments_data)} 个转录段落: {video_id}")
-            return True
+            with _get_sync_session() as session:
+                models = _get_models()
+                TranscriptSegment = models["transcript_segments"]
+                Transcript = models["transcripts"]
+                
+                # 先创建或更新 transcripts 表记录
+                existing = session.execute(
+                    select(Transcript).where(Transcript.video_id == video_id)
+                ).scalar_one_or_none()
+                
+                if not existing:
+                    transcript_record = Transcript(
+                        video_id=video_id,
+                        language="zh-CN",
+                        total_segments=len(segments)
+                    )
+                    session.add(transcript_record)
+                else:
+                    existing.total_segments = len(segments)
+                
+                # 保存转录段落
+                for idx, seg in enumerate(segments):
+                    # 支持 dataclass 和 dict 两种格式
+                    if hasattr(seg, '__dict__'):
+                        seg_data = vars(seg) if not isinstance(seg, dict) else seg
+                    else:
+                        seg_data = seg
+                    
+                    segment = TranscriptSegment(
+                        video_id=video_id,
+                        segment_index=idx,
+                        text=seg_data.get("text", ""),
+                        start_time=seg_data.get("start_time", seg_data.get("start", 0.0)),
+                        end_time=seg_data.get("end_time", seg_data.get("end", 0.0)),
+                        confidence=seg_data.get("confidence")
+                    )
+                    session.add(segment)
+                
+                session.commit()
+                logger.info(f"✅ 保存转录段落: {video_id}, 数量: {len(segments)}")
+                return True
         except Exception as e:
-            logger.error(f"❌ 保存转录段落失败: {e}")
-            logger.exception(e)
+            logger.error(f"保存转录段落失败: {e}")
+            import traceback
+            traceback.print_exc()
             return False
     
     def save_video_summary(
@@ -562,32 +378,42 @@ class SupabaseService:
         content: str,
         model_used: str = "qwen3-vl-flash"
     ) -> bool:
-        """
-        保存视频总结(使用 UPSERT 避免重复)
-        
-        Args:
-            video_id: 视频 ID
-            summary_type: 总结类型 (brief/standard/detailed)
-            content: 总结内容
-            model_used: 使用的 AI 模型
-        
-        Returns:
-            是否保存成功
-        """
-        if not self.is_available():
-            return False
-        
+        """保存视频总结"""
         try:
-            self.admin_client.table("video_summaries").upsert({
-                "video_id": video_id,
-                "summary_type": summary_type,
-                "content": content,
-                "model_used": model_used
-            }).execute()
-            logger.info(f"✅ 保存视频总结: {video_id} ({summary_type})")
-            return True
+            with _get_sync_session() as session:
+                models = _get_models()
+                VideoSummary = models["video_summaries"]
+                
+                # 检查是否已存在
+                existing = session.execute(
+                    select(VideoSummary).where(
+                        VideoSummary.video_id == video_id,
+                        VideoSummary.summary_type == summary_type
+                    )
+                ).scalar_one_or_none()
+                
+                if existing:
+                    # 更新现有记录
+                    existing.content = content
+                    existing.model_used = model_used
+                    existing.updated_at = datetime.now(timezone.utc)
+                else:
+                    # 创建新记录
+                    summary = VideoSummary(
+                        video_id=video_id,
+                        summary_type=summary_type,
+                        content=content,
+                        model_used=model_used
+                    )
+                    session.add(summary)
+                
+                session.commit()
+                logger.info(f"✅ 保存视频总结: {video_id}, 类型: {summary_type}")
+                return True
         except Exception as e:
-            logger.error(f"❌ 保存视频总结失败: {e}")
+            logger.error(f"保存视频总结失败: {e}")
+            import traceback
+            traceback.print_exc()
             return False
     
     # ========================================================================
@@ -596,143 +422,545 @@ class SupabaseService:
     
     def get_video_by_id(self, video_id: str) -> Optional[Dict[str, Any]]:
         """根据 ID 查询视频信息"""
-        if not self.is_available():
-            return None
-        
         try:
-            response = self.admin_client.table("videos").select("*").eq("video_id", video_id).single().execute()
-            return response.data
+            with _get_sync_session() as session:
+                models = _get_models()
+                Video = models["videos"]
+                result = session.execute(
+                    select(Video).where(Video.video_id == video_id)
+                )
+                video = result.scalar_one_or_none()
+                if video:
+                    return _model_to_dict(video)
+                return None
         except Exception as e:
-            logger.error(f"❌ 查询视频失败: {e}")
+            logger.error(f"查询视频失败: {e}")
             return None
     
     def get_user_videos(self, user_id: str, limit: int = 50) -> List[Dict[str, Any]]:
         """查询用户的视频列表"""
-        if not self.is_available():
-            return []
-        
         try:
-            response = self.admin_client.table("videos").select("*").eq("user_id", user_id).order("created_at", desc=True).limit(limit).execute()
-            return response.data
+            with _get_sync_session() as session:
+                models = _get_models()
+                Video = models["videos"]
+                result = session.execute(
+                    select(Video).where(Video.user_id == user_id).limit(limit)
+                )
+                videos = result.scalars().all()
+                return [_model_to_dict(v) for v in videos]
         except Exception as e:
-            logger.error(f"❌ 查询用户视频列表失败: {e}")
+            logger.error(f"查询用户视频失败: {e}")
             return []
     
     def get_keyframes(self, video_id: str) -> List[Dict[str, Any]]:
         """获取指定视频的关键帧列表"""
-        if not self.is_available():
-            return []
         try:
-            res = self.admin_client.table("keyframes") \
-                .select("frame_id,timestamp,oss_image_url,scene_description") \
-                .eq("video_id", video_id) \
-                .order("timestamp", desc=False) \
-                .execute()
-            return res.data or []
+            with _get_sync_session() as session:
+                models = _get_models()
+                Keyframe = models["keyframes"]
+                result = session.execute(
+                    select(Keyframe).where(Keyframe.video_id == video_id).order_by(Keyframe.frame_id)
+                )
+                keyframes = result.scalars().all()
+                return [_model_to_dict(k) for k in keyframes]
         except Exception as e:
-            logger.error(f"❌ 获取关键帧失败: {e}")
+            logger.error(f"获取关键帧失败: {e}")
             return []
-
+    
     def get_transcript_segments(self, video_id: str) -> List[Dict[str, Any]]:
         """获取指定视频的转录段落列表"""
-        if not self.is_available():
-            return []
         try:
-            res = self.admin_client.table("transcript_segments") \
-                .select("segment_index,text,start_time,end_time,confidence") \
-                .eq("video_id", video_id) \
-                .order("segment_index", desc=False) \
-                .execute()
-            return res.data or []
+            with _get_sync_session() as session:
+                models = _get_models()
+                TranscriptSegment = models["transcript_segments"]
+                result = session.execute(
+                    select(TranscriptSegment).where(TranscriptSegment.video_id == video_id).order_by(TranscriptSegment.segment_index)
+                )
+                segments = result.scalars().all()
+                return [_model_to_dict(s) for s in segments]
         except Exception as e:
-            logger.error(f"❌ 获取转录段落失败: {e}")
+            logger.error(f"获取转录段落失败: {e}")
             return []
     
     def get_video_summaries(self, video_id: str) -> Dict[str, str]:
         """获取指定视频的各粒度总结内容"""
-        if not self.is_available():
-            return {}
         try:
-            res = self.admin_client.table("video_summaries") \
-                .select("summary_type,content") \
-                .eq("video_id", video_id) \
-                .execute()
-            summaries = {}
-            for row in res.data or []:
-                summaries[row.get("summary_type")] = row.get("content") or ""
-            return summaries
+            with _get_sync_session() as session:
+                models = _get_models()
+                VideoSummary = models["video_summaries"]
+                result = session.execute(
+                    select(VideoSummary).where(VideoSummary.video_id == video_id)
+                )
+                summaries = result.scalars().all()
+                return {s.summary_type: s.content for s in summaries}
         except Exception as e:
-            logger.error(f"❌ 获取视频总结失败: {e}")
+            logger.error(f"获取视频总结失败: {e}")
             return {}
-
+    
     def get_compiled_metadata(self, video_id: str) -> Optional[Dict[str, Any]]:
-        """
-        汇聚视频完整上下文：关键帧、转录文本、视频元数据、AI总结
-        确保聊天对话中VL模型能访问完整的分析历史信息
-        
-        Returns:
-            {
-              "transcript": { oss_audio_url, language, overall_confidence, segments: [...] },
-              "keyframes": [...],
-              "video": { title, duration, oss_video_url, original_url, source_type },
-              "summaries": { brief?, standard?, detailed? }
-            }
-        """
-        if not self.is_available():
-            logger.warning(f"[DEBUG] Supabase不可用，无法编译metadata: {video_id}")
-            return None
+        """汇聚视频完整上下文"""
         try:
-            logger.info(f"[DEBUG] 开始编译视频上下文: {video_id}")
-            video = self.get_video_by_id(video_id) or {}
-            logger.info(f"[DEBUG] 获取video: {bool(video)}")
+            # 获取视频信息
+            video = self.get_video_by_id(video_id)
+            if not video:
+                return None
             
+            # 获取关键帧
             keyframes = self.get_keyframes(video_id)
-            logger.info(f"[DEBUG] 获取keyframes: {len(keyframes)}")
             
+            # 获取转录段落
             segments = self.get_transcript_segments(video_id)
-            logger.info(f"[DEBUG] 获取segments: {len(segments)} 个转录段")
-            if segments:
-                logger.info(f"[DEBUG] 第一个segment示例: {segments[0]}")
             
+            # 获取转录元信息
+            transcript_info = {}
+            try:
+                with _get_sync_session() as session:
+                    models = _get_models()
+                    Transcript = models["transcripts"]
+                    result = session.execute(
+                        select(Transcript).where(Transcript.video_id == video_id)
+                    )
+                    transcript = result.scalar_one_or_none()
+                    if transcript:
+                        transcript_info = {
+                            "language": transcript.language,
+                            "overall_confidence": transcript.overall_confidence,
+                            "total_segments": transcript.total_segments
+                        }
+            except Exception as e:
+                logger.warning(f"获取转录元信息失败: {e}")
+            
+            # 获取总结
             summaries = self.get_video_summaries(video_id)
-            logger.info(f"[DEBUG] 获取summaries: {list(summaries.keys()) if summaries else []}")
-
-            transcript = {
-                "oss_audio_url": video.get("oss_audio_url") or "",
-                "language": "zh-CN",
-                "overall_confidence": 0.0,
-                "segments": [
-                    {
-                        "text": s.get("text") or "",
-                        "start_time": float(s.get("start_time") or 0.0),
-                        "end_time": float(s.get("end_time") or 0.0),
-                        "confidence": float(s.get("confidence") or 0.0),
-                    } for s in segments
-                ],
-            }
-            logger.info(f"[DEBUG] 组装transcript: segments={len(transcript['segments'])}")
-
-            video_meta = {
-                "title": video.get("title") or "未知标题",
-                "duration": float(video.get("duration") or 0.0),
-                "oss_video_url": video.get("oss_video_url") or "",
-                "original_url": video.get("original_url") or "",
-                "source_type": video.get("source_type") or "unknown",
-            }
-
-            compiled = {
-                "transcript": transcript,
+            
+            return {
+                "video": {
+                    "title": video.get("title", ""),
+                    "duration": video.get("duration"),
+                    "oss_video_url": video.get("oss_video_url", ""),
+                    "original_url": video.get("original_url", ""),
+                    "source_type": video.get("source_type", "")
+                },
+                "transcript": {
+                    "oss_audio_url": video.get("oss_audio_url", ""),
+                    "language": transcript_info.get("language", "zh-CN"),
+                    "overall_confidence": transcript_info.get("overall_confidence"),
+                    "segments": segments
+                },
                 "keyframes": keyframes,
-                "video": video_meta,
-                "summaries": summaries,
+                "summaries": summaries
             }
-            logger.info(f"✅ 编译视频上下文成功: {video_id} | 关键帧={len(keyframes)} 转录段={len(segments)}")
-            return compiled
         except Exception as e:
-            logger.error(f"❌ 编译视频上下文失败: {e}")
-            logger.exception(e)
+            logger.error(f"获取编译元数据失败: {e}")
+            import traceback
+            traceback.print_exc()
             return None
+
+
+class _AdminClientProxy:
+    """
+    模拟 Supabase admin_client 的链式调用
+    支持 .table().select().eq().execute() 等调用链
+    """
+    
+    def __init__(self):
+        self._table_name = None
+        self._operation = None
+        self._columns = "*"
+        self._filters = {}
+        self._data = None
+        self._order_by = None
+        self._limit_val = None
+        self._single = False
+    
+    def table(self, name: str):
+        """选择表"""
+        self._table_name = name
+        return self
+    
+    def select(self, columns: str = "*"):
+        """SELECT 操作"""
+        self._operation = "select"
+        self._columns = columns
+        return self
+    
+    def insert(self, data: Dict[str, Any]):
+        """INSERT 操作"""
+        self._operation = "insert"
+        self._data = data.copy()
+        return self
+    
+    def update(self, data: Dict[str, Any]):
+        """UPDATE 操作"""
+        self._operation = "update"
+        self._data = data.copy()
+        return self
+    
+    def upsert(self, data: Dict[str, Any]):
+        """UPSERT 操作"""
+        self._operation = "upsert"
+        self._data = data.copy()
+        return self
+    
+    def delete(self):
+        """DELETE 操作"""
+        self._operation = "delete"
+        return self
+    
+    def eq(self, column: str, value: Any):
+        """等于条件"""
+        self._filters[column] = ("eq", value)
+        return self
+    
+    def neq(self, column: str, value: Any):
+        """不等于条件"""
+        self._filters[column] = ("neq", value)
+        return self
+    
+    def in_(self, column: str, values: List[Any]):
+        """IN 条件"""
+        self._filters[column] = ("in", values)
+        return self
+    
+    def gte(self, column: str, value: Any):
+        """大于等于条件"""
+        self._filters[column] = ("gte", value)
+        return self
+    
+    def lte(self, column: str, value: Any):
+        """小于等于条件"""
+        self._filters[column] = ("lte", value)
+        return self
+    
+    def gt(self, column: str, value: Any):
+        """大于条件"""
+        self._filters[column] = ("gt", value)
+        return self
+    
+    def lt(self, column: str, value: Any):
+        """小于条件"""
+        self._filters[column] = ("lt", value)
+        return self
+    
+    def order(self, column: str, desc: bool = False):
+        """排序"""
+        self._order_by = (column, desc)
+        return self
+    
+    def limit(self, count: int):
+        """限制数量"""
+        self._limit_val = count
+        return self
+    
+    def single(self):
+        """返回单条记录"""
+        self._single = True
+        return self
+    
+    def execute(self):
+        """执行查询"""
+        try:
+            result = self._execute_sync()
+            return _MockResponse(result)
+        except Exception as e:
+            logger.error(f"数据库操作失败: {self._table_name}.{self._operation}: {e}")
+            return _MockResponse([])
+    
+    def _execute_sync(self):
+        """同步执行数据库操作"""
+        models = _get_models()
+        model = models.get(self._table_name)
+        
+        if not model:
+            logger.warning(f"未知表名: {self._table_name}")
+            return []
+        
+        with _get_sync_session() as session:
+            try:
+                if self._operation == "select":
+                    return self._do_select(session, model)
+                elif self._operation == "insert":
+                    return self._do_insert(session, model)
+                elif self._operation == "update":
+                    return self._do_update(session, model)
+                elif self._operation == "delete":
+                    return self._do_delete(session, model)
+                elif self._operation == "upsert":
+                    return self._do_upsert(session, model)
+            except Exception as e:
+                session.rollback()
+                raise
+        
+        return []
+    
+    def _apply_filters(self, stmt, model):
+        """应用过滤条件"""
+        for col, (op, val) in self._filters.items():
+            # 处理关联查询的过滤条件（如 youtube_subscriptions.user_id）
+            if "." in col:
+                # 忽略关联表的过滤条件，在 select 中单独处理
+                continue
+            
+            if hasattr(model, col):
+                column = getattr(model, col)
+                if op == "eq":
+                    stmt = stmt.where(column == val)
+                elif op == "neq":
+                    stmt = stmt.where(column != val)
+                elif op == "in":
+                    stmt = stmt.where(column.in_(val))
+                elif op == "gte":
+                    stmt = stmt.where(column >= val)
+                elif op == "lte":
+                    stmt = stmt.where(column <= val)
+                elif op == "gt":
+                    stmt = stmt.where(column > val)
+                elif op == "lt":
+                    stmt = stmt.where(column < val)
+        return stmt
+    
+    def _do_select(self, session, model):
+        """执行 SELECT"""
+        # 检查是否是关联查询
+        if "!" in self._columns or "youtube_subscriptions" in self._columns:
+            return self._do_select_with_join(session, model)
+        
+        stmt = select(model)
+        stmt = self._apply_filters(stmt, model)
+        
+        if self._order_by:
+            col_name, desc = self._order_by
+            if hasattr(model, col_name):
+                order_col = getattr(model, col_name)
+                stmt = stmt.order_by(order_col.desc() if desc else order_col)
+        
+        if self._limit_val:
+            stmt = stmt.limit(self._limit_val)
+        
+        result = session.execute(stmt)
+        rows = result.scalars().all()
+        return [_model_to_dict(r) for r in rows]
+    
+    def _do_select_with_join(self, session, model):
+        """执行带关联的 SELECT"""
+        models = _get_models()
+        YouTubeSubscription = models["youtube_subscriptions"]
+        AutoAnalyzedVideo = models["auto_analyzed_videos"]
+        
+        if self._table_name == "auto_analyzed_videos":
+            # 构建带 JOIN 的查询
+            stmt = select(
+                AutoAnalyzedVideo,
+                YouTubeSubscription.channel_id,
+                YouTubeSubscription.channel_name,
+                YouTubeSubscription.channel_avatar,
+                YouTubeSubscription.user_id.label("sub_user_id")
+            ).join(
+                YouTubeSubscription,
+                AutoAnalyzedVideo.subscription_id == YouTubeSubscription.id
+            )
+            
+            # 应用过滤条件
+            for col, (op, val) in self._filters.items():
+                if col == "youtube_subscriptions.user_id":
+                    if op == "eq":
+                        stmt = stmt.where(YouTubeSubscription.user_id == val)
+                elif col == "youtube_subscriptions.is_active":
+                    if op == "eq":
+                        stmt = stmt.where(YouTubeSubscription.is_active == val)
+                elif col == "analysis_status":
+                    if op == "eq":
+                        stmt = stmt.where(AutoAnalyzedVideo.analysis_status == val)
+                elif hasattr(AutoAnalyzedVideo, col):
+                    column = getattr(AutoAnalyzedVideo, col)
+                    if op == "eq":
+                        stmt = stmt.where(column == val)
+            
+            if self._order_by:
+                col_name, desc = self._order_by
+                if hasattr(AutoAnalyzedVideo, col_name):
+                    order_col = getattr(AutoAnalyzedVideo, col_name)
+                    stmt = stmt.order_by(order_col.desc() if desc else order_col)
+            
+            if self._limit_val:
+                stmt = stmt.limit(self._limit_val)
+            
+            result = session.execute(stmt)
+            rows = result.all()
+            
+            results = []
+            for row in rows:
+                video = row[0]
+                item = _model_to_dict(video)
+                item["channel_id"] = row.channel_id
+                item["channel_name"] = row.channel_name
+                item["channel_avatar"] = row.channel_avatar
+                # 添加嵌套的 youtube_subscriptions 对象
+                item["youtube_subscriptions"] = {
+                    "channel_id": row.channel_id,
+                    "channel_name": row.channel_name,
+                    "channel_avatar": row.channel_avatar,
+                    "user_id": str(row.sub_user_id) if row.sub_user_id else None
+                }
+                results.append(item)
+            
+            return results
+        
+        return []
+    
+    def _do_insert(self, session, model):
+        """执行 INSERT"""
+        if "id" not in self._data:
+            self._data["id"] = str(uuid.uuid4())
+        if "created_at" not in self._data:
+            self._data["created_at"] = datetime.now(timezone.utc)
+        if "updated_at" not in self._data:
+            self._data["updated_at"] = datetime.now(timezone.utc)
+        
+        obj = model(**self._data)
+        session.add(obj)
+        session.commit()
+        session.refresh(obj)
+        return [_model_to_dict(obj)]
+    
+    def _do_update(self, session, model):
+        """执行 UPDATE"""
+        if not self._filters:
+            logger.warning("UPDATE 操作缺少过滤条件")
+            return []
+        
+        self._data["updated_at"] = datetime.now(timezone.utc)
+        
+        stmt = select(model)
+        stmt = self._apply_filters(stmt, model)
+        result = session.execute(stmt)
+        rows = result.scalars().all()
+        
+        for row in rows:
+            for key, val in self._data.items():
+                if hasattr(row, key):
+                    setattr(row, key, val)
+        session.commit()
+        return [_model_to_dict(r) for r in rows]
+    
+    def _do_delete(self, session, model):
+        """执行 DELETE"""
+        if not self._filters:
+            logger.warning("DELETE 操作缺少过滤条件")
+            return []
+        
+        stmt = delete(model)
+        for col, (op, val) in self._filters.items():
+            if "." in col:
+                continue
+            if hasattr(model, col):
+                column = getattr(model, col)
+                if op == "eq":
+                    stmt = stmt.where(column == val)
+        
+        session.execute(stmt)
+        session.commit()
+        return []
+    
+    def _do_upsert(self, session, model):
+        """执行 UPSERT"""
+        stmt = select(model)
+        stmt = self._apply_filters(stmt, model)
+        result = session.execute(stmt)
+        existing = result.scalar_one_or_none()
+        
+        if existing:
+            for key, val in self._data.items():
+                if hasattr(existing, key):
+                    setattr(existing, key, val)
+            existing.updated_at = datetime.now(timezone.utc)
+            session.commit()
+            return [_model_to_dict(existing)]
+        else:
+            if "id" not in self._data:
+                self._data["id"] = str(uuid.uuid4())
+            self._data["created_at"] = datetime.now(timezone.utc)
+            self._data["updated_at"] = datetime.now(timezone.utc)
+            obj = model(**self._data)
+            session.add(obj)
+            session.commit()
+            session.refresh(obj)
+            return [_model_to_dict(obj)]
+    
+    def rpc(self, function_name: str, params: Dict[str, Any] = None):
+        """调用数据库函数"""
+        try:
+            result = self._execute_rpc(function_name, params or {})
+            return _MockResponse(result)
+        except Exception as e:
+            logger.error(f"RPC 调用失败: {function_name}: {e}")
+            return _MockResponse([])
+    
+    def _execute_rpc(self, function_name: str, params: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """执行数据库函数"""
+        with _get_sync_session() as session:
+            if function_name == "get_subscriptions_to_check":
+                limit = params.get("p_limit", 100)
+                result = session.execute(
+                    text("SELECT * FROM get_subscriptions_to_check(:limit)"),
+                    {"limit": limit}
+                )
+                rows = result.fetchall()
+                columns = result.keys()
+                return [dict(zip(columns, row)) for row in rows]
+            
+            elif function_name == "get_user_subscription_stats":
+                user_id = params.get("p_user_id")
+                result = session.execute(
+                    text("""
+                        SELECT 
+                            (SELECT COUNT(*) FROM youtube_subscriptions WHERE user_id = :user_id) as total_subscriptions,
+                            (SELECT COUNT(*) FROM youtube_subscriptions WHERE user_id = :user_id AND is_active = true) as active_subscriptions,
+                            (SELECT COUNT(*) FROM auto_analyzed_videos aav 
+                             JOIN youtube_subscriptions ys ON aav.subscription_id = ys.id 
+                             WHERE ys.user_id = :user_id) as total_analyzed_videos,
+                            (SELECT COUNT(*) FROM auto_analyzed_videos aav 
+                             JOIN youtube_subscriptions ys ON aav.subscription_id = ys.id 
+                             WHERE ys.user_id = :user_id AND aav.analysis_status = 'pending') as pending_videos,
+                            (SELECT COUNT(*) FROM auto_analyzed_videos aav 
+                             JOIN youtube_subscriptions ys ON aav.subscription_id = ys.id 
+                             WHERE ys.user_id = :user_id AND aav.analysis_status = 'failed') as failed_videos
+                    """),
+                    {"user_id": user_id}
+                )
+                row = result.fetchone()
+                if row:
+                    columns = result.keys()
+                    return [dict(zip(columns, row))]
+                return []
+            
+            else:
+                logger.warning(f"未实现的 RPC 函数: {function_name}")
+                return []
+
+
+def _model_to_dict(obj) -> Dict[str, Any]:
+    """将 SQLAlchemy 模型转换为字典"""
+    result = {}
+    for column in obj.__table__.columns:
+        val = getattr(obj, column.name)
+        if hasattr(val, 'isoformat'):
+            val = val.isoformat()
+        elif hasattr(val, '__str__') and type(val).__name__ == 'UUID':
+            val = str(val)
+        result[column.name] = val
+    return result
+
+
+class _MockResponse:
+    """模拟 Supabase 响应对象"""
+    
+    def __init__(self, data):
+        self.data = data if data is not None else []
+    
+    def execute(self):
+        return self
 
 
 # 创建全局实例
-supabase_service = SupabaseService()
+supabase_service = SupabaseServiceProxy()

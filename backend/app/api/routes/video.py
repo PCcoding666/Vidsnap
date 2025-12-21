@@ -1,5 +1,10 @@
 """
 Video processing API routes.
+
+安全更新 (2025-12):
+- YouTube视频下载已禁用，改为使用YouTube字幕API
+- 新增 /youtube-info 端点检查字幕可用性
+- 新增 /download-instructions 端点获取客户端下载指令
 """
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Depends, status, Request
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
@@ -11,6 +16,7 @@ import time
 
 from ...services.pipeline_service import pipeline
 from ...services.supabase_service import supabase_service
+from ...services.youtube_transcript_service import youtube_transcript_service
 from ...core.logging import logger, get_context_logger
 
 router = APIRouter(prefix="/video", tags=["video"])
@@ -366,3 +372,140 @@ async def get_service_status():
     except Exception as e:
         logger.exception(f"获取服务状态失败: {e}")
         raise HTTPException(status_code=500, detail=f"获取服务状态失败: {str(e)}")
+
+
+@router.get("/youtube-info")
+async def get_youtube_info(youtube_url: str):
+    """
+    获取YouTube视频信息和字幕可用性
+    
+    这是一个轻量级接口，不下载视频，仅检查字幕可用性
+    
+    Args:
+        youtube_url: YouTube视频URL
+        
+    Returns:
+        视频信息和字幕可用性
+    """
+    try:
+        logger.info(f"检查YouTube视频字幕可用性: {youtube_url}")
+        
+        availability = await youtube_transcript_service.check_transcript_availability(youtube_url)
+        
+        return {
+            "status": "success",
+            "video_id": availability.get("video_id"),
+            "has_transcript": availability.get("has_transcript", False),
+            "available_languages": availability.get("available_languages", []),
+            "has_manual_transcript": availability.get("has_manual_transcript", False),
+            "has_auto_generated": availability.get("has_auto_generated", False),
+            "error": availability.get("error"),
+            "message": "有可用字幕，可以直接分析" if availability.get("has_transcript") else "该视频没有可用字幕，请使用客户端下载工具"
+        }
+        
+    except Exception as e:
+        logger.exception(f"检查YouTube视频信息失败: {e}")
+        raise HTTPException(status_code=500, detail=f"检查视频信息失败: {str(e)}")
+
+
+@router.get("/download-instructions")
+async def get_download_instructions(youtube_url: str):
+    """
+    获取客户端下载指令
+    
+    当YouTube视频没有可用字幕时，返回给用户下载指令
+    用户需要使用自己的IP下载视频，然后上传给我们处理
+    
+    Args:
+        youtube_url: YouTube视频URL
+        
+    Returns:
+        下载指令和建议
+    """
+    try:
+        instructions = youtube_transcript_service.get_client_download_instructions(youtube_url)
+        
+        return {
+            "status": "success",
+            **instructions
+        }
+        
+    except Exception as e:
+        logger.exception(f"获取下载指令失败: {e}")
+        raise HTTPException(status_code=500, detail=f"获取下载指令失败: {str(e)}")
+
+
+@router.post("/process-transcript")
+async def process_youtube_transcript(
+    request: Request,
+    youtube_url: str = Form(...),
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security)
+):
+    """
+    仅使用YouTube字幕处理视频（推荐方式）
+    
+    这是处理YouTube视频的推荐方式，不下载视频文件，保护服务器IP
+    
+    Args:
+        request: FastAPI Request对象
+        youtube_url: YouTube视频URL
+        credentials: 可选的认证凭证
+        
+    Returns:
+        处理结果
+    """
+    ctx_logger = get_context_logger()
+    start_time = time.time()
+    
+    ctx_logger.info(
+        "🎬 收到YouTube字幕处理请求",
+        youtube_url=youtube_url,
+        client_host=request.client.host if request.client else "unknown"
+    )
+    
+    # 处理认证（可选）
+    user_id = None
+    if credentials and supabase_service.is_available():
+        try:
+            user = supabase_service.verify_token(credentials.credentials)
+            if user:
+                user_id = user.get("id")
+                # 检查配额
+                quota_ok = supabase_service.check_user_quota(str(user_id))
+                if not quota_ok:
+                    raise HTTPException(
+                        status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                        detail="已达到本月视频处理上限，请升级订阅或等待下月重置"
+                    )
+                ctx_logger.info("✅ 用户认证成功", user_id=user_id)
+        except HTTPException:
+            raise
+        except Exception as e:
+            ctx_logger.warning(f"⚠️ Token验证失败，使用匿名模式: {e}")
+    
+    try:
+        # 使用字幕流程处理
+        result = await pipeline.process_youtube_transcript_only(
+            youtube_url=youtube_url,
+            user_id=user_id
+        )
+        
+        # 如果处理成功，递增配额使用
+        if result.get("status") == "success" and supabase_service.is_available() and user_id:
+            try:
+                supabase_service.increment_video_usage(user_id)
+            except Exception as e:
+                ctx_logger.error(f"⚠️ 递增配额使用失败: {e}")
+        
+        total_duration = (time.time() - start_time) * 1000
+        ctx_logger.info(
+            f"YouTube字幕处理完成",
+            status=result.get("status"),
+            duration_ms=total_duration
+        )
+        
+        return result
+        
+    except Exception as e:
+        ctx_logger.exception(f"❌ YouTube字幕处理失败: {e}")
+        raise HTTPException(status_code=500, detail=f"处理失败: {str(e)}")

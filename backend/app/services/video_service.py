@@ -1,6 +1,11 @@
 """
 改进的视频处理服务
 支持双输入源、PySceneDetect场景检测（FFmpeg fallback）、阿里云OSS存储
+
+安全更新 (2025-12): 
+- 服务器端YouTube视频下载已禁用，以保护服务器IP避免被封禁
+- 仅支持用户上传的视频文件处理
+- YouTube视频分析请使用youtube_transcript_service获取字幕
 """
 import logging
 import uuid
@@ -42,7 +47,16 @@ class AliyunVideoService:
         else:
             logger.info("YouTube 代理未配置，使用直连")
         
-        # yt-dlp下载选项 (2025.12 最新配置 - 代理 + Android 客户端)
+        # Cookies 文件路径（用于绕过 YouTube 机器人检测）
+        cookies_path = os.path.join(os.path.dirname(__file__), '../../youtube_cookies.txt')
+        cookies_path = os.path.abspath(cookies_path)
+        
+        if os.path.exists(cookies_path):
+            logger.info(f"YouTube Cookies 已启用: {cookies_path}")
+        else:
+            logger.warning(f"YouTube Cookies 文件不存在: {cookies_path}")
+        
+        # yt-dlp下载选项 (2025.12 最新配置 - 代理 + Cookies + Android 客户端)
         self.ytdl_opts = {
             # 基础配置
             'noplaylist': True,
@@ -61,6 +75,9 @@ class AliyunVideoService:
             
             # YouTube 代理配置
             # 通过环境变量 YOUTUBE_PROXY 设置，例如: http://127.0.0.1:7890
+            
+            # Cookies 配置（用于绕过机器人检测）
+            'cookiefile': cookies_path if os.path.exists(cookies_path) else None,
             
             # 绕过限制配置
             'age_limit': None,
@@ -83,11 +100,11 @@ class AliyunVideoService:
                 'Upgrade-Insecure-Requests': '1',
             },
             
-            # YouTube 特定优化配置（2025.12更新 - 使用android客户端绕过bot检测）
+            # YouTube 特定优化配置（2025.12更新）
             'extractor_args': {
                 'youtube': {
-                    # Android 客户端最稳定，配合代理使用
-                    'player_client': ['android', 'web'],
+                    # 使用多种客户端绕过bot检测
+                    'player_client': ['android', 'web', 'ios'],
                     'skip': ['hls', 'dash'],
                 }
             },
@@ -118,17 +135,29 @@ class AliyunVideoService:
         """
         双输入源视频处理
         
+        安全更新: YouTube视频下载已禁用，仅支持用户上传的视频文件
+        
         Args:
             video_file: 用户上传的视频文件路径
-            youtube_url: YouTube视频URL
+            youtube_url: YouTube视频URL (已禁用，会返回错误)
             
         Returns:
             处理结果
         """
-        if not video_file and not youtube_url:
+        # 安全检查：禁止服务器端YouTube视频下载
+        if youtube_url:
+            logger.warning(f"尝试使用YouTube URL但服务器端下载已禁用: {youtube_url}")
             return {
                 "status": "error",
-                "error": "必须提供视频文件或YouTube URL",
+                "error": "服务器端YouTube视频下载已禁用以保护IP。请使用字幕获取功能或上传本地视频文件。",
+                "video_id": None,
+                "download_disabled": True
+            }
+        
+        if not video_file:
+            return {
+                "status": "error",
+                "error": "必须提供视频文件",
                 "video_id": None
             }
         
@@ -139,28 +168,17 @@ class AliyunVideoService:
         try:
             logger.info(f"开始处理视频，ID: {video_id}")
             
-            # 步骤1: 获取视频文件
+            # 步骤1: 获取视频文件（仅支持用户上传）
             audio_path = None  # 初始化音频路径
             audio_oss_url = None  # 初始化音频OSS URL
             
-            if youtube_url:
-                logger.info(f"从YouTube下载视频: {youtube_url}")
-                video_result = await self._download_from_youtube(youtube_url, session_temp_dir)
-                if video_result["status"] != "success":
-                    return video_result
-                
-                video_path = video_result["video_path"]
-                video_metadata = video_result["metadata"]
-                source_type = "youtube"
-                original_url = youtube_url
-                
-            else:  # 用户上传文件
-                logger.info(f"处理用户上传的视频: {video_file}")
-                video_path = video_file
-                # 用户上传的是完整视频，后续需要提取音频
-                video_metadata = await self._extract_video_metadata(video_path)
-                source_type = "upload"
-                original_url = None
+            # 用户上传文件处理
+            logger.info(f"处理用户上传的视频: {video_file}")
+            video_path = video_file
+            # 用户上传的是完整视频，后续需要提取音频
+            video_metadata = await self._extract_video_metadata(video_path)
+            source_type = "upload"
+            original_url = None
             
             # 获取视频基本信息
             duration = video_metadata.get("duration", 0.0)
@@ -210,7 +228,20 @@ class AliyunVideoService:
             }
     
     async def _download_from_youtube(self, url: str, session_temp_dir: Path) -> Dict[str, Any]:
-        """从YouTube下载视频(使用默认格式,让yt-dlp自动选择最佳策略)"""
+        """
+        从YouTube下载视频 - 已禁用
+        
+        安全更新: 服务器端YouTube视频下载已禁用，以保护服务器IP避免被封禁
+        请使用 youtube_transcript_service 获取字幕，或引导用户上传本地文件
+        """
+        logger.error(f"YouTube视频下载已禁用！尝试下载: {url}")
+        return {
+            "status": "error",
+            "error": "服务器端YouTube视频下载已禁用以保护IP。请使用字幕获取功能或让用户上传本地视频文件。"
+        }
+        
+        # ===== 以下代码已禁用，保留供参考 =====
+        # 如需启用，请移除上方return语句
         try:
             base_filename = session_temp_dir / "downloaded_video"
             
@@ -308,15 +339,30 @@ class AliyunVideoService:
                 }
                 
         except yt_dlp.utils.DownloadError as e:
-            error_msg = f"YouTube视频下载失败: {str(e)}"
-            logger.error(error_msg)
+            # 简化错误消息，提取关键信息
+            raw_error = str(e)
+            if "Failed to extract any player response" in raw_error:
+                error_msg = "YouTube 机器人检测，请配置代理"
+            elif "Video unavailable" in raw_error:
+                error_msg = "视频不可用或已删除"
+            elif "Private video" in raw_error:
+                error_msg = "私有视频，无法访问"
+            elif "Sign in to confirm" in raw_error:
+                error_msg = "需要登录验证"
+            else:
+                error_msg = f"下载失败: {raw_error[:100]}"
+            logger.error(f"❌ {error_msg}")
             return {
                 "status": "error",
                 "error": error_msg
             }
         except Exception as e:
-            error_msg = f"YouTube下载异常: {str(e)}"
-            logger.exception(error_msg)
+            raw_error = str(e)
+            if "Failed to extract any player response" in raw_error:
+                error_msg = "YouTube 机器人检测，请配置代理"
+            else:
+                error_msg = f"下载异常: {raw_error[:100]}"
+            logger.exception(f"❌ {error_msg}")
             return {
                 "status": "error",
                 "error": error_msg
@@ -324,8 +370,9 @@ class AliyunVideoService:
     
     async def extract_keyframes_scene_detection(self, video_path: str, video_id: str, session_temp_dir: Path) -> List[KeyframeInfo]:
         """
-        使用PySceneDetect进行场景检测提取关键帧（FFmpeg作为fallback）
-        最多提取20帧
+        使用PySceneDetect进行场景检测提取关键帧 - 已禁用
+        
+        安全更新: 关键帧提取功能已禁用，系统改为基于逐字稿的纯文本分析
         
         Args:
             video_path: 视频文件路径
@@ -333,8 +380,12 @@ class AliyunVideoService:
             session_temp_dir: 会话临时目录
             
         Returns:
-            关键帧信息列表
+            空列表（功能已禁用）
         """
+        logger.info(f"关键帧提取功能已禁用，返回空列表 (video_id={video_id})")
+        return []
+        
+        # ===== 以下代码已禁用，保留供参考 =====
         if not os.path.exists(video_path):
             logger.error(f"视频文件不存在: {video_path}")
             return []

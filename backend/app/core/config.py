@@ -1,6 +1,8 @@
 """
 Configuration management for the video analysis platform.
 Handles environment variables and application settings.
+
+本地数据库模式 - Supabase 已禁用
 """
 import os
 from typing import Optional
@@ -39,13 +41,34 @@ class Settings:
     # 音频转录服务 API Key（优先级最高）
     TRANSCRIPT_SERVICE_API_KEY: str = os.getenv("TRANSCRIPT_SERVICE_API_KEY", "")
     
-    # Supabase 配置
-    # ⚠️ 安全警告: SUPABASE_SERVICE_KEY 拥有绕过 RLS 的完全数据库访问权限
-    # 仅在后端服务器环境使用,严禁暴露给前端或客户端
-    # 应通过环境变量注入,禁止硬编码到代码中
-    SUPABASE_URL: str = os.getenv("SUPABASE_URL", "")
-    SUPABASE_ANON_KEY: str = os.getenv("SUPABASE_ANON_KEY", "")
-    SUPABASE_SERVICE_KEY: str = os.getenv("SUPABASE_SERVICE_KEY", "")
+    # ============================================
+    # Supabase 配置 - 已禁用
+    # ============================================
+    # SUPABASE_URL: str = os.getenv("SUPABASE_URL", "")
+    # SUPABASE_ANON_KEY: str = os.getenv("SUPABASE_ANON_KEY", "")
+    # SUPABASE_SERVICE_KEY: str = os.getenv("SUPABASE_SERVICE_KEY", "")
+    SUPABASE_URL: str = ""
+    SUPABASE_ANON_KEY: str = ""
+    SUPABASE_SERVICE_KEY: str = ""
+    
+    # 本地 PostgreSQL 数据库配置
+    # 格式: postgresql+asyncpg://user:password@host:port/database
+    DATABASE_URL: str = os.getenv(
+        "DATABASE_URL", 
+        "postgresql+asyncpg://vidsnap:vidsnap_secret_2024@localhost:5432/vidsnap"
+    )
+    
+    # JWT 认证配置
+    JWT_SECRET: str = os.getenv("JWT_SECRET", "your-super-secret-jwt-key-change-in-production")
+    JWT_LIFETIME_SECONDS: int = int(os.getenv("JWT_LIFETIME_SECONDS", str(3600 * 24 * 7)))  # 7天
+    
+    # Google OAuth 配置
+    GOOGLE_OAUTH_CLIENT_ID: str = os.getenv("GOOGLE_OAUTH_CLIENT_ID", "")
+    GOOGLE_OAUTH_CLIENT_SECRET: str = os.getenv("GOOGLE_OAUTH_CLIENT_SECRET", "")
+    
+    # 数据库模式 - 强制使用本地数据库
+    # DATABASE_MODE: str = os.getenv("DATABASE_MODE", "local")
+    DATABASE_MODE: str = "local"  # Supabase 已禁用，强制使用本地
     
     # 应用配置
     TEMP_DIR: str = os.getenv("TEMP_DIR", "/tmp/video_analysis")
@@ -54,6 +77,17 @@ class Settings:
     # 服务器部署时设置为 http://127.0.0.1:7890 (Clash 代理)
     # 本地开发可设置为 http://127.0.0.1:33210 (本地代理) 或留空禁用
     YOUTUBE_PROXY: str = os.getenv("YOUTUBE_PROXY", "")
+    
+    # Gmail SMTP 配置
+    # 用于发送邮件通知给用户
+    GMAIL_SMTP_USER: str = os.getenv("GMAIL_SMTP_USER", "")
+    GMAIL_SMTP_PASSWORD: str = os.getenv("GMAIL_SMTP_PASSWORD", "")  # 使用 App Password
+    GMAIL_SMTP_HOST: str = os.getenv("GMAIL_SMTP_HOST", "smtp.gmail.com")
+    GMAIL_SMTP_PORT: int = int(os.getenv("GMAIL_SMTP_PORT", "587"))
+    GMAIL_SMTP_FROM: str = os.getenv("GMAIL_SMTP_FROM", "")  # 发送者名称，如 "VidSnap <noreply@vidsnap.space>"
+    
+    # 应用 URL（用于邮件中的链接）
+    APP_URL: str = os.getenv("APP_URL", "https://vidsnap.space")
     
     @property
     def DASHSCOPE_API_KEY(self) -> str:
@@ -83,11 +117,42 @@ class Settings:
     
     @property
     def supabase_available(self) -> bool:
-        """检查 Supabase 配置是否完整"""
+        """检查 Supabase 配置是否完整 - 已禁用，始终返回 False"""
+        # ============================================
+        # Supabase 已禁用
+        # ============================================
+        # return all([
+        #     self.SUPABASE_URL,
+        #     self.SUPABASE_ANON_KEY,
+        #     self.SUPABASE_SERVICE_KEY
+        # ])
+        return False
+    
+    @property
+    def local_db_available(self) -> bool:
+        """检查本地数据库配置是否完整"""
+        return bool(self.DATABASE_URL)
+    
+    @property
+    def google_oauth_available(self) -> bool:
+        """检查 Google OAuth 配置是否完整"""
         return all([
-            self.SUPABASE_URL,
-            self.SUPABASE_ANON_KEY,
-            self.SUPABASE_SERVICE_KEY
+            self.GOOGLE_OAUTH_CLIENT_ID,
+            self.GOOGLE_OAUTH_CLIENT_SECRET
+        ])
+    
+    @property
+    def use_local_database(self) -> bool:
+        """是否使用本地数据库 - 强制使用本地"""
+        # return self.DATABASE_MODE == "local" and self.local_db_available
+        return True  # Supabase 已禁用，强制使用本地数据库
+    
+    @property
+    def email_available(self) -> bool:
+        """检查邮件服务配置是否完整"""
+        return all([
+            self.GMAIL_SMTP_USER,
+            self.GMAIL_SMTP_PASSWORD
         ])
 
 

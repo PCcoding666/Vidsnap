@@ -17,7 +17,18 @@ oss2>=2.18.0
 dashscope>=1.14.0  # 阿里云 DashScope SDK (SenseVoice + Qwen3-VL-Flash)
 
 # 数据库服务
-supabase>=2.10.0  # Supabase Python SDK (用户认证 + 数据存储)
+supabase>=2.10.0  # Supabase Python SDK (保留兼容性)
+
+# 本地数据库 (PostgreSQL + SQLAlchemy)
+sqlalchemy[asyncio]>=2.0.25
+asyncpg>=0.29.0
+greenlet>=3.0.0
+
+# 认证系统
+fastapi-users[sqlalchemy]>=13.0.0
+httpx-oauth>=0.13.0
+python-jose[cryptography]>=3.3.0
+passlib[bcrypt]>=1.7.4
 
 # 基础工具
 requests>=2.31.0
@@ -37,3 +48,25 @@ asyncio>=3.4.3
 # 测试框架
 pytest>=7.4.0
 pytest-asyncio>=0.21.0
+
+# 任务队列 (频道监控功能)
+celery>=5.3.0
+redis>=4.5.0
+kombu>=5.3.0
+
+# YouTube Data API
+google-api-python-client>=2.100.0
+
+# YouTube字幕获取（无需下载视频）
+youtube-transcript-api>=0.6.0
+google-auth>=2.22.0
+google-auth-oauthlib>=1.0.0
+
+# 表单解析
+python-multipart>=0.0.6
+
+# 邮箱验证
+email-validator>=2.0.0
+
+# 系统监控
+psutil>=5.9.0

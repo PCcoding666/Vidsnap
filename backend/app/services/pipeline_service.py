@@ -1,7 +1,12 @@
 """
 阿里云视频处理管道
-协调视频处理、音频转录、关键帧提取和OSS存储的完整流程
+协调视频处理、音频转录和OSS存储的完整流程
 支持并行处理和统一metadata格式
+
+安全更新 (2025-12):
+- YouTube视频下载已禁用，改为使用YouTube字幕API
+- 关键帧提取功能已禁用，改为纯文本分析
+- 新增 process_youtube_transcript_only() 方法处理YouTube URL
 """
 import logging
 import asyncio
@@ -26,6 +31,7 @@ from .paraformer_service import paraformer_service  # 使用 Paraformer-v2 替�
 from .oss_service import oss_service
 from .llm_service import llm_service
 from .supabase_service import supabase_service
+from .youtube_transcript_service import youtube_transcript_service  # YouTube字幕服务
 
 
 class AliyunVideoProcessingPipeline:
@@ -37,8 +43,188 @@ class AliyunVideoProcessingPipeline:
         self.speech_service = paraformer_service  # 使用 Paraformer-v2
         self.oss_service = oss_service
         self.llm_service = llm_service
+        self.transcript_service = youtube_transcript_service  # YouTube字幕服务
         
-        logger.info("阿里云视频处理管道初始化完成（使用 Paraformer-v2 语音服务 + Qwen VL 视频总结服务）")
+        logger.info("阿里云视频处理管道初始化完成（YouTube字幕优先 + Paraformer-v2 语音服务）")
+    
+    async def process_youtube_transcript_only(
+        self,
+        youtube_url: str,
+        user_id: Optional[str] = None,
+        progress_callback: Optional[callable] = None
+    ) -> Dict[str, Any]:
+        """
+        仅使用YouTube字幕处理视频（不下载视频文件）
+        
+        这是推荐的YouTube视频处理方式，不会暴露服务器IP
+        
+        Args:
+            youtube_url: YouTube视频URL
+            user_id: 用户ID（用于Supabase数据持久化）
+            progress_callback: 进度回调函数
+            
+        Returns:
+            处理结果
+        """
+        video_id = None
+        
+        try:
+            # 步骤1: 检查字幕可用性
+            availability = await self.transcript_service.check_transcript_availability(youtube_url)
+            
+            if not availability.get("has_transcript"):
+                error_msg = availability.get("error", "该视频没有可用字幕")
+                logger.warning(f"YouTube视频没有字幕: {youtube_url} - {error_msg}")
+                
+                # 返回下载指令
+                download_instructions = self.transcript_service.get_client_download_instructions(youtube_url)
+                
+                # 检测是否是IP封禁
+                is_ip_blocked = "IP" in error_msg or "封禁" in error_msg or "blocked" in error_msg.lower()
+                
+                return {
+                    "status": "ip_blocked" if is_ip_blocked else "no_transcript",
+                    "error": error_msg,
+                    "video_id": availability.get("video_id"),
+                    "available_languages": availability.get("available_languages", []),
+                    "download_instructions": download_instructions,
+                    "message": "服务器IP被YouTube封禁，请手动下载视频后上传分析" if is_ip_blocked else "该视频没有可用字幕，请使用客户端下载工具下载视频后上传"
+                }
+            
+            video_id = availability.get("video_id")
+            video_title = availability.get("title") or f"YouTube视频 {video_id}"
+            video_duration = availability.get("duration") or 0
+            video_channel = availability.get("channel") or ""
+            
+            # 创建视频记录
+            if supabase_service.is_available() and user_id:
+                try:
+                    video_data = {
+                        "video_id": video_id,
+                        "user_id": user_id,
+                        "title": video_title,
+                        "duration": video_duration,
+                        "source_type": "youtube_transcript",
+                        "original_url": youtube_url,
+                        "oss_video_url": "",
+                        "processing_status": "processing",
+                        "processing_progress": 10
+                    }
+                    supabase_service.create_video_record(video_data)
+                except Exception as e:
+                    logger.error(f"创建视频记录失败: {e}")
+            
+            # 步骤2: 获取字幕内容
+            transcript = await self.transcript_service.get_transcript_as_metadata(youtube_url)
+            
+            if not transcript:
+                return {
+                    "status": "error",
+                    "error": "获取字幕内容失败",
+                    "video_id": video_id
+                }
+            
+            # 保存字幕数据
+            if supabase_service.is_available() and user_id:
+                try:
+                    supabase_service.update_video_status(video_id, "processing", 40)
+                    if transcript.segments:
+                        supabase_service.save_transcript_segments(video_id, transcript.segments)
+                except Exception as e:
+                    logger.error(f"保存字幕数据失败: {e}")
+            
+            # 步骤3: 生成 LLM 视频总结
+            video_summary = None
+            if self.llm_service.is_available():
+                
+                try:
+                    # 构建视频元数据（字幕模式）
+                    video_metadata = {
+                        "title": video_title,
+                        "duration": video_duration,
+                        "description": "",
+                        "uploader": video_channel
+                    }
+                    
+                    video_summary = await self.llm_service.generate_text_based_summary(
+                        transcript=transcript,
+                        video_metadata=video_metadata,
+                        video_id=video_id
+                    )
+                    
+                    if video_summary:
+                        # 保存总结到Supabase
+                        if supabase_service.is_available() and user_id:
+                            try:
+                                supabase_service.update_video_status(video_id, "processing", 80)
+                                if hasattr(video_summary, 'detailed_summary') and video_summary.detailed_summary:
+                                    supabase_service.save_video_summary(video_id, "detailed", video_summary.detailed_summary)
+                            except Exception as e:
+                                logger.error(f"保存视频总结失败: {e}")
+                        
+                except Exception as e:
+                    logger.error(f"LLM 总结生成失败: {e}")
+            
+            # 更新完成状态
+            if supabase_service.is_available() and user_id:
+                try:
+                    supabase_service.update_video_status(video_id, "completed", 100)
+                except Exception as e:
+                    logger.error(f"更新完成状态失败: {e}")
+            
+            logger.info(f"✅ 字幕分析完成: {video_id}")
+            
+            # 构建 metadata 供前端使用
+            result_metadata = {
+                "video": {
+                    "title": video_title,
+                    "duration": video_duration,
+                    "channel": video_channel,
+                },
+                "title": video_title,
+                "duration": video_duration,
+                "transcript": {
+                    "language": transcript.language,
+                    "segments": [
+                        {
+                            "text": seg.text,
+                            "start_time": seg.start_time,
+                            "end_time": seg.end_time,
+                        }
+                        for seg in (transcript.segments or [])
+                    ]
+                }
+            }
+            
+            return {
+                "status": "success",
+                "video_id": video_id,
+                "source_type": "youtube_transcript",
+                "metadata": result_metadata,
+                "transcript": transcript,
+                "video_summary": video_summary,
+                "transcript_segments_count": len(transcript.segments) if transcript.segments else 0,
+                "summary_generated": video_summary is not None,
+                "keyframes_count": 0,  # 字幕模式不提取关键帧
+                "language": transcript.language
+            }
+            
+        except Exception as e:
+            error_msg = f"YouTube字幕处理异常: {str(e)}"
+            logger.exception(error_msg)
+            
+            # 更新失败状态
+            if supabase_service.is_available() and user_id and video_id:
+                try:
+                    supabase_service.update_video_status(video_id, "failed", error_message=error_msg)
+                except Exception as se:
+                    logger.error(f"⚠️ Supabase: 更新失败状态失败: {se}")
+            
+            return {
+                "status": "error",
+                "error": error_msg,
+                "video_id": video_id
+            }
     
     async def process_video(self, 
                           video_file: Optional[str] = None,
@@ -328,6 +514,20 @@ class AliyunVideoProcessingPipeline:
             "llm_service": self.llm_service.is_available()
         }
     
+    async def _send_completion_notification(
+        self,
+        user_id: str,
+        video_id: str,
+        video_title: str,
+        thumbnail_url: Optional[str] = None,
+        channel_name: Optional[str] = None
+    ):
+        """
+        发送视频分析完成通知（已禁用邮件服务）
+        """
+        # 邮件服务已移除，仅记录日志
+        logger.debug(f"视频分析完成: {video_title} ({video_id})")
+    
     async def process_video_with_summary(
         self,
         video_file: Optional[str] = None,
@@ -338,15 +538,29 @@ class AliyunVideoProcessingPipeline:
         """
         处理视频的完整流程（包含 LLM 总结）
         
+        安全更新：
+        - YouTube URL 现在使用字幕获取流程（不下载视频）
+        - 上传的视频文件使用音频转录流程
+        - 关键帧提取已禁用
+        
         Args:
             video_file: 上传的视频文件路径
-            youtube_url: YouTube视频URL
+            youtube_url: YouTube视频URL（将使用字幕流程）
             user_id: 用户 ID(用于 Supabase 数据持久化)
             progress_callback: 进度回调函数（可选，主要用于日志记录）
             
         Returns:
             处理结果（包含视频总结）
         """
+        # 如果是YouTube URL，使用字幕流程（不下载视频）
+        if youtube_url and not video_file:
+            logger.info(f"检测到YouTube URL，使用字幕流程: {youtube_url}")
+            return await self.process_youtube_transcript_only(
+                youtube_url=youtube_url,
+                user_id=user_id,
+                progress_callback=progress_callback
+            )
+        
         self._log_progress("开始处理视频...", progress_callback)
         
         video_id = None
@@ -554,6 +768,14 @@ class AliyunVideoProcessingPipeline:
                 try:
                     supabase_service.update_video_status(video_id, "completed", 100)
                     logger.info(f"✅ Supabase: 视频处理完成 {video_id}")
+                    
+                    # 【邮件通知】发送视频分析完成通知
+                    await self._send_completion_notification(
+                        user_id=user_id,
+                        video_id=video_id,
+                        video_title=video_info.title or "未知标题",
+                        thumbnail_url=keyframes[0].oss_image_url if keyframes else None
+                    )
                 except Exception as e:
                     logger.error(f"⚠️ Supabase: 更新完成状态失败: {e}")
             

@@ -12,6 +12,11 @@
 *-key.json
 *-service-account.json
 
+# Virtual environments
+venv/
+.venv/
+backend/venv/
+
 # Python
 __pycache__/
 *.py[cod]

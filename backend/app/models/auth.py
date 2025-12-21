@@ -37,6 +37,7 @@ class OAuthCallbackRequest(BaseModel):
     """OAuth 回调请求"""
     code: str
     state: Optional[str] = None
+    redirect_uri: Optional[str] = None  # 回调 URI（必须与授权时一致）
 
 
 class OAuthURLResponse(BaseModel):

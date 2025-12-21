@@ -196,26 +196,14 @@ def setup_logging(
     logger = logging.getLogger("video_analysis")
     logger.setLevel(level)
     
+    # 禁止向上传播（避免 Celery 重复输出）
+    logger.propagate = False
+    
     # 如果已经有处理器，先清除
     if logger.handlers:
         logger.handlers.clear()
     
-    # 创建控制台处理器
-    console_handler = logging.StreamHandler(sys.stdout)
-    console_handler.setLevel(level)
-    
-    # 设置格式化器
-    if enable_structured:
-        formatter = StructuredFormatter()
-    else:
-        formatter = logging.Formatter(
-            '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-        )
-    
-    console_handler.setFormatter(formatter)
-    logger.addHandler(console_handler)
-    
-    # 添加文件处理器（如果指定）
+    # 只添加文件处理器（控制台输出由 Celery 负责）
     if log_file:
         log_path = Path(log_file)
         log_path.parent.mkdir(parents=True, exist_ok=True)
@@ -234,6 +222,17 @@ def setup_logging(
         error_handler.setLevel(logging.ERROR)
         error_handler.setFormatter(json_formatter)
         logger.addHandler(error_handler)
+    else:
+        # 没有文件日志时，使用控制台
+        console_handler = logging.StreamHandler(sys.stdout)
+        console_handler.setLevel(level)
+        
+        formatter = logging.Formatter(
+            '%(asctime)s - %(levelname)s - %(message)s',
+            datefmt='%H:%M:%S'
+        )
+        console_handler.setFormatter(formatter)
+        logger.addHandler(console_handler)
     
     return logger
 

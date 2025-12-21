@@ -3,6 +3,11 @@
 - Qwen3-VL-Flash (qwen-vl-max): 用于关键帧图像分析
 - Qwen3-VL-Plus (qwen-vl-plus): 用于主视频总结生成
 支持基于关键帧图像和转录文本的智能总结
+
+安全更新 (2025-12):
+- 多模态图像分析功能已禁用（ENABLE_MULTIMODAL_ANALYSIS=False）
+- 系统改为基于逐字稿的纯文本分析
+- 关键帧分析方法保留但默认返回空结果
 """
 import os
 import logging
@@ -22,6 +27,10 @@ from ..models.analysis import (
     VideoSummary,
     KeyframeDescription as KeyframeDescriptionModel
 )
+
+# 安全配置开关
+ENABLE_MULTIMODAL_ANALYSIS = os.getenv("ENABLE_MULTIMODAL_ANALYSIS", "false").lower() == "true"
+ENABLE_KEYFRAME_EXTRACTION = os.getenv("ENABLE_KEYFRAME_EXTRACTION", "false").lower() == "true"
 
 
 @dataclass
@@ -101,6 +110,8 @@ class QwenVLService:
         """
         分析单个关键帧，生成描述（带重试机制）
         
+        安全更新：此功能已默认禁用，需设置 ENABLE_MULTIMODAL_ANALYSIS=true 启用
+        
         Args:
             image_url: 关键帧的 OSS 图片 URL
             context: 上下文信息(如转录文本)
@@ -109,6 +120,11 @@ class QwenVLService:
         Returns:
             关键帧描述文本
         """
+        # 检查多模态分析是否启用
+        if not ENABLE_MULTIMODAL_ANALYSIS:
+            logger.info("多模态分析已禁用 (ENABLE_MULTIMODAL_ANALYSIS=false)")
+            return None
+        
         if not self.is_available():
             logger.error("Qwen VL 服务不可用")
             return None
@@ -387,6 +403,8 @@ class QwenVLService:
         多模态关键帧分析服务（独立服务，v0.2.0 新增）
         按需调用，不在主流水线中执行
         
+        安全更新：此功能已默认禁用，需设置 ENABLE_MULTIMODAL_ANALYSIS=true 启用
+        
         Args:
             keyframes: 关键帧列表（含 OSS URL）
             context: 可选的上下文文本
@@ -394,6 +412,11 @@ class QwenVLService:
         Returns:
             关键帧描述列表
         """
+        # 检查多模态分析是否启用
+        if not ENABLE_MULTIMODAL_ANALYSIS:
+            logger.info("多模态关键帧分析已禁用 (ENABLE_MULTIMODAL_ANALYSIS=false)")
+            return []
+        
         if not self.is_available():
             logger.error("Qwen VL 服务不可用")
             return []
