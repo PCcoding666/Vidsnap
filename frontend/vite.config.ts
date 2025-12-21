@@ -11,6 +11,8 @@ export default defineConfig(({ mode }) => ({
     allowedHosts: [
       'vidsnap.space',
       'www.vidsnap.space',
+      'vidsnap-test.space',
+      'www.vidsnap-test.space',
       'localhost',
       '127.0.0.1'
     ],
@@ -29,6 +31,8 @@ export default defineConfig(({ mode }) => ({
     allowedHosts: [
       'vidsnap.space',
       'www.vidsnap.space',
+      'vidsnap-test.space',
+      'www.vidsnap-test.space',
       'localhost',
       '127.0.0.1'
     ],

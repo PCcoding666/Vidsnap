@@ -4,8 +4,8 @@
  */
 
 // API 基础配置
-// 开发环境使用 /api 前缀触发 Vite 代理
-const API_BASE_URL = import.meta.env.DEV ? '/api' : (import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000');
+// 开发环境使用 /api/v1 前缀触发 Vite 代理
+const API_BASE_URL = import.meta.env.DEV ? '/api/v1' : (import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000');
 
 // API 客户端类
 class ApiClient {
@@ -117,6 +117,23 @@ class ApiClient {
       throw error;
     }
   }
+
+  /**
+   * DELETE 请求
+   */
+  async delete<T>(endpoint: string): Promise<T> {
+    return this.request<T>(endpoint, { method: 'DELETE' });
+  }
+
+  /**
+   * PUT 请求
+   */
+  async put<T>(endpoint: string, data?: any): Promise<T> {
+    return this.request<T>(endpoint, {
+      method: 'PUT',
+      body: data ? JSON.stringify(data) : undefined,
+    });
+  }
 }
 
 // 创建 API 客户端实例
@@ -138,9 +155,12 @@ export const API_ENDPOINTS = {
   // 视频处理
   VIDEO: {
     PROCESS: '/video/process',
+    PROCESS_TRANSCRIPT: '/video/process-transcript',  // 仅使用字幕处理（推荐）
+    YOUTUBE_INFO: '/video/youtube-info',  // 检查字幕可用性
+    DOWNLOAD_INSTRUCTIONS: '/video/download-instructions',  // 获取下载指令
     STATUS: '/video/status',
     HISTORY: '/video/history',
-    DETAILS: '/video/details',  // 新增视频详情接口
+    DETAILS: '/video/details',
   },
   
   // 分析结果
@@ -149,6 +169,14 @@ export const API_ENDPOINTS = {
     CHAT_START: '/analysis/chat/start',
     CHAT_MESSAGE: '/analysis/chat/message',
     CHAT_SESSION: '/analysis/chat/session',
+  },
+  
+  // 用户中心
+  USER: {
+    PROFILE: '/user/profile',
+    SETTINGS: '/user/settings',
+    QUOTA: '/user/quota',
+    STATS: '/user/stats',
   },
 } as const;
 
@@ -197,6 +225,46 @@ export interface ProcessVideoResponse {
   metadata?: any;
   video_summary?: any;
   summary_generated?: boolean;
+  // 字幕模式特有字段
+  source_type?: string;
+  language?: string;
+  transcript?: string | { segments?: Array<{ text: string }>; full_text?: string };
+  // 无字幕时的响应
+  download_instructions?: any;
+  message?: string;
+  available_languages?: string[];
+}
+
+// YouTube信息检查响应
+export interface YouTubeInfoResponse {
+  status: string;
+  video_id: string;
+  has_transcript: boolean;
+  available_languages: string[];
+  has_manual_transcript: boolean;
+  has_auto_generated: boolean;
+  error?: string;
+  message: string;
+}
+
+// 下载指令响应
+export interface DownloadInstructionsResponse {
+  status: string;
+  video_id: string;
+  youtube_url: string;
+  instructions: {
+    title: string;
+    methods: Array<{
+      name: string;
+      description: string;
+      install?: string;
+      command?: string;
+      note?: string;
+      suggestions?: string[];
+      warning?: string;
+    }>;
+    tips: string[];
+  };
 }
 
 // Chat API 类型定义
@@ -280,7 +348,7 @@ export const apiService = {
     return response;
   },
 
-  // 处理视频
+  // 处理视频（通用接口，会自动选择字幕或上传流程）
   async processVideo(data: ProcessVideoRequest): Promise<ProcessVideoResponse> {
     const formData = new FormData();
     
@@ -294,6 +362,31 @@ export const apiService = {
     
     return apiClient.postFormData<ProcessVideoResponse>(
       API_ENDPOINTS.VIDEO.PROCESS,
+      formData
+    );
+  },
+
+  // 检查YouTube视频字幕可用性（轻量级，不下载视频）
+  async checkYouTubeInfo(youtubeUrl: string): Promise<YouTubeInfoResponse> {
+    return apiClient.get<YouTubeInfoResponse>(
+      `${API_ENDPOINTS.VIDEO.YOUTUBE_INFO}?youtube_url=${encodeURIComponent(youtubeUrl)}`
+    );
+  },
+
+  // 获取客户端下载指令
+  async getDownloadInstructions(youtubeUrl: string): Promise<DownloadInstructionsResponse> {
+    return apiClient.get<DownloadInstructionsResponse>(
+      `${API_ENDPOINTS.VIDEO.DOWNLOAD_INSTRUCTIONS}?youtube_url=${encodeURIComponent(youtubeUrl)}`
+    );
+  },
+
+  // 仅使用YouTube字幕处理（推荐方式，不下载视频）
+  async processYouTubeTranscript(youtubeUrl: string): Promise<ProcessVideoResponse> {
+    const formData = new FormData();
+    formData.append('youtube_url', youtubeUrl);
+    
+    return apiClient.postFormData<ProcessVideoResponse>(
+      API_ENDPOINTS.VIDEO.PROCESS_TRANSCRIPT,
       formData
     );
   },
@@ -331,5 +424,46 @@ export const apiService = {
     return apiClient.get<ProcessVideoResponse>(
       `${API_ENDPOINTS.VIDEO.DETAILS}/${video_id}`
     );
+  },
+
+  // ========================================================================
+  // 用户中心方法
+  // ========================================================================
+
+  // 获取用户资料
+  async getUserProfile(): Promise<any> {
+    return apiClient.get<any>(API_ENDPOINTS.USER.PROFILE);
+  },
+
+  // 更新用户资料
+  async updateUserProfile(data: {
+    display_name?: string;
+    gender?: 'male' | 'female' | 'other' | 'prefer_not_to_say';
+    birthday?: string;
+  }): Promise<any> {
+    return apiClient.put<any>(API_ENDPOINTS.USER.PROFILE, data);
+  },
+
+  // 获取用户设置
+  async getUserSettings(): Promise<any> {
+    return apiClient.get<any>(API_ENDPOINTS.USER.SETTINGS);
+  },
+
+  // 更新用户设置
+  async updateUserSettings(data: {
+    language?: string;
+    theme?: 'system' | 'light' | 'dark';
+  }): Promise<any> {
+    return apiClient.put<any>(API_ENDPOINTS.USER.SETTINGS, data);
+  },
+
+  // 获取用户配额
+  async getUserQuota(): Promise<any> {
+    return apiClient.get<any>(API_ENDPOINTS.USER.QUOTA);
+  },
+
+  // 获取用户统计
+  async getUserStats(): Promise<any> {
+    return apiClient.get<any>(API_ENDPOINTS.USER.STATS);
   },
 };

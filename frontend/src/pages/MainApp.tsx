@@ -8,7 +8,7 @@ import { apiService } from "@/services/api";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 
-type ProcessingState = "idle" | "processing" | "completed" | "error";
+type ProcessingState = "idle" | "processing" | "completed" | "error" | "no_transcript";
 
 export interface Keyframe {
   id: number;
@@ -22,8 +22,10 @@ export interface VideoData {
   title: string;
   duration: string;
   summary: string;
-  keyframes: Keyframe[];
+  keyframes: Keyframe[];  // 保留接口兼容性，但实际会是空数组
   transcript: string;
+  sourceType?: string;  // 新增：标识数据来源 (youtube_transcript / upload)
+  language?: string;    // 新增：转录语言
 }
 
 const MainApp = () => {
@@ -73,11 +75,31 @@ const MainApp = () => {
           };
           
           // Process summary: prioritize detailed, then standard, then brief
-          const summaryText = summary?.detailed || summary?.standard || summary?.brief || t('video.noSummaryAvailable');
+          // 支持新旧两种响应格式
+          let summaryText = "";
+          if (summary?.detailed_summary) {
+            summaryText = summary.detailed_summary;
+          } else if (summary?.detailed || summary?.standard || summary?.brief) {
+            summaryText = summary?.detailed || summary?.standard || summary?.brief;
+          } else if (typeof summary === 'string') {
+            summaryText = summary;
+          } else {
+            summaryText = t('video.noSummaryAvailable');
+          }
           
           // 处理transcript: 处理多种可能的数据结构
           let transcriptText = "";
-          if (metadata?.transcript) {
+          if (response.transcript) {
+            // 新格式：直接在响应顶层
+            if (typeof response.transcript === 'string') {
+              transcriptText = response.transcript;
+            } else if (Array.isArray(response.transcript.segments)) {
+              transcriptText = response.transcript.segments.map((seg: any) => seg.text).join(" ");
+            } else if (response.transcript.full_text) {
+              transcriptText = response.transcript.full_text;
+            }
+          } else if (metadata?.transcript) {
+            // 旧格式：在metadata中
             if (typeof metadata.transcript === 'string') {
               transcriptText = metadata.transcript;
             } else if (Array.isArray(metadata.transcript.segments)) {
@@ -87,21 +109,18 @@ const MainApp = () => {
             }
           }
           
-          // Process keyframes: use scene_description or description
-          const keyframes = (metadata?.keyframes || []).map((kf: any, idx: number) => ({
-            id: kf.frame_id || idx + 1,
-            timestamp: kf.timestamp,
-            description: kf.scene_description || kf.description || t('video.keyframe', { number: idx + 1 }),
-            url: kf.oss_image_url,
-          }));
+          // 关键帧已禁用，返回空数组
+          const keyframes: Keyframe[] = [];
           
-          const videoData = {
+          const videoData: VideoData = {
             id: response.video_id,
             title: metadata?.video?.title || metadata?.title || t('video.untitled'),
             duration: metadata?.video?.duration ? formatDuration(metadata.video.duration) : (metadata?.duration ? formatDuration(metadata.duration) : t('video.unknownDuration')),
             summary: summaryText,
             keyframes,
             transcript: transcriptText,
+            sourceType: response.source_type,
+            language: response.language,
           };
           
           console.log("✅ 转换后的视频数据:", videoData);
@@ -109,12 +128,22 @@ const MainApp = () => {
 
           toast({
             title: t('processing.completeTitle'),
-            description: t('processing.completeDescription', { count: keyframes.length }),
+            description: response.source_type === "youtube_transcript" 
+              ? "已使用YouTube字幕完成分析" 
+              : "视频分析完成",
           });
         } catch (dataError: any) {
           console.error("Data conversion failed:", dataError);
           throw new Error(t('processing.dataConversionFailed', { message: dataError.message }));
         }
+      } else if (response.status === "no_transcript") {
+        // 视频没有字幕，需要用户手动下载
+        setProcessingState("no_transcript");
+        toast({
+          variant: "destructive",
+          title: "需要手动下载",
+          description: response.message || "该视频没有可用字幕，请使用下载工具下载后上传",
+        });
       } else {
         throw new Error(t('processing.processingFailed'));
       }
