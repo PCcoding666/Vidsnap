@@ -1,7 +1,6 @@
 {
   "processing": {
     "startTitle": "Start Processing Video",
-    "downloadingYoutube": "Downloading and analyzing YouTube video...",
     "uploadingVideo": "Uploading and analyzing video file...",
     "completeTitle": "✅ Processing Complete",
     "completeDescription": "Video successfully analyzed, generated {{count}} keyframes",

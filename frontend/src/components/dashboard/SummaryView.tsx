@@ -1,6 +1,6 @@
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Copy, Download, FileDown } from "lucide-react";
+import { Copy, FileDown } from "lucide-react";
 import MarkdownRenderer from "@/components/chat/MarkdownRenderer";
 import type { VideoData } from "@/pages/MainApp";
 
@@ -87,10 +87,6 @@ const SummaryView = ({ videoData }: SummaryViewProps) => {
 
       {/* Actions */}
       <div className="flex gap-4">
-        <Button variant="outline" className="flex-1 gap-2">
-          <Download className="w-4 h-4" />
-          下载原视频
-        </Button>
         <Button variant="outline" className="flex-1 gap-2">
           <FileDown className="w-4 h-4" />
           导出总结为 MD

@@ -81,7 +81,7 @@ class ApiClient {
   /**
    * POST 请求
    */
-  async post<T>(endpoint: string, data?: any): Promise<T> {
+  async post<T>(endpoint: string, data?: unknown): Promise<T> {
     return this.request<T>(endpoint, {
       method: 'POST',
       body: JSON.stringify(data),
@@ -128,7 +128,7 @@ class ApiClient {
   /**
    * PUT 请求
    */
-  async put<T>(endpoint: string, data?: any): Promise<T> {
+  async put<T>(endpoint: string, data?: unknown): Promise<T> {
     return this.request<T>(endpoint, {
       method: 'PUT',
       body: data ? JSON.stringify(data) : undefined,
@@ -155,12 +155,19 @@ export const API_ENDPOINTS = {
   // 视频处理
   VIDEO: {
     PROCESS: '/video/process',
-    PROCESS_TRANSCRIPT: '/video/process-transcript',  // 仅使用字幕处理（推荐）
-    YOUTUBE_INFO: '/video/youtube-info',  // 检查字幕可用性
-    DOWNLOAD_INSTRUCTIONS: '/video/download-instructions',  // 获取下载指令
     STATUS: '/video/status',
     HISTORY: '/video/history',
     DETAILS: '/video/details',
+  },
+
+  // Query-first 工作区
+  WORKSPACE: {
+    SKILLS: '/workspace/skills',
+    PLAN: '/workspace/plan',
+    PROCESS: '/workspace/process',
+    JOBS: '/workspace/jobs',
+    TRANSCRIPTION_PROVIDERS: '/workspace/transcription-providers',
+    PLANNER_EVALS: '/workspace/evals/planner',
   },
   
   // 分析结果
@@ -213,8 +220,7 @@ export interface AuthResponse {
 }
 
 export interface ProcessVideoRequest {
-  youtube_url?: string;
-  video_file?: File;
+  video_file: File;
 }
 
 export interface ProcessVideoResponse {
@@ -222,55 +228,182 @@ export interface ProcessVideoResponse {
   video_id: string;
   keyframes_count?: number;
   transcript_segments_count?: number;
-  metadata?: any;
-  video_summary?: any;
+  metadata?: unknown;
+  video_summary?: unknown;
   summary_generated?: boolean;
-  // 字幕模式特有字段
   source_type?: string;
   language?: string;
   transcript?: string | { segments?: Array<{ text: string }>; full_text?: string };
-  // 无字幕时的响应
-  download_instructions?: any;
   message?: string;
-  available_languages?: string[];
 }
 
-// YouTube信息检查响应
-export interface YouTubeInfoResponse {
-  status: string;
-  video_id: string;
-  has_transcript: boolean;
-  available_languages: string[];
-  has_manual_transcript: boolean;
-  has_auto_generated: boolean;
+export type ArtifactType = 'transcript' | 'summary' | 'notes' | 'content_locations' | 'qa_answer';
+
+export interface WorkspacePlanStep {
+  id: string;
+  skill: string;
+  depends_on: string[];
+  purpose: string;
+  inputs?: Record<string, unknown>;
+}
+
+export interface WorkspacePlan {
+  plan_id: string;
+  query: string;
+  artifact_type: ArtifactType;
+  steps: WorkspacePlanStep[];
+  requires_user_confirmation: boolean;
+  cost_tier: 'low' | 'medium' | 'high';
+  assumptions: string[];
+  rejected_capabilities: string[];
+}
+
+export interface WorkspaceArtifact {
+  artifact_id: string;
+  artifact_type: ArtifactType;
+  title: string;
+  content: string;
+  format: 'markdown' | 'text' | 'json';
+  citations: Array<{
+    segment_index?: number;
+    start_time: number;
+    end_time: number;
+    text: string;
+  }>;
+  metadata?: Record<string, unknown>;
+}
+
+export interface WorkspaceSkillTrace {
+  step_id: string;
+  skill: string;
+  status: 'planned' | 'running' | 'success' | 'skipped' | 'failed';
+  started_at?: string;
+  completed_at?: string;
+  duration_ms?: number;
+  output_summary?: string;
   error?: string;
-  message: string;
 }
 
-// 下载指令响应
-export interface DownloadInstructionsResponse {
-  status: string;
+export interface WorkspaceVideoAsset {
   video_id: string;
-  youtube_url: string;
-  instructions: {
-    title: string;
-    methods: Array<{
-      name: string;
-      description: string;
-      install?: string;
-      command?: string;
-      note?: string;
-      suggestions?: string[];
-      warning?: string;
-    }>;
-    tips: string[];
-  };
+  title: string;
+  duration: number;
+  source_type: 'upload';
+  processing_status: string;
+  transcript_segments_count: number;
+  summary_generated: boolean;
+  metadata: Record<string, unknown>;
+}
+
+export interface WorkspaceValidation {
+  valid: boolean;
+  errors: string[];
+  warnings: string[];
+}
+
+export interface WorkspaceProcessRequest {
+  video_file: File;
+  query: string;
+}
+
+export interface WorkspaceProcessResponse {
+  status: string;
+  video_asset: WorkspaceVideoAsset;
+  plan: WorkspacePlan;
+  validation: WorkspaceValidation;
+  artifact: WorkspaceArtifact;
+  transcript_index: Array<{
+    segment_index: number;
+    text: string;
+    start_time: number;
+    end_time: number;
+    confidence: number;
+  }>;
+  skill_trace: WorkspaceSkillTrace[];
+}
+
+export type WorkspaceJobStatusValue = 'queued' | 'running' | 'succeeded' | 'failed' | 'canceled';
+
+export interface WorkspaceCostEstimate {
+  source_file_bytes: number;
+  source_file_mb: number;
+  source_duration_seconds?: number | null;
+  estimated_audio_mb: number;
+  estimated_transcript_minutes: number;
+  provider: string;
+  estimated_audio_format: string;
+  chunking_expected: boolean;
+  chunk_seconds: number;
+  estimated_chunks: number;
+  estimate_source: 'media_duration' | 'file_size_fallback';
+}
+
+export interface WorkspaceJobStatus {
+  job_id: string;
+  status: WorkspaceJobStatusValue;
+  stage: string;
+  progress: number;
+  message: string;
+  query: string;
+  original_filename: string;
+  created_at: string;
+  updated_at: string;
+  attempts: number;
+  max_attempts: number;
+  retryable: boolean;
+  failed_stage?: string | null;
+  error?: string | null;
+  plan: WorkspacePlan;
+  validation: WorkspaceValidation;
+  skill_trace: WorkspaceSkillTrace[];
+  cost_estimate: WorkspaceCostEstimate;
+  artifact_available: boolean;
+  artifact_versions_count: number;
+  transcript_segments_count: number;
+  partial: boolean;
+}
+
+export interface WorkspaceJobCreateResponse {
+  status: string;
+  job_id: string;
+  job: WorkspaceJobStatus;
+}
+
+export interface WorkspaceJobStatusResponse {
+  status: string;
+  job: WorkspaceJobStatus;
+}
+
+export interface WorkspaceArtifactVersion {
+  version: number;
+  artifact: WorkspaceArtifact;
+  query: string;
+  plan_id: string;
+  created_at: string;
+}
+
+export interface WorkspaceJobArtifactResponse extends WorkspaceProcessResponse {
+  job_id: string;
+  artifact_versions: WorkspaceArtifactVersion[];
+}
+
+export interface WorkspaceQAResponse {
+  status: string;
+  job_id: string;
+  partial: boolean;
+  answer: string;
+  citations: Array<{
+    segment_index?: number;
+    start_time: number;
+    end_time: number;
+    text: string;
+  }>;
 }
 
 // Chat API 类型定义
 export interface ChatStartRequest {
   video_id: string;
-  metadata?: any;  // 可选，如果不提供，后端会自动从Supabase加载
+  metadata?: unknown;  // 可选，如果不提供，后端会自动从Supabase加载
 }
 
 export interface ChatStartResponse {
@@ -300,7 +433,7 @@ export interface ChatMessageResponse {
       text: string;
     }>;
     keyframe_ids?: number[];
-    keyframes?: any[];
+    keyframes?: unknown[];
   };
   history_length: number;
 }
@@ -312,7 +445,7 @@ export interface VideoHistoryItem {
   duration?: number;
   created_at: string;
   processing_status: 'pending' | 'processing' | 'completed' | 'failed';
-  source_type: 'upload' | 'youtube';
+  source_type: 'upload';
   thumbnail_url?: string;
 }
 
@@ -348,17 +481,10 @@ export const apiService = {
     return response;
   },
 
-  // 处理视频（通用接口，会自动选择字幕或上传流程）
+  // 处理上传视频
   async processVideo(data: ProcessVideoRequest): Promise<ProcessVideoResponse> {
     const formData = new FormData();
-    
-    if (data.youtube_url) {
-      formData.append('youtube_url', data.youtube_url);
-    }
-    
-    if (data.video_file) {
-      formData.append('video_file', data.video_file);
-    }
+    formData.append('video_file', data.video_file);
     
     return apiClient.postFormData<ProcessVideoResponse>(
       API_ENDPOINTS.VIDEO.PROCESS,
@@ -366,29 +492,56 @@ export const apiService = {
     );
   },
 
-  // 检查YouTube视频字幕可用性（轻量级，不下载视频）
-  async checkYouTubeInfo(youtubeUrl: string): Promise<YouTubeInfoResponse> {
-    return apiClient.get<YouTubeInfoResponse>(
-      `${API_ENDPOINTS.VIDEO.YOUTUBE_INFO}?youtube_url=${encodeURIComponent(youtubeUrl)}`
-    );
-  },
-
-  // 获取客户端下载指令
-  async getDownloadInstructions(youtubeUrl: string): Promise<DownloadInstructionsResponse> {
-    return apiClient.get<DownloadInstructionsResponse>(
-      `${API_ENDPOINTS.VIDEO.DOWNLOAD_INSTRUCTIONS}?youtube_url=${encodeURIComponent(youtubeUrl)}`
-    );
-  },
-
-  // 仅使用YouTube字幕处理（推荐方式，不下载视频）
-  async processYouTubeTranscript(youtubeUrl: string): Promise<ProcessVideoResponse> {
+  // Query-first workspace 处理
+  async processWorkspaceQuery(data: WorkspaceProcessRequest): Promise<WorkspaceProcessResponse> {
     const formData = new FormData();
-    formData.append('youtube_url', youtubeUrl);
-    
-    return apiClient.postFormData<ProcessVideoResponse>(
-      API_ENDPOINTS.VIDEO.PROCESS_TRANSCRIPT,
+    formData.append('video_file', data.video_file);
+    formData.append('query', data.query);
+
+    return apiClient.postFormData<WorkspaceProcessResponse>(
+      API_ENDPOINTS.WORKSPACE.PROCESS,
       formData
     );
+  },
+
+  async createWorkspaceJob(data: WorkspaceProcessRequest): Promise<WorkspaceJobCreateResponse> {
+    const formData = new FormData();
+    formData.append('video_file', data.video_file);
+    formData.append('query', data.query);
+
+    return apiClient.postFormData<WorkspaceJobCreateResponse>(
+      API_ENDPOINTS.WORKSPACE.JOBS,
+      formData
+    );
+  },
+
+  async getWorkspaceJob(jobId: string): Promise<WorkspaceJobStatusResponse> {
+    return apiClient.get<WorkspaceJobStatusResponse>(
+      `${API_ENDPOINTS.WORKSPACE.JOBS}/${jobId}`
+    );
+  },
+
+  async getWorkspaceJobArtifact(jobId: string): Promise<WorkspaceJobArtifactResponse> {
+    return apiClient.get<WorkspaceJobArtifactResponse>(
+      `${API_ENDPOINTS.WORKSPACE.JOBS}/${jobId}/artifact`
+    );
+  },
+
+  async retryWorkspaceJob(jobId: string): Promise<WorkspaceJobStatusResponse> {
+    return apiClient.post<WorkspaceJobStatusResponse>(
+      `${API_ENDPOINTS.WORKSPACE.JOBS}/${jobId}/retry`
+    );
+  },
+
+  async askWorkspaceJob(jobId: string, question: string, top_k = 5): Promise<WorkspaceQAResponse> {
+    return apiClient.post<WorkspaceQAResponse>(
+      `${API_ENDPOINTS.WORKSPACE.JOBS}/${jobId}/qa`,
+      { question, top_k }
+    );
+  },
+
+  async planWorkspaceQuery(query: string): Promise<{ status: string; plan: WorkspacePlan; validation: WorkspaceValidation }> {
+    return apiClient.post(API_ENDPOINTS.WORKSPACE.PLAN, { query });
   },
 
   // 退出登录
@@ -431,8 +584,8 @@ export const apiService = {
   // ========================================================================
 
   // 获取用户资料
-  async getUserProfile(): Promise<any> {
-    return apiClient.get<any>(API_ENDPOINTS.USER.PROFILE);
+  async getUserProfile(): Promise<unknown> {
+    return apiClient.get<unknown>(API_ENDPOINTS.USER.PROFILE);
   },
 
   // 更新用户资料
@@ -440,30 +593,30 @@ export const apiService = {
     display_name?: string;
     gender?: 'male' | 'female' | 'other' | 'prefer_not_to_say';
     birthday?: string;
-  }): Promise<any> {
-    return apiClient.put<any>(API_ENDPOINTS.USER.PROFILE, data);
+  }): Promise<unknown> {
+    return apiClient.put<unknown>(API_ENDPOINTS.USER.PROFILE, data);
   },
 
   // 获取用户设置
-  async getUserSettings(): Promise<any> {
-    return apiClient.get<any>(API_ENDPOINTS.USER.SETTINGS);
+  async getUserSettings(): Promise<unknown> {
+    return apiClient.get<unknown>(API_ENDPOINTS.USER.SETTINGS);
   },
 
   // 更新用户设置
   async updateUserSettings(data: {
     language?: string;
     theme?: 'system' | 'light' | 'dark';
-  }): Promise<any> {
-    return apiClient.put<any>(API_ENDPOINTS.USER.SETTINGS, data);
+  }): Promise<unknown> {
+    return apiClient.put<unknown>(API_ENDPOINTS.USER.SETTINGS, data);
   },
 
   // 获取用户配额
-  async getUserQuota(): Promise<any> {
-    return apiClient.get<any>(API_ENDPOINTS.USER.QUOTA);
+  async getUserQuota(): Promise<unknown> {
+    return apiClient.get<unknown>(API_ENDPOINTS.USER.QUOTA);
   },
 
   // 获取用户统计
-  async getUserStats(): Promise<any> {
-    return apiClient.get<any>(API_ENDPOINTS.USER.STATS);
+  async getUserStats(): Promise<unknown> {
+    return apiClient.get<unknown>(API_ENDPOINTS.USER.STATS);
   },
 };

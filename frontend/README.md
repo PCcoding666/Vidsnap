@@ -1,73 +1,69 @@
-# Welcome to your Lovable project
+# VidSnap Frontend
 
-## Project info
+VidSnap 前端是 Vite + React + TypeScript + Tailwind CSS + shadcn/ui。根目录 [README.md](../README.md) 是项目主入口；本文只记录前端开发要点。
 
-**URL**: https://lovable.dev/projects/39312d39-a0a9-49e6-8b85-21c263005dab
+## 本地开发
 
-## How can I edit this code?
-
-There are several ways of editing your application.
-
-**Use Lovable**
-
-Simply visit the [Lovable Project](https://lovable.dev/projects/39312d39-a0a9-49e6-8b85-21c263005dab) and start prompting.
-
-Changes made via Lovable will be committed automatically to this repo.
-
-**Use your preferred IDE**
-
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
-
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
-
-Follow these steps:
-
-```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
-
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
-
-# Step 3: Install the necessary dependencies.
-npm i
-
-# Step 4: Start the development server with auto-reloading and an instant preview.
-npm run dev
+```bash
+npm ci
+npm run dev -- --port 8081 --host 0.0.0.0
 ```
 
-**Edit a file directly in GitHub**
+默认访问：
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+```text
+http://localhost:8081
+```
 
-**Use GitHub Codespaces**
+完整本地环境建议从仓库根目录启动：
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
+```bash
+../start_local.sh
+```
 
-## What technologies are used for this project?
+或在根目录运行：
 
-This project is built with:
+```bash
+./start_local.sh
+```
 
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
+## 常用命令
 
-## How can I deploy this project?
+```bash
+npm run dev
+npm run lint
+npm run build
+npm run preview
+```
 
-Simply open [Lovable](https://lovable.dev/projects/39312d39-a0a9-49e6-8b85-21c263005dab) and click on Share -> Publish.
+## 目录结构
 
-## Can I connect a custom domain to my Lovable project?
+```text
+src/
+├── components/        # shared and feature UI
+├── components/ui/     # shadcn/ui primitives
+├── config/            # frontend config helpers
+├── contexts/          # React context
+├── i18n/              # translations
+├── integrations/      # legacy Supabase client/types
+├── pages/             # route screens
+└── services/          # API client and API types
+```
 
-Yes, you can!
+## API 配置
 
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
+开发环境中 `src/services/api.ts` 使用 `/api/v1` 作为 base URL，依赖 Vite 代理或同源代理转发到 FastAPI。生产构建使用：
 
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
+```bash
+VITE_API_BASE_URL=https://vidsnap.example.com/api/v1
+```
+
+更多配置见 [docs/configuration.md](../docs/configuration.md)。
+
+## 开发规则
+
+- 新页面放在 `src/pages/`。
+- 可复用业务组件放在 `src/components/`。
+- shadcn/ui primitive 放在 `src/components/ui/`。
+- API 类型和请求方法优先维护在 `src/services/api.ts`。
+- 可见 UI 改动提交前运行 `npm run lint` 和 `npm run build`。

@@ -5,7 +5,7 @@ const steps = [
     icon: Upload,
     number: "01",
     title: "Input Your Video",
-    description: "Paste a YouTube link or upload a local video file (MP4, AVI, MOV, MKV). Processing starts instantly.",
+    description: "Upload a local video file (MP4, MOV, MKV, AVI, WEBM, M4V). Processing starts instantly.",
     color: "text-blue-500"
   },
   {

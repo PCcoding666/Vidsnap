@@ -2,7 +2,7 @@ import VideoInputPanel from "@/components/dashboard/VideoInputPanel";
 import HistoryPanel from "@/components/dashboard/HistoryPanel";
 
 interface LeftPanelProps {
-  onStartProcessing: (input: string | File, type: "youtube" | "upload") => void;
+  onStartProcessing: (file: File, query: string) => void;
   processingState: "idle" | "processing" | "completed" | "error";
   onVideoSelect?: (videoId: string) => void;
 }

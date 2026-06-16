@@ -4,9 +4,10 @@ import KeyframesGallery from "./KeyframesGallery";
 import VideoChatBot from "./VideoChatBot";
 import TranscriptViewer from "./TranscriptViewer";
 import { FileText, Image, MessageSquare, ScrollText } from "lucide-react";
+import type { VideoData } from "@/pages/MainApp";
 
 interface ResultTabsProps {
-  videoData: any;
+  videoData: VideoData;
 }
 
 const ResultTabs = ({ videoData }: ResultTabsProps) => {

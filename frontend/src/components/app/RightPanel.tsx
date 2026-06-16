@@ -4,7 +4,7 @@ import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Send, Sparkles, User, Bot, X, MessageSquare, Zap, FileSearch, Video } from "lucide-react";
 import type { VideoData } from "@/pages/MainApp";
-import { apiService } from "@/services/api";
+import { apiService, type WorkspaceJobStatus } from "@/services/api";
 import { useToast } from "@/hooks/use-toast";
 import StreamingMessage from "@/components/chat/StreamingMessage";
 import MarkdownRenderer from "@/components/chat/MarkdownRenderer";
@@ -25,14 +25,20 @@ interface RightPanelProps {
   onHighlightKeyframes: (frameIds: number[]) => void;
   selectedKeyframe?: { id: number; url: string } | null;
   onKeyframeUsed?: () => void;
+  workspaceJob?: WorkspaceJobStatus | null;
 }
+
+const getErrorMessage = (error: unknown, fallback: string) => {
+  return error instanceof Error ? error.message : fallback;
+};
 
 const RightPanel = ({ 
   videoData, 
   onTimestampJump, 
   onHighlightKeyframes, 
   selectedKeyframe,
-  onKeyframeUsed
+  onKeyframeUsed,
+  workspaceJob,
 }: RightPanelProps) => {
   const { toast } = useToast();
   const [messages, setMessages] = useState<Message[]>([]);
@@ -46,6 +52,7 @@ const RightPanel = ({
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const MAX_KEYFRAMES = 5;
+  const activeWorkspaceJobId = videoData?.workspaceJobId || workspaceJob?.job_id;
   const sessionReady = sessionId !== null;
 
   useEffect(() => {
@@ -83,13 +90,18 @@ const RightPanel = ({
   }, [selectedKeyframe]);
   
   useEffect(() => {
-    if (videoData && !sessionId) {
+    if ((videoData || activeWorkspaceJobId) && !sessionId) {
       initializeChatSession();
     }
-  }, [videoData]);
+  }, [videoData, activeWorkspaceJobId]);
 
   const initializeChatSession = async () => {
-    if (!videoData || isInitializing) return;
+    if ((!videoData && !activeWorkspaceJobId) || isInitializing) return;
+
+    if (activeWorkspaceJobId) {
+      setSessionId(`workspace:${activeWorkspaceJobId}`);
+      return;
+    }
     
     setIsInitializing(true);
     try {
@@ -101,12 +113,12 @@ const RightPanel = ({
         setSessionId(response.session_id);
         console.log("✅ 聊天会话已初始化:", response.session_id);
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("聊天会话初始化失败:", error);
       toast({
         variant: "destructive",
         title: "会话初始化失败",
-        description: error.message || "无法启动聊天功能",
+        description: getErrorMessage(error, "无法启动聊天功能"),
       });
     } finally {
       setIsInitializing(false);
@@ -144,15 +156,36 @@ const RightPanel = ({
     setStreamingMessageId(aiMessageId);
 
     try {
-      const response = await apiService.sendChatMessage({
-        session_id: sessionId!,
-        question: userMessage.content,
-        keyframe_ids: selectedKeyframes.length > 0 ? selectedKeyframes.map(kf => kf.id) : undefined,
-        top_k: 5,
-        auto_keyframes: false,
-      });
+      if (activeWorkspaceJobId) {
+        const response = await apiService.askWorkspaceJob(activeWorkspaceJobId, userMessage.content, 5);
 
-      if (response.status === "success") {
+        if (response.status === "success") {
+          setMessages((prev) =>
+            prev.map((msg) =>
+              msg.id === aiMessageId
+                ? {
+                    ...msg,
+                    content: response.answer,
+                    timestamp: response.citations?.[0]?.start_time,
+                  }
+                : msg
+            )
+          );
+
+          setTimeout(() => {
+            setStreamingMessageId(null);
+          }, response.answer.length * 20 + 500);
+        }
+      } else {
+        const response = await apiService.sendChatMessage({
+          session_id: sessionId!,
+          question: userMessage.content,
+          keyframe_ids: selectedKeyframes.length > 0 ? selectedKeyframes.map(kf => kf.id) : undefined,
+          top_k: 5,
+          auto_keyframes: false,
+        });
+
+        if (response.status === "success") {
         setMessages((prev) =>
           prev.map((msg) =>
             msg.id === aiMessageId
@@ -174,15 +207,16 @@ const RightPanel = ({
         setTimeout(() => {
           setStreamingMessageId(null);
         }, response.answer.length * 20 + 500);
+        }
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("发送消息失败:", error);
       setMessages((prev) =>
         prev.map((msg) =>
           msg.id === aiMessageId
             ? {
                 ...msg,
-                content: `❌ Sorry, an error occurred: ${error.message || 'Unable to get response'}`,
+                content: `❌ Sorry, an error occurred: ${getErrorMessage(error, "Unable to get response")}`,
               }
             : msg
         )
@@ -266,7 +300,7 @@ const RightPanel = ({
                   </div>
                   <div className="mt-4 pt-3 border-t border-border/50 flex items-center gap-2 text-xs text-muted-foreground">
                     <Video className="w-3.5 h-3.5" />
-                    <span>Paste a YouTube URL to get started →</span>
+                    <span>Upload a local video to get started.</span>
                   </div>
                 </div>
               </div>

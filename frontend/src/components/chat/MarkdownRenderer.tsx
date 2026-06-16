@@ -17,7 +17,7 @@ const MarkdownRenderer = ({ content }: MarkdownRendererProps) => {
       
       return !isInline ? (
         <SyntaxHighlighter
-          style={oneDark as any}
+          style={oneDark}
           language={match[1]}
           PreTag="div"
           className="rounded-lg !mt-2 !mb-2"

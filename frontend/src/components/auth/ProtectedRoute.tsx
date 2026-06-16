@@ -1,6 +1,7 @@
 import { Navigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { Loader2 } from 'lucide-react';
+import { isAuthDisabled } from '@/config/auth';
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
@@ -8,6 +9,10 @@ interface ProtectedRouteProps {
 
 const ProtectedRoute = ({ children }: ProtectedRouteProps) => {
   const { user, isLoading } = useAuth();
+
+  if (isAuthDisabled) {
+    return <>{children}</>;
+  }
 
   if (isLoading) {
     return (

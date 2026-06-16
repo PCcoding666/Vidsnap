@@ -2,6 +2,7 @@ import { createContext, useContext, useEffect, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import type { User, Session } from '@supabase/supabase-js';
 import { apiClient } from '@/services/api';
+import { isAuthDisabled } from '@/config/auth';
 
 interface AuthContextType {
   user: User | null;
@@ -31,6 +32,14 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
+    if (isAuthDisabled) {
+      apiClient.clearToken();
+      setSession(null);
+      setUser(null);
+      setIsLoading(false);
+      return;
+    }
+
     // 获取初始会话
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
@@ -63,7 +72,9 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   }, []);
 
   const signOut = async () => {
-    await supabase.auth.signOut();
+    if (!isAuthDisabled) {
+      await supabase.auth.signOut();
+    }
     apiClient.clearToken();
   };
 

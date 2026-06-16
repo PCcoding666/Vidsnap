@@ -11,6 +11,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { isAuthDisabled } from "@/config/auth";
 
 const Header = () => {
   const { user, signOut } = useAuth();
@@ -21,8 +22,10 @@ const Header = () => {
   const isMainApp = location.pathname === '/app'; // 判断是否在主应用页面
   
   const handleSignOut = async () => {
-    await signOut();
-    navigate('/login');
+    if (!isAuthDisabled) {
+      await signOut();
+    }
+    navigate(isAuthDisabled ? '/app' : '/login');
   };
   
   const getUserInitials = () => {
@@ -68,7 +71,7 @@ const Header = () => {
           )}
 
           <div className="flex items-center gap-3">
-            {user ? (
+            {isAuthDisabled ? null : user ? (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button variant="ghost" className="relative h-9 w-9 rounded-full">

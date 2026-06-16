@@ -5,24 +5,28 @@ import { ThemeSupa } from '@supabase/auth-ui-shared';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { Card } from '@/components/ui/card';
+import { isAuthDisabled } from '@/config/auth';
 
 const Login = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
 
   useEffect(() => {
-    // 如果已登录，重定向到应用主页
-    if (user) {
-      navigate('/app');
+    if (isAuthDisabled || user) {
+      navigate('/app', { replace: true });
     }
   }, [user, navigate]);
+
+  if (isAuthDisabled) {
+    return null;
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-background to-muted/20 flex items-center justify-center p-4">
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
           <h1 className="text-4xl font-bold mb-2 bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent">
-            YouTube Video Analysis
+            VidSnap Video Analysis
           </h1>
           <p className="text-muted-foreground">Sign in to access your video history and premium features</p>
         </div>

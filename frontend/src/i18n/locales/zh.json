@@ -1,7 +1,6 @@
 {
   "processing": {
     "startTitle": "开始处理视频",
-    "downloadingYoutube": "正在下载并分析 YouTube 视频...",
     "uploadingVideo": "正在上传并分析视频文件...",
     "completeTitle": "✅ 处理完成",
     "completeDescription": "视频分析成功，生成了 {{count}} 个关键帧",
