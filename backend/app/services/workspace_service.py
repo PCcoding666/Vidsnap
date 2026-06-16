@@ -40,8 +40,10 @@ class WorkspaceService:
         query: str,
         user_id: Optional[str] = None,
         progress_callback: Optional[callable] = None,
+        plan=None,
     ) -> WorkspaceProcessResponse:
-        plan = planner_service.create_plan(query)
+        # 允许调用方传入预建 plan（含用户手动补充的工具），否则按 query 重新规划。
+        plan = plan or planner_service.create_plan(query)
         validation = skill_registry.validate_plan(plan)
         trace = self._initial_trace(plan.steps)
 

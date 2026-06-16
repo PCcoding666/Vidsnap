@@ -67,7 +67,7 @@ async def create_plan(payload: QueryPlanRequest):
         raise HTTPException(status_code=400, detail="query 不能为空")
 
     try:
-        plan = planner_service.create_plan(payload.query)
+        plan = planner_service.create_plan(payload.query, payload.force_skills)
         validation = skill_registry.validate_plan(plan)
         return QueryPlanResponse(status="success", plan=plan, validation=validation)
     except ValueError as e:
@@ -80,10 +80,12 @@ async def create_workspace_job(
     video_file: UploadFile = File(...),
     query: str = Form(...),
     provider: str = Form("paraformer"),
+    force_skills: str = Form(""),
     credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
 ):
     """Create a recoverable async workspace job."""
     ctx_logger = get_context_logger()
+    forced_skills = [s.strip() for s in force_skills.split(",") if s.strip()]
 
     if not query.strip():
         raise HTTPException(status_code=400, detail="query 不能为空")
@@ -117,6 +119,7 @@ async def create_workspace_job(
             query=query.strip(),
             user_id=user_id,
             provider=provider,
+            force_skills=forced_skills,
         )
 
         ctx_logger.info(

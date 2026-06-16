@@ -23,6 +23,11 @@ export default defineConfig(({ mode }) => ({
         changeOrigin: true,
         // 不重写路径，保持 /api/v1 前缀
       },
+      // ExtractFrames 截帧 JPEG 静态资源
+      '/static': {
+        target: 'http://localhost:8000',
+        changeOrigin: true,
+      },
     },
   },
   preview: {

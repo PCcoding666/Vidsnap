@@ -113,6 +113,8 @@ class QueryPlanRequest(BaseModel):
     """Request body for plan preview."""
 
     query: str
+    # 用户手动补充的工具（如 "ExtractFrames"）；planner 会强制纳入对应步骤。
+    force_skills: List[str] = Field(default_factory=list)
 
 
 class QueryPlanResponse(BaseModel):

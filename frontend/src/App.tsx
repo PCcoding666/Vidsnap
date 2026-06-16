@@ -9,6 +9,7 @@ import Index from "./pages/Index";
 import MainApp from "./pages/MainApp";
 import Login from "./pages/Login";
 import ApiTest from "./pages/ApiTest";
+import Lab from "./pages/Lab";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -29,6 +30,7 @@ const App = () => (
               </ProtectedRoute>
             } />
             <Route path="/api-test" element={<ApiTest />} />
+            <Route path="/lab" element={<Lab />} />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
           </Routes>

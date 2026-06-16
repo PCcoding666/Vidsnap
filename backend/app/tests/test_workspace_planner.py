@@ -64,3 +64,14 @@ def test_extract_frames_only_for_explicit_visual_requests():
     assert "ExtractFrames" not in {step.skill for step in normal_plan.steps}
     assert "ExtractFrames" in {step.skill for step in visual_plan.steps}
     assert visual_plan.requires_user_confirmation
+
+
+def test_force_skills_supplements_extract_frames():
+    # 普通摘要 query 默认不含 ExtractFrames
+    base = planner_service.create_plan("总结这个视频")
+    assert "ExtractFrames" not in {s.skill for s in base.steps}
+
+    # 手动补充 ExtractFrames 后强制走带截帧的 notes 链路
+    forced = planner_service.create_plan("总结这个视频", force_skills=["ExtractFrames"])
+    assert forced.artifact_type == "notes"
+    assert "ExtractFrames" in {s.skill for s in forced.steps}

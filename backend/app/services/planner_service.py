@@ -7,7 +7,7 @@ the same SkillPlan contract later.
 """
 import hashlib
 import re
-from typing import List, Set
+from typing import List, Optional, Set
 
 from ..models.workspace import ArtifactType, PlanStep, SkillPlan
 from .skill_registry_service import skill_registry
@@ -100,10 +100,15 @@ class PlannerService:
         "key points",
     }
 
-    def create_plan(self, query: str) -> SkillPlan:
+    def create_plan(self, query: str, force_skills: Optional[List[str]] = None) -> SkillPlan:
+        forced = set(force_skills or [])
         normalized_query = self._normalize_query(query)
         artifact_type = self._detect_artifact_type(normalized_query)
         requires_visual = self._contains_any(normalized_query, self.visual_terms)
+        # 用户手动补充 ExtractFrames：强制走带截帧的 notes 链路（帧锚定在 notes 产物上）
+        if "ExtractFrames" in forced:
+            requires_visual = True
+            artifact_type = "notes"
         cost_tier = "medium" if artifact_type in {"notes", "summary"} or requires_visual else "low"
 
         steps: List[PlanStep] = [

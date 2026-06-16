@@ -79,8 +79,9 @@ class WorkspaceJobService:
         user_id: Optional[str] = None,
         provider: str = "paraformer",
         start_immediately: bool = True,
+        force_skills: Optional[List[str]] = None,
     ) -> WorkspaceJobStatus:
-        plan = planner_service.create_plan(query)
+        plan = planner_service.create_plan(query, force_skills)
         validation = skill_registry.validate_plan(plan)
         if not validation.valid:
             raise ValueError("; ".join(validation.errors))
@@ -330,6 +331,7 @@ class WorkspaceJobService:
                 query=job.query,
                 user_id=self.user_ids.get(job_id),
                 progress_callback=lambda message: self._progress_from_pipeline(job_id, message),
+                plan=job.plan,
             )
             self.results[job_id] = result
             self._append_artifact_version(job_id, result, job.query)
