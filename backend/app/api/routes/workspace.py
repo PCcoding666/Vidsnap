@@ -1,0 +1,378 @@
+"""
+Query-first VidSnap workspace routes.
+"""
+import json
+import os
+import tempfile
+import time
+from pathlib import Path
+from typing import Optional
+
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile, status
+from fastapi.responses import StreamingResponse
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+
+from ...core.logging import get_context_logger, logger
+from ...models.workspace import (
+    QueryPlanRequest,
+    QueryPlanResponse,
+    WorkspaceArtifactCreateRequest,
+    WorkspaceJobCreateResponse,
+    WorkspaceQARequest,
+)
+from ...services.planner_service import planner_service
+from ...services.skill_registry_service import skill_registry
+from ...services.supabase_service import supabase_service
+from ...services.transcription_provider_service import transcription_provider_registry
+from ...services.workspace_job_service import workspace_job_service
+from ...services.workspace_service import workspace_service
+
+router = APIRouter(prefix="/workspace", tags=["workspace"])
+security = HTTPBearer(auto_error=False)
+
+ALLOWED_VIDEO_EXTENSIONS = {".mp4", ".mov", ".mkv", ".avi", ".webm", ".m4v"}
+
+
+@router.get("/skills")
+async def list_skills():
+    """List all externally visible P0 skills."""
+    return {
+        "status": "success",
+        "skills": [skill.dict() for skill in skill_registry.list_skills()],
+    }
+
+
+@router.get("/transcription-providers")
+async def list_transcription_providers():
+    """List ASR provider adapters."""
+    transcription_provider_registry.refresh()
+    return {
+        "status": "success",
+        "providers": [
+            provider.__dict__
+            for provider in transcription_provider_registry.list_providers()
+        ],
+    }
+
+
+@router.post("/plan", response_model=QueryPlanResponse)
+async def create_plan(payload: QueryPlanRequest):
+    """Preview a structured skill plan for a user query."""
+    if not payload.query.strip():
+        raise HTTPException(status_code=400, detail="query 不能为空")
+
+    try:
+        plan = planner_service.create_plan(payload.query)
+        validation = skill_registry.validate_plan(plan)
+        return QueryPlanResponse(status="success", plan=plan, validation=validation)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+async def _resolve_user_id(credentials: Optional[HTTPAuthorizationCredentials]) -> Optional[str]:
+    if credentials and supabase_service.is_available():
+        try:
+            user = supabase_service.verify_token(credentials.credentials)
+            if user:
+                user_id = user.get("id")
+                if not supabase_service.check_user_quota(str(user_id)):
+                    raise HTTPException(
+                        status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                        detail="已达到本月视频处理上限或存储空间已满",
+                    )
+                return user_id
+        except HTTPException:
+            raise
+        except Exception as e:
+            get_context_logger().warning(f"Token 验证失败，使用匿名模式: {e}")
+    return None
+
+
+@router.post("/jobs", response_model=WorkspaceJobCreateResponse)
+async def create_workspace_job(
+    request: Request,
+    video_file: UploadFile = File(...),
+    query: str = Form(...),
+    provider: str = Form("paraformer"),
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
+):
+    """Create a recoverable async workspace job."""
+    ctx_logger = get_context_logger()
+
+    if not query.strip():
+        raise HTTPException(status_code=400, detail="query 不能为空")
+
+    if not video_file or not video_file.filename:
+        raise HTTPException(status_code=400, detail="必须上传本地视频文件")
+
+    file_suffix = Path(video_file.filename).suffix.lower()
+    if file_suffix not in ALLOWED_VIDEO_EXTENSIONS:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"不支持的视频格式: {file_suffix or 'unknown'}，"
+                "请上传 MP4、MOV、MKV、AVI、WEBM 或 M4V 文件"
+            ),
+        )
+
+    user_id = await _resolve_user_id(credentials)
+    upload_dir = tempfile.mkdtemp(prefix="vidsnap_workspace_job_")
+    safe_filename = Path(video_file.filename).name
+    video_path = os.path.join(upload_dir, safe_filename)
+
+    try:
+        with open(video_path, "wb") as buffer:
+            while chunk := await video_file.read(1024 * 1024):
+                buffer.write(chunk)
+
+        job = await workspace_job_service.create_job(
+            video_file_path=video_path,
+            original_filename=safe_filename,
+            query=query.strip(),
+            user_id=user_id,
+            provider=provider,
+        )
+
+        ctx_logger.info(
+            "workspace job accepted",
+            job_id=job.job_id,
+            file_name=video_file.filename,
+            query=query,
+            client_host=request.client.host if request.client else "unknown",
+        )
+        return WorkspaceJobCreateResponse(status="success", job_id=job.job_id, job=job)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        ctx_logger.exception(f"workspace job 创建失败: {e}")
+        raise HTTPException(status_code=500, detail=f"workspace job 创建失败: {str(e)}")
+    finally:
+        try:
+            if os.path.exists(video_path):
+                os.remove(video_path)
+            if os.path.isdir(upload_dir):
+                os.rmdir(upload_dir)
+        except Exception as e:
+            logger.warning(f"清理 workspace job 上传临时文件失败: {e}")
+
+
+@router.get("/jobs/{job_id}")
+async def get_workspace_job(job_id: str):
+    job = workspace_job_service.get_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="job not found")
+    return {"status": "success", "job": job}
+
+
+@router.get("/jobs/{job_id}/artifact")
+async def get_workspace_job_artifact(job_id: str):
+    response = workspace_job_service.get_artifact_response(job_id)
+    if not response:
+        raise HTTPException(status_code=404, detail="artifact not ready")
+    return response
+
+
+@router.post("/jobs/{job_id}/retry")
+async def retry_workspace_job(job_id: str):
+    try:
+        job = await workspace_job_service.retry_job(job_id)
+        return {"status": "success", "job_id": job_id, "job": job}
+    except KeyError:
+        raise HTTPException(status_code=404, detail="job not found")
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.post("/jobs/{job_id}/artifacts")
+async def create_workspace_job_artifact_version(job_id: str, payload: WorkspaceArtifactCreateRequest):
+    if not payload.query.strip():
+        raise HTTPException(status_code=400, detail="query 不能为空")
+    try:
+        return await workspace_job_service.create_artifact_version(job_id, payload)
+    except KeyError:
+        raise HTTPException(status_code=404, detail="job not found")
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.post("/jobs/{job_id}/qa")
+async def ask_workspace_job(job_id: str, payload: WorkspaceQARequest):
+    if not payload.question.strip():
+        raise HTTPException(status_code=400, detail="question 不能为空")
+    try:
+        return workspace_job_service.answer_question(job_id, payload.question, payload.top_k)
+    except KeyError:
+        raise HTTPException(status_code=404, detail="job not found")
+
+
+@router.get("/jobs/{job_id}/events")
+async def stream_workspace_job_events(job_id: str):
+    if not workspace_job_service.get_job(job_id):
+        raise HTTPException(status_code=404, detail="job not found")
+    return StreamingResponse(
+        workspace_job_service.event_snapshots(job_id),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache"},
+    )
+
+
+@router.post("/process")
+async def process_workspace_query(
+    request: Request,
+    video_file: UploadFile = File(...),
+    query: str = Form(...),
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
+):
+    """
+    Execute the P0 flow: local video + natural language query -> plan -> artifact.
+    """
+    ctx_logger = get_context_logger()
+    start_time = time.time()
+
+    if not query.strip():
+        raise HTTPException(status_code=400, detail="query 不能为空")
+
+    if not video_file or not video_file.filename:
+        raise HTTPException(status_code=400, detail="必须上传本地视频文件")
+
+    file_suffix = Path(video_file.filename).suffix.lower()
+    if file_suffix not in ALLOWED_VIDEO_EXTENSIONS:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"不支持的视频格式: {file_suffix or 'unknown'}，"
+                "请上传 MP4、MOV、MKV、AVI、WEBM 或 M4V 文件"
+            ),
+        )
+
+    user_id = None
+    if credentials and supabase_service.is_available():
+        try:
+            user = supabase_service.verify_token(credentials.credentials)
+            if user:
+                user_id = user.get("id")
+                if not supabase_service.check_user_quota(str(user_id)):
+                    raise HTTPException(
+                        status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                        detail="已达到本月视频处理上限或存储空间已满",
+                    )
+        except HTTPException:
+            raise
+        except Exception as e:
+            ctx_logger.warning(f"Token 验证失败，使用匿名模式: {e}")
+
+    video_path = None
+    try:
+        upload_dir = tempfile.mkdtemp(prefix="vidsnap_workspace_")
+        safe_filename = Path(video_file.filename).name
+        video_path = os.path.join(upload_dir, safe_filename)
+
+        with open(video_path, "wb") as buffer:
+            while chunk := await video_file.read(1024 * 1024):
+                buffer.write(chunk)
+
+        ctx_logger.info(
+            "执行 query-first workspace 任务",
+            file_name=video_file.filename,
+            query=query,
+            client_host=request.client.host if request.client else "unknown",
+        )
+
+        response = await workspace_service.process_video_query(
+            video_file_path=video_path,
+            original_filename=safe_filename,
+            query=query,
+            user_id=user_id,
+        )
+
+        if user_id and response.status == "success" and supabase_service.is_available():
+            try:
+                supabase_service.increment_video_usage(user_id)
+            except Exception as e:
+                logger.warning(f"更新用户配额失败: {e}")
+
+        ctx_logger.info(
+            "workspace 任务完成",
+            duration_ms=round((time.time() - start_time) * 1000, 2),
+            artifact_type=response.artifact.artifact_type,
+            video_id=response.video_asset.video_id,
+        )
+        return response
+    except HTTPException:
+        raise
+    except Exception as e:
+        ctx_logger.exception(f"workspace 任务失败: {e}")
+        raise HTTPException(status_code=500, detail=f"workspace 任务失败: {str(e)}")
+    finally:
+        if video_path and os.path.exists(video_path):
+            try:
+                os.remove(video_path)
+                parent_dir = os.path.dirname(video_path)
+                if parent_dir.startswith(tempfile.gettempdir()) and os.path.isdir(parent_dir):
+                    os.rmdir(parent_dir)
+            except Exception as e:
+                logger.warning(f"清理 workspace 临时文件失败: {e}")
+
+
+@router.get("/evals/planner")
+async def evaluate_planner():
+    """
+    Evaluate deterministic planner against the 100-query P0 golden set.
+    """
+    eval_path = Path(__file__).resolve().parents[2] / "evals" / "planner_eval_set.json"
+    if not eval_path.exists():
+        raise HTTPException(status_code=404, detail="planner eval set not found")
+
+    cases = json.loads(eval_path.read_text(encoding="utf-8"))
+    total = len(cases)
+    required_hits = 0
+    forbidden_violations = 0
+    artifact_hits = 0
+
+    failures = []
+    for case in cases:
+        plan = planner_service.create_plan(case["query"])
+        planned_skills = {step.skill for step in plan.steps}
+        required = set(case["required_skills"])
+        forbidden = set(case.get("forbidden_skills", []))
+
+        missing = sorted(required - planned_skills)
+        forbidden_used = sorted(forbidden & planned_skills)
+
+        if not missing:
+            required_hits += 1
+        if not forbidden_used:
+            forbidden_violations += 1
+        if plan.artifact_type == case["expected_artifact"]:
+            artifact_hits += 1
+        if missing or forbidden_used or plan.artifact_type != case["expected_artifact"]:
+            failures.append(
+                {
+                    "id": case["id"],
+                    "query": case["query"],
+                    "expected_artifact": case["expected_artifact"],
+                    "actual_artifact": plan.artifact_type,
+                    "missing_required": missing,
+                    "forbidden_used": forbidden_used,
+                }
+            )
+
+    selection_accuracy = required_hits / total if total else 0
+    unnecessary_skill_pass_rate = forbidden_violations / total if total else 0
+    artifact_accuracy = artifact_hits / total if total else 0
+    passes_p0 = (
+        total >= 100
+        and selection_accuracy >= 0.85
+        and (1 - unnecessary_skill_pass_rate) <= 0.15
+        and artifact_accuracy >= 0.85
+    )
+
+    return {
+        "status": "success",
+        "total": total,
+        "selection_accuracy": round(selection_accuracy, 4),
+        "unnecessary_skill_rate": round(1 - unnecessary_skill_pass_rate, 4),
+        "artifact_accuracy": round(artifact_accuracy, 4),
+        "passes_p0": passes_p0,
+        "failures": failures[:20],
+    }
