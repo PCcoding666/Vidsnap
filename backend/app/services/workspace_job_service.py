@@ -81,7 +81,7 @@ class WorkspaceJobService:
             plan=plan,
             validation=validation,
             skill_trace=workspace_service._initial_trace(plan.steps),
-            cost_estimate=self._estimate(saved_path, provider),
+            cost_estimate=await self._estimate(saved_path, provider),
         )
 
         async with self._lock:
@@ -249,6 +249,8 @@ class WorkspaceJobService:
                 transcript_segments_count=len(result.transcript_index),
                 partial=False,
             )
+            # 成功后产物（transcript_index / artifact）已驻留内存，原始视频不再需要。
+            self._cleanup_input(job_id)
         except Exception as exc:
             current_stage = self._require_job(job_id).stage
             error = str(exc)
@@ -261,6 +263,10 @@ class WorkspaceJobService:
             if failure_stage == "failed":
                 failure_stage = current_stage
             self._fail(job_id, error, retryable=retryable, failed_stage=failure_stage)
+            # 仅在无法再重试时清理输入；可重试失败必须保留以支持 /retry。
+            failed_job = self._require_job(job_id)
+            if not failed_job.retryable or failed_job.attempts >= failed_job.max_attempts:
+                self._cleanup_input(job_id)
         finally:
             self.tasks.pop(job_id, None)
 
@@ -278,10 +284,25 @@ class WorkspaceJobService:
         shutil.copy2(source_path, target)
         return str(target)
 
-    def _estimate(self, path: str, provider: str) -> WorkspaceCostEstimate:
+    def _cleanup_input(self, job_id: str) -> None:
+        """删除作业的持久化输入视频及其目录（到达不可重试的终态后调用）。"""
+        path = self.input_paths.get(job_id)
+        if not path:
+            return
+        try:
+            if os.path.exists(path):
+                os.remove(path)
+            parent = os.path.dirname(path)
+            if parent and os.path.isdir(parent):
+                os.rmdir(parent)
+        except OSError as exc:
+            logger.warning(f"清理 workspace job 输入文件失败 ({job_id}): {exc}")
+
+    async def _estimate(self, path: str, provider: str) -> WorkspaceCostEstimate:
         file_bytes = os.path.getsize(path) if os.path.exists(path) else 0
         file_mb = file_bytes / (1024 * 1024)
-        duration_seconds = self._probe_duration_seconds(path)
+        # ffprobe 是阻塞调用，放到线程里执行，避免卡住事件循环。
+        duration_seconds = await asyncio.to_thread(self._probe_duration_seconds, path)
         if duration_seconds and duration_seconds > 0:
             estimated_minutes = duration_seconds / 60
             estimate_source = "media_duration"

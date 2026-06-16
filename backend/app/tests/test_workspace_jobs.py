@@ -95,6 +95,36 @@ async def test_workspace_job_success_creates_artifact_version(tmp_path, monkeypa
     assert artifact_response.transcript_index[0].chunk_id == "chunk_000"
     assert artifact_response.transcript_index[0].provider == "paraformer"
 
+    # 成功后原始输入视频应被清理，产物仍可读取。
+    assert not Path(service.input_paths[job.job_id]).exists()
+
+
+@pytest.mark.asyncio
+async def test_workspace_job_non_retryable_failure_cleans_input(tmp_path, monkeypatch):
+    service = WorkspaceJobService()
+    video = tmp_path / "sample.webm"
+    video.write_bytes(b"video")
+
+    async def fake_process(**_kwargs):
+        raise ValueError("unsupported codec, not a transient error")
+
+    monkeypatch.setattr(job_module.workspace_service, "process_video_query", fake_process)
+
+    job = await service.create_job(
+        str(video),
+        "sample.webm",
+        "转录这个视频",
+        start_immediately=False,
+    )
+    await service.run_job(job.job_id)
+
+    status = service.get_job(job.job_id)
+    assert status is not None
+    assert status.status == "failed"
+    assert status.retryable is False
+    # 不可重试的终态应清理输入文件。
+    assert not Path(service.input_paths[job.job_id]).exists()
+
 
 @pytest.mark.asyncio
 async def test_workspace_job_failure_is_retryable_and_keeps_input(tmp_path, monkeypatch):
