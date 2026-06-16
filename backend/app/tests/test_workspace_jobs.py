@@ -11,7 +11,11 @@ from app.models.workspace import (
 )
 from app.services.planner_service import planner_service
 from app.services.skill_registry_service import skill_registry
-from app.services.workspace_job_service import WorkspaceJobService
+from app.services.workspace_job_service import (
+    WorkspaceConcurrencyLimitError,
+    WorkspaceJobLimitError,
+    WorkspaceJobService,
+)
 from app.services.workspace_service import WorkspaceProcessingError
 from app.services import workspace_job_service as job_module
 
@@ -239,3 +243,164 @@ async def test_workspace_job_artifact_version_and_qa(tmp_path, monkeypatch):
     assert answer.status == "success"
     assert answer.partial is False
     assert answer.citations
+
+
+@pytest.mark.asyncio
+async def test_workspace_job_rejects_file_over_global_limit(tmp_path, monkeypatch):
+    service = WorkspaceJobService()
+    video = tmp_path / "large.webm"
+    video.write_bytes(b"12345")
+
+    monkeypatch.setattr(job_module.settings, "MAX_UPLOAD_BYTES", 4)
+
+    with pytest.raises(WorkspaceJobLimitError) as exc_info:
+        await service.create_job(
+            str(video),
+            "large.webm",
+            "转录这个视频",
+            start_immediately=False,
+        )
+
+    assert exc_info.value.status_code == 413
+    assert "too large" in str(exc_info.value)
+
+
+@pytest.mark.asyncio
+async def test_workspace_job_rejects_duration_over_global_limit(tmp_path, monkeypatch):
+    service = WorkspaceJobService()
+    video = tmp_path / "long.webm"
+    video.write_bytes(b"video")
+
+    monkeypatch.setattr(job_module.settings, "MAX_UPLOAD_BYTES", 1024)
+    monkeypatch.setattr(job_module.settings, "MAX_MEDIA_DURATION_SECONDS", 60)
+    monkeypatch.setattr(service, "_probe_duration_seconds", lambda _path: 61.2)
+
+    with pytest.raises(WorkspaceJobLimitError) as exc_info:
+        await service.create_job(
+            str(video),
+            "long.webm",
+            "转录这个视频",
+            start_immediately=False,
+        )
+
+    assert exc_info.value.status_code == 422
+    assert "too long" in str(exc_info.value)
+
+
+@pytest.mark.asyncio
+async def test_workspace_job_concurrency_limit(tmp_path, monkeypatch):
+    service = WorkspaceJobService()
+    first = tmp_path / "first.webm"
+    second = tmp_path / "second.webm"
+    first.write_bytes(b"video")
+    second.write_bytes(b"video")
+
+    monkeypatch.setattr(job_module.settings, "MAX_CONCURRENT_WORKSPACE_JOBS", 1)
+    monkeypatch.setattr(service, "_probe_duration_seconds", lambda _path: None)
+
+    await service.create_job(
+        str(first),
+        "first.webm",
+        "转录这个视频",
+        start_immediately=False,
+    )
+
+    with pytest.raises(WorkspaceConcurrencyLimitError) as exc_info:
+        await service.create_job(
+            str(second),
+            "second.webm",
+            "转录这个视频",
+            start_immediately=False,
+        )
+
+    assert exc_info.value.status_code == 429
+    assert exc_info.value.active_jobs == 1
+
+
+@pytest.mark.asyncio
+async def test_workspace_processing_slot_counts_against_job_limit(tmp_path, monkeypatch):
+    service = WorkspaceJobService()
+    video = tmp_path / "sample.webm"
+    video.write_bytes(b"video")
+
+    monkeypatch.setattr(job_module.settings, "MAX_CONCURRENT_WORKSPACE_JOBS", 1)
+    monkeypatch.setattr(service, "_probe_duration_seconds", lambda _path: None)
+
+    reservation_id = await service.reserve_processing_slot()
+    try:
+        with pytest.raises(WorkspaceConcurrencyLimitError):
+            await service.create_job(
+                str(video),
+                "sample.webm",
+                "转录这个视频",
+                start_immediately=False,
+            )
+    finally:
+        await service.release_processing_slot(reservation_id)
+
+    assert service.get_active_job_count() == 0
+
+
+@pytest.mark.asyncio
+async def test_workspace_retry_respects_concurrency_limit(tmp_path, monkeypatch):
+    service = WorkspaceJobService()
+    video = tmp_path / "retry.webm"
+    video.write_bytes(b"video")
+
+    async def fake_process(**_kwargs):
+        raise RuntimeError("SSLError unexpected_eof while submitting transcription")
+
+    monkeypatch.setattr(job_module.settings, "MAX_CONCURRENT_WORKSPACE_JOBS", 1)
+    monkeypatch.setattr(job_module.workspace_service, "process_video_query", fake_process)
+    monkeypatch.setattr(service, "_probe_duration_seconds", lambda _path: None)
+
+    job = await service.create_job(
+        str(video),
+        "retry.webm",
+        "转录这个视频",
+        start_immediately=False,
+    )
+    await service.run_job(job.job_id)
+    assert service.get_job(job.job_id).retryable is True
+
+    reservation_id = await service.reserve_processing_slot()
+    try:
+        with pytest.raises(WorkspaceConcurrencyLimitError):
+            await service.retry_job(job.job_id)
+    finally:
+        await service.release_processing_slot(reservation_id)
+
+    assert service.get_job(job.job_id).status == "failed"
+
+
+@pytest.mark.asyncio
+async def test_workspace_job_success_records_local_quota_usage(tmp_path, monkeypatch):
+    service = WorkspaceJobService()
+    video = tmp_path / "sample.webm"
+    video.write_bytes(b"video")
+    calls = []
+
+    async def fake_process(**kwargs):
+        return _response(kwargs["query"])
+
+    async def fake_increment(user_id):
+        calls.append(("increment", user_id))
+
+    async def fake_storage(user_id, storage_mb):
+        calls.append(("storage", user_id, storage_mb))
+
+    monkeypatch.setattr(job_module.workspace_service, "process_video_query", fake_process)
+    monkeypatch.setattr(job_module.database_service, "increment_video_usage", fake_increment)
+    monkeypatch.setattr(job_module.database_service, "update_storage_usage", fake_storage)
+
+    job = await service.create_job(
+        str(video),
+        "sample.webm",
+        "生成摘要",
+        user_id="user-1",
+        start_immediately=False,
+    )
+    await service.run_job(job.job_id)
+
+    assert ("increment", "user-1") in calls
+    assert ("storage", "user-1", 1) in calls

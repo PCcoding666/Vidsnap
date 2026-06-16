@@ -12,8 +12,16 @@ import time
 from pathlib import Path
 
 from ...services.pipeline_service import pipeline
-from ...services.supabase_service import supabase_service
+from ...services.database_service import database_service
 from ...core.logging import logger, get_context_logger
+from ..upload_guards import (
+    ALLOWED_VIDEO_EXTENSIONS,
+    enforce_media_duration_limit,
+    enforce_storage_quota,
+    record_user_usage,
+    resolve_user_context,
+    save_upload_with_size_limit,
+)
 
 router = APIRouter(prefix="/video", tags=["video"])
 security = HTTPBearer(auto_error=False)  # auto_error=False 允许无token访问
@@ -54,25 +62,9 @@ async def process_video(
     ctx_logger.log_resource_usage("请求开始")
     
     # 处理认证（可选）
-    user_id = None
-    if credentials and supabase_service.is_available():
-        try:
-            user = supabase_service.verify_token(credentials.credentials)
-            if user:
-                user_id = user.get("id")
-                # 检查配额
-                quota_ok = supabase_service.check_user_quota(str(user_id))
-                if not quota_ok:
-                    ctx_logger.warning("❌ 用户配额已耗尽", user_id=user_id, user_email=user.get('email'))
-                    raise HTTPException(
-                        status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-                        detail="已达到本月视频处理上限或存储空间已满，请升级订阅或等待下月重置"
-                    )
-                ctx_logger.info("✅ 用户认证成功", user_id=user_id, user_email=user.get('email'))
-        except HTTPException:
-            raise
-        except Exception as e:
-            ctx_logger.warning(f"⚠️ Token验证失败，使用匿名模式: {e}")
+    user_id, quota = await resolve_user_context(credentials)
+    if user_id:
+        ctx_logger.info("✅ 用户认证成功", user_id=user_id)
     else:
         ctx_logger.info("👤 使用匿名模式处理视频")
     
@@ -81,9 +73,8 @@ async def process_video(
         ctx_logger.error("❌ 请求验证失败: 未上传视频文件")
         raise HTTPException(status_code=400, detail="必须上传视频文件")
 
-    allowed_extensions = {".mp4", ".mov", ".mkv", ".avi", ".webm", ".m4v"}
     file_suffix = Path(video_file.filename).suffix.lower()
-    if file_suffix not in allowed_extensions:
+    if file_suffix not in ALLOWED_VIDEO_EXTENSIONS:
         ctx_logger.error("❌ 请求验证失败: 不支持的视频格式", file_name=video_file.filename)
         raise HTTPException(
             status_code=400,
@@ -106,12 +97,11 @@ async def process_video(
             content_type=video_file.content_type
         )
 
-        with open(video_path, "wb") as buffer:
-            while chunk := await video_file.read(1024 * 1024):
-                buffer.write(chunk)
+        actual_file_size = await save_upload_with_size_limit(video_file, video_path)
+        enforce_storage_quota(quota, actual_file_size)
+        await enforce_media_duration_limit(video_path, quota)
 
         upload_duration = (time.time() - upload_start) * 1000
-        actual_file_size = os.path.getsize(video_path)
         upload_seconds = max(upload_duration / 1000, 0.001)
 
         ctx_logger.log_file_operation(
@@ -153,12 +143,8 @@ async def process_video(
         ctx_logger.log_resource_usage("管道处理完成")
         
         # 如果处理成功,递增配额使用
-        if result.get("status") == "success" and supabase_service.is_available() and user_id:
-            try:
-                supabase_service.increment_video_usage(user_id)
-                ctx_logger.info("✅ 配额使用已更新", user_id=user_id)
-            except Exception as e:
-                ctx_logger.error(f"⚠️ 递增配额使用失败: {e}", user_id=user_id)
+        if result.get("status") == "success":
+            await record_user_usage(user_id, actual_file_size)
         
         # 记录总体性能
         total_duration = (time.time() - start_time) * 1000
@@ -215,18 +201,9 @@ async def get_video_history(
     Returns:
         视频历史列表
     """
-    # 处理认证
-    user_id = None
-    if credentials and supabase_service.is_available():
-        try:
-            user = supabase_service.verify_token(credentials.credentials)
-            if user:
-                user_id = user.get("id")
-        except Exception as e:
-            logger.warning(f"⚠️ Token验证失败: {e}")
-            # 不抛出异常，只是返回空列表
+    user_id, _ = await resolve_user_context(credentials, enforce_quota=False)
     
-    if not user_id or not supabase_service.is_available():
+    if not user_id:
         return {
             "status": "success",
             "videos": [],
@@ -234,7 +211,7 @@ async def get_video_history(
         }
     
     try:
-        videos = supabase_service.get_user_videos(user_id, limit)
+        videos = await database_service.get_user_videos(user_id, limit)
         
         # 转换数据格式为前端需要的格式
         formatted_videos = []
@@ -276,40 +253,31 @@ async def get_video_details(
     Returns:
         视频详细信息
     """
-    # 处理认证
-    user_id = None
-    if credentials and supabase_service.is_available():
-        try:
-            user = supabase_service.verify_token(credentials.credentials)
-            if user:
-                user_id = user.get("id")
-        except Exception as e:
-            logger.warning(f"⚠️ Token验证失败: {e}")
-    
-    if not supabase_service.is_available():
+    user_id, _ = await resolve_user_context(credentials, enforce_quota=False)
+    if not user_id:
         raise HTTPException(
-            status_code=503,
-            detail="数据库服务不可用"
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="需要登录才能查看视频详情"
         )
     
     try:
         # 获取视频基本信息
-        video = supabase_service.get_video_by_id(video_id)
+        video = await database_service.get_video_by_id(video_id)
         if not video:
             raise HTTPException(
                 status_code=404,
                 detail=f"视频不存在: {video_id}"
             )
         
-        # 检查权限（如果有用户登录）
-        if user_id and str(video.get("user_id")) != str(user_id):
+        # 检查权限
+        if str(video.get("user_id")) != str(user_id):
             raise HTTPException(
                 status_code=403,
                 detail="无权访问该视频"
             )
         
         # 获取完整的元数据（包括关键帧、转录、总结）
-        metadata = supabase_service.get_compiled_metadata(video_id)
+        metadata = await database_service.get_compiled_metadata(video_id)
         if not metadata:
             raise HTTPException(
                 status_code=404,
@@ -317,7 +285,7 @@ async def get_video_details(
             )
         
         # 获取总结信息
-        summaries = supabase_service.get_video_summaries(video_id)
+        summaries = await database_service.get_video_summaries(video_id)
         
         return {
             "status": "success",

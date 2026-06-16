@@ -22,15 +22,20 @@ from ...models.workspace import (
 )
 from ...services.planner_service import planner_service
 from ...services.skill_registry_service import skill_registry
-from ...services.supabase_service import supabase_service
 from ...services.transcription_provider_service import transcription_provider_registry
-from ...services.workspace_job_service import workspace_job_service
+from ...services.workspace_job_service import WorkspaceJobLimitError, workspace_job_service
 from ...services.workspace_service import workspace_service
+from ..upload_guards import (
+    ALLOWED_VIDEO_EXTENSIONS,
+    enforce_media_duration_limit,
+    enforce_storage_quota,
+    record_user_usage,
+    resolve_user_context,
+    save_upload_with_size_limit,
+)
 
 router = APIRouter(prefix="/workspace", tags=["workspace"])
 security = HTTPBearer(auto_error=False)
-
-ALLOWED_VIDEO_EXTENSIONS = {".mp4", ".mov", ".mkv", ".avi", ".webm", ".m4v"}
 
 
 @router.get("/skills")
@@ -69,25 +74,6 @@ async def create_plan(payload: QueryPlanRequest):
         raise HTTPException(status_code=400, detail=str(e))
 
 
-async def _resolve_user_id(credentials: Optional[HTTPAuthorizationCredentials]) -> Optional[str]:
-    if credentials and supabase_service.is_available():
-        try:
-            user = supabase_service.verify_token(credentials.credentials)
-            if user:
-                user_id = user.get("id")
-                if not supabase_service.check_user_quota(str(user_id)):
-                    raise HTTPException(
-                        status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-                        detail="已达到本月视频处理上限或存储空间已满",
-                    )
-                return user_id
-        except HTTPException:
-            raise
-        except Exception as e:
-            get_context_logger().warning(f"Token 验证失败，使用匿名模式: {e}")
-    return None
-
-
 @router.post("/jobs", response_model=WorkspaceJobCreateResponse)
 async def create_workspace_job(
     request: Request,
@@ -115,15 +101,15 @@ async def create_workspace_job(
             ),
         )
 
-    user_id = await _resolve_user_id(credentials)
+    user_id, quota = await resolve_user_context(credentials)
     upload_dir = tempfile.mkdtemp(prefix="vidsnap_workspace_job_")
     safe_filename = Path(video_file.filename).name
     video_path = os.path.join(upload_dir, safe_filename)
 
     try:
-        with open(video_path, "wb") as buffer:
-            while chunk := await video_file.read(1024 * 1024):
-                buffer.write(chunk)
+        upload_bytes = await save_upload_with_size_limit(video_file, video_path)
+        enforce_storage_quota(quota, upload_bytes)
+        await enforce_media_duration_limit(video_path, quota)
 
         job = await workspace_job_service.create_job(
             video_file_path=video_path,
@@ -141,6 +127,10 @@ async def create_workspace_job(
             client_host=request.client.host if request.client else "unknown",
         )
         return WorkspaceJobCreateResponse(status="success", job_id=job.job_id, job=job)
+    except WorkspaceJobLimitError as e:
+        raise HTTPException(status_code=e.status_code, detail=str(e))
+    except HTTPException:
+        raise
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
@@ -179,6 +169,8 @@ async def retry_workspace_job(job_id: str):
         return {"status": "success", "job_id": job_id, "job": job}
     except KeyError:
         raise HTTPException(status_code=404, detail="job not found")
+    except WorkspaceJobLimitError as e:
+        raise HTTPException(status_code=e.status_code, detail=str(e))
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -245,31 +237,20 @@ async def process_workspace_query(
             ),
         )
 
-    user_id = None
-    if credentials and supabase_service.is_available():
-        try:
-            user = supabase_service.verify_token(credentials.credentials)
-            if user:
-                user_id = user.get("id")
-                if not supabase_service.check_user_quota(str(user_id)):
-                    raise HTTPException(
-                        status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-                        detail="已达到本月视频处理上限或存储空间已满",
-                    )
-        except HTTPException:
-            raise
-        except Exception as e:
-            ctx_logger.warning(f"Token 验证失败，使用匿名模式: {e}")
+    user_id, quota = await resolve_user_context(credentials)
 
     video_path = None
+    upload_bytes = 0
+    reservation_id = None
     try:
         upload_dir = tempfile.mkdtemp(prefix="vidsnap_workspace_")
         safe_filename = Path(video_file.filename).name
         video_path = os.path.join(upload_dir, safe_filename)
 
-        with open(video_path, "wb") as buffer:
-            while chunk := await video_file.read(1024 * 1024):
-                buffer.write(chunk)
+        upload_bytes = await save_upload_with_size_limit(video_file, video_path)
+        enforce_storage_quota(quota, upload_bytes)
+        await enforce_media_duration_limit(video_path, quota)
+        reservation_id = await workspace_job_service.reserve_processing_slot()
 
         ctx_logger.info(
             "执行 query-first workspace 任务",
@@ -285,11 +266,8 @@ async def process_workspace_query(
             user_id=user_id,
         )
 
-        if user_id and response.status == "success" and supabase_service.is_available():
-            try:
-                supabase_service.increment_video_usage(user_id)
-            except Exception as e:
-                logger.warning(f"更新用户配额失败: {e}")
+        if response.status == "success":
+            await record_user_usage(user_id, upload_bytes)
 
         ctx_logger.info(
             "workspace 任务完成",
@@ -298,12 +276,16 @@ async def process_workspace_query(
             video_id=response.video_asset.video_id,
         )
         return response
+    except WorkspaceJobLimitError as e:
+        raise HTTPException(status_code=e.status_code, detail=str(e))
     except HTTPException:
         raise
     except Exception as e:
         ctx_logger.exception(f"workspace 任务失败: {e}")
         raise HTTPException(status_code=500, detail=f"workspace 任务失败: {str(e)}")
     finally:
+        if reservation_id:
+            await workspace_job_service.release_processing_slot(reservation_id)
         if video_path and os.path.exists(video_path):
             try:
                 os.remove(video_path)

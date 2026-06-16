@@ -32,9 +32,30 @@ from ..models.workspace import (
     WorkspaceQAResponse,
 )
 from .planner_service import planner_service
+from .database_service import database_service
 from .skill_registry_service import skill_registry
 from .transcription_provider_service import transcription_provider_registry
 from .workspace_service import workspace_service
+
+
+class WorkspaceJobLimitError(ValueError):
+    """A user-facing workspace job admission or input limit failure."""
+
+    def __init__(self, message: str, status_code: int = 400) -> None:
+        super().__init__(message)
+        self.status_code = status_code
+
+
+class WorkspaceConcurrencyLimitError(WorkspaceJobLimitError):
+    """Raised when this API process is already running the allowed job count."""
+
+    def __init__(self, active_jobs: int, max_jobs: int) -> None:
+        super().__init__(
+            f"workspace job concurrency limit reached: {active_jobs}/{max_jobs} active jobs",
+            status_code=429,
+        )
+        self.active_jobs = active_jobs
+        self.max_jobs = max_jobs
 
 
 class WorkspaceJobService:
@@ -48,6 +69,7 @@ class WorkspaceJobService:
         self.user_ids: Dict[str, Optional[str]] = {}
         self.tasks: Dict[str, asyncio.Task] = {}
         self._lock = asyncio.Lock()
+        self._admission_reservations: set[str] = set()
 
     async def create_job(
         self,
@@ -64,36 +86,105 @@ class WorkspaceJobService:
             raise ValueError("; ".join(validation.errors))
 
         job_id = f"job_{uuid.uuid4().hex[:16]}"
-        saved_path = self._persist_input(video_file_path, job_id, original_filename)
-        now = self._now()
-        job = WorkspaceJobStatus(
-            job_id=job_id,
-            status="queued",
-            stage="queued",
-            progress=5,
-            message="Job accepted and queued",
-            query=query,
-            original_filename=Path(original_filename).name,
-            created_at=now,
-            updated_at=now,
-            attempts=0,
-            max_attempts=3,
-            plan=plan,
-            validation=validation,
-            skill_trace=workspace_service._initial_trace(plan.steps),
-            cost_estimate=await self._estimate(saved_path, provider),
-        )
+        await self._enforce_global_input_limits(video_file_path)
+        await self.reserve_processing_slot(job_id)
 
-        async with self._lock:
-            self.jobs[job_id] = job
-            self.input_paths[job_id] = saved_path
-            self.user_ids[job_id] = user_id
-            self.artifact_versions[job_id] = []
+        saved_path = None
+        try:
+            saved_path = self._persist_input(video_file_path, job_id, original_filename)
+            now = self._now()
+            job = WorkspaceJobStatus(
+                job_id=job_id,
+                status="queued",
+                stage="queued",
+                progress=5,
+                message="Job accepted and queued",
+                query=query,
+                original_filename=Path(original_filename).name,
+                created_at=now,
+                updated_at=now,
+                attempts=0,
+                max_attempts=3,
+                plan=plan,
+                validation=validation,
+                skill_trace=workspace_service._initial_trace(plan.steps),
+                cost_estimate=await self._estimate(saved_path, provider),
+            )
+
+            async with self._lock:
+                self._admission_reservations.discard(job_id)
+                self.jobs[job_id] = job
+                self.input_paths[job_id] = saved_path
+                self.user_ids[job_id] = user_id
+                self.artifact_versions[job_id] = []
+        except Exception:
+            async with self._lock:
+                self._admission_reservations.discard(job_id)
+            if saved_path:
+                self._cleanup_path(saved_path)
+            raise
 
         if start_immediately:
             self._start_task(job_id)
 
         return job
+
+    async def reserve_processing_slot(self, reservation_id: Optional[str] = None) -> str:
+        reservation_id = reservation_id or f"reservation_{uuid.uuid4().hex[:16]}"
+        async with self._lock:
+            self._enforce_concurrency_limit_locked()
+            self._admission_reservations.add(reservation_id)
+        return reservation_id
+
+    async def release_processing_slot(self, reservation_id: str) -> None:
+        async with self._lock:
+            self._admission_reservations.discard(reservation_id)
+
+    def get_active_job_count(self) -> int:
+        return self._active_job_count()
+
+    def get_max_concurrent_jobs(self) -> int:
+        return max(int(getattr(settings, "MAX_CONCURRENT_WORKSPACE_JOBS", 0) or 0), 0)
+
+    def _active_job_count(self) -> int:
+        return sum(1 for job in self.jobs.values() if job.status in {"queued", "running"}) + len(
+            self._admission_reservations
+        )
+
+    def _enforce_concurrency_limit_locked(self) -> None:
+        max_jobs = self.get_max_concurrent_jobs()
+        if max_jobs <= 0:
+            return
+
+        active_jobs = self._active_job_count()
+        if active_jobs >= max_jobs:
+            raise WorkspaceConcurrencyLimitError(active_jobs=active_jobs, max_jobs=max_jobs)
+
+    async def _enforce_global_input_limits(self, path: str) -> None:
+        if not path or not os.path.exists(path):
+            raise WorkspaceJobLimitError("uploaded video file is missing", status_code=400)
+
+        max_bytes = max(int(getattr(settings, "MAX_UPLOAD_BYTES", 0) or 0), 0)
+        file_bytes = os.path.getsize(path)
+        if max_bytes > 0 and file_bytes > max_bytes:
+            raise WorkspaceJobLimitError(
+                f"uploaded video is too large: {_format_bytes(file_bytes)} exceeds {_format_bytes(max_bytes)}",
+                status_code=413,
+            )
+
+        max_duration_seconds = max(int(getattr(settings, "MAX_MEDIA_DURATION_SECONDS", 0) or 0), 0)
+        if max_duration_seconds <= 0:
+            return
+
+        duration_seconds = await self.probe_duration_seconds(path)
+        if duration_seconds and duration_seconds > max_duration_seconds:
+            raise WorkspaceJobLimitError(
+                f"uploaded video is too long: {duration_seconds:.1f}s exceeds {max_duration_seconds}s",
+                status_code=422,
+            )
+
+    async def probe_duration_seconds(self, path: str) -> Optional[float]:
+        return await asyncio.to_thread(self._probe_duration_seconds, path)
 
     def get_job(self, job_id: str) -> Optional[WorkspaceJobStatus]:
         return self.jobs.get(job_id)
@@ -125,16 +216,24 @@ class WorkspaceJobService:
         if not self.input_paths.get(job_id) or not os.path.exists(self.input_paths[job_id]):
             raise ValueError("saved input file is no longer available")
 
-        self._update(
-            job_id,
-            status="queued",
-            stage="queued",
-            progress=max(job.progress, 5),
-            message="Retry queued from saved input",
-            retryable=False,
-            error=None,
-            failed_stage=None,
-        )
+        await self.reserve_processing_slot(job_id)
+        try:
+            self._update(
+                job_id,
+                status="queued",
+                stage="queued",
+                progress=max(job.progress, 5),
+                message="Retry queued from saved input",
+                retryable=False,
+                error=None,
+                failed_stage=None,
+            )
+            async with self._lock:
+                self._admission_reservations.discard(job_id)
+        except Exception:
+            await self.release_processing_slot(job_id)
+            raise
+
         self._start_task(job_id)
         return self._require_job(job_id)
 
@@ -249,6 +348,7 @@ class WorkspaceJobService:
                 transcript_segments_count=len(result.transcript_index),
                 partial=False,
             )
+            await self._record_success_usage(job_id, input_path)
             # 成功后产物（transcript_index / artifact）已驻留内存，原始视频不再需要。
             self._cleanup_input(job_id)
         except Exception as exc:
@@ -289,6 +389,9 @@ class WorkspaceJobService:
         path = self.input_paths.get(job_id)
         if not path:
             return
+        self._cleanup_path(path)
+
+    def _cleanup_path(self, path: str) -> None:
         try:
             if os.path.exists(path):
                 os.remove(path)
@@ -296,13 +399,12 @@ class WorkspaceJobService:
             if parent and os.path.isdir(parent):
                 os.rmdir(parent)
         except OSError as exc:
-            logger.warning(f"清理 workspace job 输入文件失败 ({job_id}): {exc}")
+            logger.warning(f"清理 workspace job 输入文件失败 ({path}): {exc}")
 
     async def _estimate(self, path: str, provider: str) -> WorkspaceCostEstimate:
         file_bytes = os.path.getsize(path) if os.path.exists(path) else 0
         file_mb = file_bytes / (1024 * 1024)
-        # ffprobe 是阻塞调用，放到线程里执行，避免卡住事件循环。
-        duration_seconds = await asyncio.to_thread(self._probe_duration_seconds, path)
+        duration_seconds = await self.probe_duration_seconds(path)
         if duration_seconds and duration_seconds > 0:
             estimated_minutes = duration_seconds / 60
             estimate_source = "media_duration"
@@ -369,6 +471,20 @@ class WorkspaceJobService:
             return None
 
         return duration if duration > 0 else None
+
+    async def _record_success_usage(self, job_id: str, input_path: Optional[str]) -> None:
+        user_id = self.user_ids.get(job_id)
+        if not user_id:
+            return
+
+        try:
+            await database_service.increment_video_usage(user_id)
+            if input_path and os.path.exists(input_path):
+                storage_mb = math.ceil(os.path.getsize(input_path) / (1024 * 1024))
+                if storage_mb > 0:
+                    await database_service.update_storage_usage(user_id, storage_mb)
+        except Exception as exc:
+            logger.warning(f"更新 workspace job 用户配额失败 ({job_id}): {exc}")
 
     def _append_artifact_version(
         self,
@@ -500,3 +616,7 @@ class WorkspaceJobService:
 
 
 workspace_job_service = WorkspaceJobService()
+
+
+def _format_bytes(value: int) -> str:
+    return f"{value / (1024 * 1024):.1f} MB"

@@ -179,7 +179,7 @@ class SupabaseServiceProxy:
                 )
                 quota = result.scalar_one_or_none()
                 if quota:
-                    quota.storage_used_mb += size_mb
+                    quota.used_storage_mb += size_mb
                     quota.updated_at = datetime.now(timezone.utc)
                     session.commit()
         except Exception as e:
@@ -249,11 +249,15 @@ class SupabaseServiceProxy:
                 )
                 video = result.scalar_one_or_none()
                 if video:
-                    video.status = status
+                    video.processing_status = status
                     if progress is not None:
-                        video.progress = progress
+                        video.processing_progress = progress
                     if error_message is not None:
                         video.error_message = error_message
+                    if status == "processing" and video.processing_started_at is None:
+                        video.processing_started_at = datetime.now(timezone.utc)
+                    if status == "completed":
+                        video.processing_completed_at = datetime.now(timezone.utc)
                     video.updated_at = datetime.now(timezone.utc)
                     session.commit()
                     return _model_to_dict(video)

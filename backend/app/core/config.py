@@ -85,6 +85,9 @@ class Settings:
     
     # 应用配置
     TEMP_DIR: str = os.getenv("TEMP_DIR", "/tmp/video_analysis")
+    MAX_UPLOAD_BYTES: int = int(os.getenv("MAX_UPLOAD_BYTES", str(500 * 1024 * 1024)))
+    MAX_MEDIA_DURATION_SECONDS: int = int(os.getenv("MAX_MEDIA_DURATION_SECONDS", str(4 * 3600)))
+    MAX_CONCURRENT_WORKSPACE_JOBS: int = int(os.getenv("MAX_CONCURRENT_WORKSPACE_JOBS", "2"))
     
     # Gmail SMTP 配置
     # 用于发送邮件通知给用户
