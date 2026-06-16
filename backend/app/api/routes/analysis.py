@@ -1,10 +1,10 @@
 """
 Video analysis API routes.
 """
-from fastapi import APIRouter, HTTPException, UploadFile, File, Body
+from fastapi import APIRouter, HTTPException, UploadFile, File, Body, Form
 from typing import List, Dict, Any, Optional
-import logging
 from dataclasses import asdict
+from pathlib import Path
 
 from ...services.pipeline_service import pipeline
 from ...services.chat_service import video_chat_service
@@ -65,61 +65,57 @@ async def search_in_transcript(video_id: str, keyword: str):
 
 @router.post("/summarize")
 async def summarize_video(
-    youtube_url: Optional[str] = None,
-    video_file: Optional[UploadFile] = File(None),
-    granularity: str = "standard",
-    language: str = "auto"
+    video_file: UploadFile = File(...),
+    granularity: str = Form("standard"),
+    language: str = Form("auto")
 ):
     """
-    Complete video analysis with LLM summarization.
+    Complete uploaded video analysis with LLM summarization.
     
     Args:
-        youtube_url: YouTube video URL (optional)
-        video_file: Uploaded video file (optional)
+        video_file: Uploaded video file
         granularity: Summary granularity ("brief", "standard", "detailed")
         language: Language for transcription (default: "auto")
         
     Returns:
         Complete analysis results including video summary
     """
+    video_file_path = None
     try:
-        # 验证输入
-        if not youtube_url and not video_file:
-            raise HTTPException(
-                status_code=400, 
-                detail="必须提供 youtube_url 或 video_file 之一"
-            )
-        
-        # 验证粒度参数
         if granularity not in ["brief", "standard", "detailed"]:
             raise HTTPException(
                 status_code=400,
                 detail="granularity 必须是 'brief', 'standard' 或 'detailed'"
             )
+
+        if not video_file or not video_file.filename:
+            raise HTTPException(status_code=400, detail="必须上传视频文件")
+
+        allowed_extensions = {".mp4", ".mov", ".mkv", ".avi", ".webm", ".m4v"}
+        file_suffix = Path(video_file.filename).suffix.lower()
+        if file_suffix not in allowed_extensions:
+            raise HTTPException(
+                status_code=400,
+                detail=f"不支持的视频格式: {file_suffix or 'unknown'}"
+            )
         
-        # 处理上传的视频文件
-        video_file_path = None
-        if video_file:
-            import tempfile
-            import os
-            
-            # 保存上传的文件
-            temp_dir = tempfile.mkdtemp()
-            video_file_path = os.path.join(temp_dir, video_file.filename)
-            
-            with open(video_file_path, "wb") as f:
-                content = await video_file.read()
-                f.write(content)
-            
-            logger.info(f"上传的视频文件已保存: {video_file_path}")
+        import tempfile
+        import os
+        
+        temp_dir = tempfile.mkdtemp(prefix="vidsnap_analysis_")
+        video_file_path = os.path.join(temp_dir, Path(video_file.filename).name)
+        
+        with open(video_file_path, "wb") as f:
+            while chunk := await video_file.read(1024 * 1024):
+                f.write(chunk)
+        
+        logger.info(f"上传的视频文件已保存: {video_file_path}")
         
         # 调用完整的处理管道
-        logger.info(f"开始处理视频，粒度: {granularity}")
+        logger.info(f"开始处理上传视频，粒度: {granularity}, 语言: {language}")
         
         result = await pipeline.process_video_with_summary(
-            video_file=video_file_path,
-            youtube_url=youtube_url,
-            granularity=granularity
+            video_file=video_file_path
         )
         
         if result["status"] == "success":
@@ -155,6 +151,18 @@ async def summarize_video(
             status_code=500, 
             detail=f"视频总结失败: {str(e)}"
         )
+    finally:
+        if video_file_path:
+            import os
+            import tempfile
+            try:
+                if os.path.exists(video_file_path):
+                    os.remove(video_file_path)
+                parent_dir = os.path.dirname(video_file_path)
+                if parent_dir.startswith(tempfile.gettempdir()) and os.path.isdir(parent_dir):
+                    os.rmdir(parent_dir)
+            except Exception as cleanup_error:
+                logger.warning(f"清理上传临时文件失败: {cleanup_error}")
 
 
 @router.get("/services/status")

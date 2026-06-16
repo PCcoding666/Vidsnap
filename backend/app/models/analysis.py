@@ -12,6 +12,8 @@ class TranscriptSegment:
     start_time: float
     end_time: float
     confidence: float
+    chunk_id: Optional[str] = None
+    provider: Optional[str] = None
 
 
 # 为了兼容性保留旧名称
@@ -71,7 +73,7 @@ class VideoMetadata:
     title: str
     duration: float
     oss_video_url: str
-    source_type: str  # "upload" 或 "youtube"
+    source_type: str
     upload_time: str
     processing_completed_time: str
     keyframes: List[KeyframeMetadata]

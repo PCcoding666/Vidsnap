@@ -1,26 +1,16 @@
 """
 改进的视频处理服务
-支持双输入源、PySceneDetect场景检测（FFmpeg fallback）、阿里云OSS存储
-
-安全更新 (2025-12): 
-- 服务器端YouTube视频下载已禁用，以保护服务器IP避免被封禁
-- 仅支持用户上传的视频文件处理
-- YouTube视频分析请使用youtube_transcript_service获取字幕
+仅支持本地上传视频、PySceneDetect场景检测（FFmpeg fallback）、可选阿里云OSS存储
 """
-import logging
 import uuid
 import os
-import subprocess
 import json
 import tempfile
 import asyncio
 import re
 from datetime import datetime
-from typing import Dict, List, Any, Optional, Union
+from typing import Dict, List, Any, Optional
 from pathlib import Path
-from dataclasses import dataclass
-
-import yt_dlp
 
 from ..core.logging import logger
 from ..core.config import settings
@@ -39,121 +29,21 @@ class AliyunVideoService:
         
         self.temp_dir.mkdir(parents=True, exist_ok=True)
         logger.info(f"阿里云视频服务初始化完成，临时目录: {self.temp_dir}")
-        
-        # 代理配置
-        self.proxy = settings.YOUTUBE_PROXY if settings.YOUTUBE_PROXY else None
-        if self.proxy:
-            logger.info(f"YouTube 代理已启用: {self.proxy}")
-        else:
-            logger.info("YouTube 代理未配置，使用直连")
-        
-        # Cookies 文件路径（用于绕过 YouTube 机器人检测）
-        cookies_path = os.path.join(os.path.dirname(__file__), '../../youtube_cookies.txt')
-        cookies_path = os.path.abspath(cookies_path)
-        
-        if os.path.exists(cookies_path):
-            logger.info(f"YouTube Cookies 已启用: {cookies_path}")
-        else:
-            logger.warning(f"YouTube Cookies 文件不存在: {cookies_path}")
-        
-        # yt-dlp下载选项 (2025.12 最新配置 - 代理 + Cookies + Android 客户端)
-        self.ytdl_opts = {
-            # 基础配置
-            'noplaylist': True,
-            'retries': 10,
-            'fragment_retries': 10,
-            'extractor_retries': 3,
-            'file_access_retries': 3,
-            'socket_timeout': 60,
-            'nocheckcertificate': True,
-            'ignoreerrors': False,
-            'logtostderr': False,
-            'quiet': False,
-            'no_warnings': False,
-            'default_search': 'auto',
-            'source_address': '0.0.0.0',  # 强制 IPv4
-            
-            # YouTube 代理配置
-            # 通过环境变量 YOUTUBE_PROXY 设置，例如: http://127.0.0.1:7890
-            
-            # Cookies 配置（用于绕过机器人检测）
-            'cookiefile': cookies_path if os.path.exists(cookies_path) else None,
-            
-            # 绕过限制配置
-            'age_limit': None,
-            'geo_bypass': True,
-            'geo_bypass_country': 'US',
-            
-            # 2025.11 最新 HTTP 头配置（更真实的浏览器模拟）
-            'http_headers': {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
-                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
-                'Accept-Language': 'en-US,en;q=0.9',
-                'Accept-Encoding': 'gzip, deflate, br',
-                'Sec-Fetch-Dest': 'document',
-                'Sec-Fetch-Mode': 'navigate',
-                'Sec-Fetch-Site': 'none',
-                'Sec-Fetch-User': '?1',
-                'Sec-Ch-Ua': '"Chromium";v="131", "Not_A Brand";v="24", "Google Chrome";v="131"',
-                'Sec-Ch-Ua-Mobile': '?0',
-                'Sec-Ch-Ua-Platform': '"Windows"',
-                'Upgrade-Insecure-Requests': '1',
-            },
-            
-            # YouTube 特定优化配置（2025.12更新）
-            'extractor_args': {
-                'youtube': {
-                    # 使用多种客户端绕过bot检测
-                    'player_client': ['android', 'web', 'ios'],
-                    'skip': ['hls', 'dash'],
-                }
-            },
-            
-            # 禁用缓存以避免旧的bot检测数据
-            'no_cache_dir': True,
-        }
     
     def _generate_video_id(self) -> str:
         """生成唯一的视频ID"""
         return str(uuid.uuid4())
     
-    def _extract_video_id_from_url(self, video_url: str) -> str:
-        """从YouTube URL提取视频ID或生成哈希ID"""
-        try:
-            if "youtu.be/" in video_url:
-                return video_url.split("youtu.be/")[-1].split("?")[0]
-            elif "youtube.com/watch" in video_url:
-                return video_url.split("v=")[-1].split("&")[0]
-            else:
-                return str(abs(hash(video_url)) % (10**8))
-        except Exception:
-            return self._generate_video_id()
-    
-    async def process_video_dual_source(self, 
-                                      video_file: Optional[str] = None,
-                                      youtube_url: Optional[str] = None) -> Dict[str, Any]:
+    async def process_uploaded_video(self, video_file: Optional[str] = None) -> Dict[str, Any]:
         """
-        双输入源视频处理
-        
-        安全更新: YouTube视频下载已禁用，仅支持用户上传的视频文件
+        处理用户上传的视频文件。
         
         Args:
             video_file: 用户上传的视频文件路径
-            youtube_url: YouTube视频URL (已禁用，会返回错误)
             
         Returns:
             处理结果
         """
-        # 安全检查：禁止服务器端YouTube视频下载
-        if youtube_url:
-            logger.warning(f"尝试使用YouTube URL但服务器端下载已禁用: {youtube_url}")
-            return {
-                "status": "error",
-                "error": "服务器端YouTube视频下载已禁用以保护IP。请使用字幕获取功能或上传本地视频文件。",
-                "video_id": None,
-                "download_disabled": True
-            }
-        
         if not video_file:
             return {
                 "status": "error",
@@ -168,14 +58,9 @@ class AliyunVideoService:
         try:
             logger.info(f"开始处理视频，ID: {video_id}")
             
-            # 步骤1: 获取视频文件（仅支持用户上传）
-            audio_path = None  # 初始化音频路径
-            audio_oss_url = None  # 初始化音频OSS URL
-            
-            # 用户上传文件处理
+            # 步骤1: 获取上传视频的基础信息
             logger.info(f"处理用户上传的视频: {video_file}")
             video_path = video_file
-            # 用户上传的是完整视频，后续需要提取音频
             video_metadata = await self._extract_video_metadata(video_path)
             source_type = "upload"
             original_url = None
@@ -184,18 +69,18 @@ class AliyunVideoService:
             duration = video_metadata.get("duration", 0.0)
             title = video_metadata.get("title", Path(video_path).stem)
             
-            # 步骤2: 上传原始视频到OSS
-            from .oss_service import oss_service
-            
-            logger.info("上传视频到阿里云OSS...")
-            video_oss_url = await oss_service.upload_video(video_path, video_id)
-            
-            if not video_oss_url:
-                return {
-                    "status": "error",
-                    "error": "视频上传到OSS失败",
-                    "video_id": video_id
-                }
+            # 步骤2: 可选上传原始视频到OSS。Slim 本地开发不应依赖云存储。
+            video_oss_url = None
+            if settings.ENABLE_OSS_UPLOADS:
+                from .oss_service import oss_service
+
+                logger.info("上传视频到阿里云OSS...")
+                video_oss_url = await oss_service.upload_video(video_path, video_id)
+
+                if not video_oss_url:
+                    logger.warning("视频上传到OSS失败，将继续使用本地视频文件处理")
+            else:
+                logger.info("跳过原始视频OSS上传，使用本地视频文件处理")
             
             # 步骤3: 生成视频信息（关键帧提取延迟到 Pipeline 层并发执行）
             video_info = VideoInfo(
@@ -225,147 +110,6 @@ class AliyunVideoService:
                 "status": "error",
                 "error": f"视频处理异常: {str(e)}",
                 "video_id": video_id
-            }
-    
-    async def _download_from_youtube(self, url: str, session_temp_dir: Path) -> Dict[str, Any]:
-        """
-        从YouTube下载视频 - 已禁用
-        
-        安全更新: 服务器端YouTube视频下载已禁用，以保护服务器IP避免被封禁
-        请使用 youtube_transcript_service 获取字幕，或引导用户上传本地文件
-        """
-        logger.error(f"YouTube视频下载已禁用！尝试下载: {url}")
-        return {
-            "status": "error",
-            "error": "服务器端YouTube视频下载已禁用以保护IP。请使用字幕获取功能或让用户上传本地视频文件。"
-        }
-        
-        # ===== 以下代码已禁用，保留供参考 =====
-        # 如需启用，请移除上方return语句
-        try:
-            base_filename = session_temp_dir / "downloaded_video"
-            
-            # 配置yt-dlp选项(包含HTTP headers、重试机制等)
-            opts = self.ytdl_opts.copy()
-            opts['outtmpl'] = str(base_filename) + '.%(ext)s'
-            # 使用默认格式,优先720p以下
-            opts['format'] = 'bestvideo[height<=720]+bestaudio/best[height<=720]/best'
-            opts['merge_output_format'] = 'mp4'
-            
-            # 应用代理配置
-            if self.proxy:
-                opts['proxy'] = self.proxy
-                logger.info(f"使用代理下载: {self.proxy}")
-            
-            logger.info("开始从 YouTube 下载视频（使用多种策略绕过bot检测）...")
-            logger.info(f"User-Agent: {opts['http_headers'].get('User-Agent', 'N/A')[:50]}...")
-            
-            # 使用Python API下载（尝试多种客户端策略）
-            metadata = {}
-            video_path = None
-            download_success = False
-            
-            # 策略1: 默认模式(不指定客户端,让yt-dlp自动选择)
-            try:
-                logger.info("尝试策略1: 默认模式(自动选择最佳客户端)...")
-                opts_default = opts.copy()
-                # 不指定player_client
-                opts_default.pop('extractor_args', None)
-                
-                with yt_dlp.YoutubeDL(opts_default) as ydl:
-                    info = ydl.extract_info(url, download=True)
-                    metadata = info
-                    download_success = True
-                    logger.info(f"✅ 默认模式成功: {info.get('title', 'N/A')}")
-            except Exception as e:
-                logger.warning(f"⚠️ 默认模式失败: {str(e)[:150]}")
-                
-            # 策略2: android 客户端(fallback)
-            if not download_success:
-                try:
-                    logger.info("尝试策略2: android 客户端...")
-                    opts_android = opts.copy()
-                    opts_android['extractor_args'] = {
-                        'youtube': {
-                            'player_client': ['android'],
-                        }
-                    }
-                    with yt_dlp.YoutubeDL(opts_android) as ydl:
-                        info = ydl.extract_info(url, download=True)
-                        metadata = info
-                        download_success = True
-                        logger.info(f"✅ android 成功: {info.get('title', 'N/A')}")
-                except Exception as e:
-                    logger.warning(f"⚠️ android 失败: {str(e)[:150]}")
-            
-            # 策略3: tv_embedded 客户端(fallback)
-            if not download_success:
-                try:
-                    logger.info("尝试策略3: tv_embedded 客户端...")
-                    opts_tv = opts.copy()
-                    opts_tv['extractor_args'] = {
-                        'youtube': {
-                            'player_client': ['tv_embedded'],
-                        }
-                    }
-                    with yt_dlp.YoutubeDL(opts_tv) as ydl:
-                        info = ydl.extract_info(url, download=True)
-                        metadata = info
-                        download_success = True
-                        logger.info(f"✅ tv_embedded 成功: {info.get('title', 'N/A')}")
-                except Exception as e:
-                    logger.error(f"❗ 所有策略均失败: {str(e)}")
-                    raise Exception(f"YouTube 视频下载失败:{str(e)}")
-            
-            # 查找下载的视频文件
-            for file_path in session_temp_dir.iterdir():
-                if file_path.suffix.lower() in ['.mp4', '.avi', '.mov', '.mkv', '.webm']:
-                    video_path = str(file_path)
-                    break
-            
-            if video_path and os.path.exists(video_path):
-                logger.info(f"YouTube视频下载成功: {video_path}")
-                return {
-                    "status": "success",
-                    "video_path": video_path,
-                    "metadata": metadata
-                }
-            else:
-                error_msg = f"YouTube视频下载失败：找不到下载的文件"
-                logger.error(error_msg)
-                return {
-                    "status": "error",
-                    "error": error_msg
-                }
-                
-        except yt_dlp.utils.DownloadError as e:
-            # 简化错误消息，提取关键信息
-            raw_error = str(e)
-            if "Failed to extract any player response" in raw_error:
-                error_msg = "YouTube 机器人检测，请配置代理"
-            elif "Video unavailable" in raw_error:
-                error_msg = "视频不可用或已删除"
-            elif "Private video" in raw_error:
-                error_msg = "私有视频，无法访问"
-            elif "Sign in to confirm" in raw_error:
-                error_msg = "需要登录验证"
-            else:
-                error_msg = f"下载失败: {raw_error[:100]}"
-            logger.error(f"❌ {error_msg}")
-            return {
-                "status": "error",
-                "error": error_msg
-            }
-        except Exception as e:
-            raw_error = str(e)
-            if "Failed to extract any player response" in raw_error:
-                error_msg = "YouTube 机器人检测，请配置代理"
-            else:
-                error_msg = f"下载异常: {raw_error[:100]}"
-            logger.exception(f"❌ {error_msg}")
-            return {
-                "status": "error",
-                "error": error_msg
             }
     
     async def extract_keyframes_scene_detection(self, video_path: str, video_id: str, session_temp_dir: Path) -> List[KeyframeInfo]:

@@ -24,5 +24,5 @@ class VideoInfo:
     duration: float = 0.0
     oss_video_url: Optional[str] = None
     upload_time: datetime = None
-    source_type: str = "upload"  # "upload" 或 "youtube"
+    source_type: str = "upload"
     original_url: Optional[str] = None

@@ -293,7 +293,7 @@ class QwenVLService:
         
         Args:
             transcript: 转录元数据（包含完整的音频文本）
-            video_metadata: 视频元数据（来自 yt-dlp 或 ffprobe）
+            video_metadata: 视频元数据（来自 ffprobe）
             video_id: 视频标识
             
         Returns:
