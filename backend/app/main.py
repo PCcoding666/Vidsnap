@@ -6,8 +6,10 @@ import os
 import logging
 import time
 from contextlib import asynccontextmanager
+from pathlib import Path
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
 from .core.logging import logger
 from .core.config import settings
@@ -94,6 +96,11 @@ app.include_router(workspace.router, prefix=API_PREFIX)  # Query-first 工作区
 
 # WebSocket 路由
 app.include_router(websocket.router, prefix=API_PREFIX)  # WebSocket 实时推送
+
+# 静态资源：ExtractFrames 截出的关键帧 JPEG 通过 /static/frames/{video_id}/... 访问
+_frames_dir = Path(settings.STORAGE_DIR) / "frames"
+_frames_dir.mkdir(parents=True, exist_ok=True)
+app.mount("/static/frames", StaticFiles(directory=str(_frames_dir)), name="frames")
 
 # 注意：FastAPI-Users 路由已在 auth.router 中包含，无需重复注册
 

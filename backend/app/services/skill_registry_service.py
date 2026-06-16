@@ -103,13 +103,13 @@ class SkillRegistryService:
         self.register(
             SkillDefinition(
                 name="ExtractFrames",
-                description="Optionally extract representative frames only when the user explicitly asks for visual notes or screenshots.",
-                inputs_schema={"video_asset": "VideoAsset", "locations": "time_range[]"},
+                description="Model-driven: pick key timestamps on the transcript timeline and extract representative frames, only when the user explicitly asks for visual notes or screenshots.",
+                inputs_schema={"video_asset": "VideoAsset", "transcript_index": "TranscriptIndexEntry[]", "query": "string"},
                 outputs_schema={"frames": "frame_reference[]"},
                 cost_estimate="medium",
                 failure_modes=["frame_extraction_disabled", "ffmpeg_failed", "no_relevant_frame"],
                 idempotency_key="video_id:query_hash:frames:v1",
-                default_enabled=False,
+                default_enabled=True,
             )
         )
 

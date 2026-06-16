@@ -79,3 +79,7 @@ temp/
 *.log
 hf_space/
 backend/youtube_cookies.txt
+
+# 运行时产物：ExtractFrames 截帧等
+backend/storage/
+storage/

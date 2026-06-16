@@ -246,7 +246,7 @@ class WorkspaceJobService:
         if not result:
             raise ValueError("job does not have transcript context yet")
 
-        next_result = workspace_service.create_artifact_from_existing(
+        next_result = await workspace_service.create_artifact_from_existing(
             result,
             request.query,
             plan=request.plan,

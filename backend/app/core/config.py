@@ -88,7 +88,13 @@ class Settings:
     MAX_UPLOAD_BYTES: int = int(os.getenv("MAX_UPLOAD_BYTES", str(500 * 1024 * 1024)))
     MAX_MEDIA_DURATION_SECONDS: int = int(os.getenv("MAX_MEDIA_DURATION_SECONDS", str(4 * 3600)))
     MAX_CONCURRENT_WORKSPACE_JOBS: int = int(os.getenv("MAX_CONCURRENT_WORKSPACE_JOBS", "2"))
-    
+
+    # 产物/帧存储目录（截帧 JPEG 落盘于 STORAGE_DIR/frames/{video_id}/）
+    STORAGE_DIR: str = os.getenv("STORAGE_DIR", "./storage")
+    # ExtractFrames：当 plan 含 ExtractFrames 步骤时，由模型在转录时间轴上挑选关键时间点截帧
+    WORKSPACE_FRAMES_ENABLED: bool = os.getenv("WORKSPACE_FRAMES_ENABLED", "true").lower() == "true"
+    MAX_FRAMES_PER_NOTE: int = int(os.getenv("MAX_FRAMES_PER_NOTE", "4"))
+
     # Gmail SMTP 配置
     # 用于发送邮件通知给用户
     GMAIL_SMTP_USER: str = os.getenv("GMAIL_SMTP_USER", "")

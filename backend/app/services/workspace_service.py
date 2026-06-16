@@ -16,6 +16,7 @@ from ..models.workspace import (
     VideoAsset,
     WorkspaceProcessResponse,
 )
+from .frame_service import frame_service
 from .pipeline_service import pipeline
 from .planner_service import planner_service
 from .skill_registry_service import skill_registry
@@ -89,13 +90,14 @@ class WorkspaceService:
         else:
             self._mark_failed(trace, "index", "Transcript index is empty")
 
-        artifact = self._create_artifact(
+        artifact = await self._create_artifact(
             plan=plan,
             video_asset=video_asset,
             transcript_index=transcript_index,
             summary=summary,
             query=query,
             trace=trace,
+            video_file_path=video_file_path,
         )
 
         return WorkspaceProcessResponse(
@@ -108,7 +110,7 @@ class WorkspaceService:
             skill_trace=trace,
         )
 
-    def create_artifact_from_existing(
+    async def create_artifact_from_existing(
         self,
         response: WorkspaceProcessResponse,
         query: str,
@@ -120,7 +122,7 @@ class WorkspaceService:
             raise ValueError("; ".join(validation.errors))
 
         trace = self._initial_trace(plan.steps)
-        artifact = self._create_artifact(
+        artifact = await self._create_artifact(
             plan=plan,
             video_asset=response.video_asset,
             transcript_index=response.transcript_index,
@@ -139,7 +141,7 @@ class WorkspaceService:
             skill_trace=trace,
         )
 
-    def _create_artifact(
+    async def _create_artifact(
         self,
         plan,
         video_asset: VideoAsset,
@@ -147,13 +149,16 @@ class WorkspaceService:
         summary: Dict[str, Any],
         query: str,
         trace: List[SkillTraceEntry],
+        video_file_path: Optional[str] = None,
     ) -> Artifact:
         if plan.artifact_type == "transcript":
             return self._create_transcript_artifact(video_asset, transcript_index)
         if plan.artifact_type == "content_locations":
             return self._create_locations_artifact(video_asset, transcript_index, query, trace)
         if plan.artifact_type == "notes":
-            return self._create_notes_artifact(video_asset, transcript_index, summary, query, trace, plan)
+            return await self._create_notes_artifact(
+                video_asset, transcript_index, summary, query, trace, plan, video_file_path
+            )
         if plan.artifact_type == "qa_answer":
             return self._create_qa_artifact(video_asset, transcript_index, query, trace)
         return self._create_summary_artifact(video_asset, transcript_index, summary, trace)
@@ -201,7 +206,7 @@ class WorkspaceService:
             citations=self._citations_from_segments(transcript_index[:5]),
         )
 
-    def _create_notes_artifact(
+    async def _create_notes_artifact(
         self,
         video_asset: VideoAsset,
         transcript_index: List[TranscriptIndexEntry],
@@ -209,21 +214,16 @@ class WorkspaceService:
         query: str,
         trace: List[SkillTraceEntry],
         plan,
+        video_file_path: Optional[str] = None,
     ) -> Artifact:
         summary_artifact = self._create_summary_artifact(video_asset, transcript_index, summary, trace)
 
         frame_step = next((step for step in plan.steps if step.skill == "ExtractFrames"), None)
         visual_note = ""
+        frames: List[Dict[str, Any]] = []
         if frame_step:
-            self._mark_skipped(
-                trace,
-                frame_step.id,
-                "Frame extraction is explicit in the plan, but visual extraction is disabled in P0; no image descriptions were fabricated.",
-            )
-            visual_note = (
-                "\n\n## Visual References\n"
-                "The request asked for visual material, but frame extraction is disabled in this Slim build. "
-                "No screenshot or visual description has been fabricated.\n"
+            frames, visual_note = await self._extract_frames_for_notes(
+                frame_step.id, video_asset, transcript_index, query, trace, video_file_path
             )
 
         self._mark_running(trace, "generate_notes")
@@ -253,7 +253,62 @@ class WorkspaceService:
             title=f"{video_asset.title} - Notes",
             content=content,
             citations=self._citations_from_segments(top_segments),
+            metadata={"frames": frames} if frames else {},
         )
+
+    async def _extract_frames_for_notes(
+        self,
+        step_id: str,
+        video_asset: VideoAsset,
+        transcript_index: List[TranscriptIndexEntry],
+        query: str,
+        trace: List[SkillTraceEntry],
+        video_file_path: Optional[str],
+    ) -> tuple:
+        """执行 ExtractFrames：模型在转录时间轴上选点截帧，返回 (frames, markdown 片段)。"""
+        # 再版本化等场景下原始视频已被清理，无法截帧，优雅降级。
+        if not video_file_path:
+            self._mark_skipped(
+                trace,
+                step_id,
+                "Original video is no longer available (input cleaned up); no frames were extracted or fabricated.",
+            )
+            return [], (
+                "\n\n## Visual References\n"
+                "Frames were requested but the original video is no longer available for this version. "
+                "No screenshot has been fabricated.\n"
+            )
+
+        self._mark_running(trace, step_id)
+        start = time.time()
+        try:
+            frames = await frame_service.select_and_extract_frames(
+                video_path=video_file_path,
+                video_id=video_asset.video_id,
+                transcript_index=transcript_index,
+                query=query,
+            )
+        except Exception as e:  # 截帧失败不应让整个笔记任务挂掉
+            logger.warning(f"ExtractFrames 失败: {e}")
+            self._mark_failed(trace, step_id, f"frame extraction failed: {e}")
+            return [], (
+                "\n\n## Visual References\n"
+                "Frame extraction was attempted but failed; no screenshot has been fabricated.\n"
+            )
+
+        if not frames:
+            self._mark_done(trace, step_id, start, "No frames selected")
+            return [], ""
+
+        self._mark_done(trace, step_id, start, f"{len(frames)} frames extracted")
+        lines = ["\n\n## Visual References"]
+        for frame in frames:
+            caption = frame.get("reason") or frame.get("text", "")
+            lines.append(
+                f"\n![{self._format_time(frame['timestamp'])}]({frame['frame_url']})\n"
+                f"*[{self._format_time(frame['timestamp'])}] {caption}*"
+            )
+        return frames, "\n".join(lines) + "\n"
 
     def _create_locations_artifact(
         self,
