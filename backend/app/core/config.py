@@ -9,21 +9,21 @@ from typing import Optional
 from pathlib import Path
 from dotenv import load_dotenv
 
-# 加载环境变量，优先从项目根目录的 .env 文件读取
-# 项目根目录 = backend的父目录
-project_root = Path(__file__).parent.parent.parent
-env_file = project_root / ".env"
-if env_file.exists():
-    load_dotenv(env_file)
-    print(f"✅ 已加载环境变量文件: {env_file}")
+# 加载环境变量：项目根目录 .env 优先，backend/.env 作为兼容补充。
+backend_dir = Path(__file__).resolve().parents[2]
+project_root = backend_dir.parent
+env_files = [project_root / ".env", backend_dir / ".env"]
+loaded_env_files = []
+
+for env_file in env_files:
+    if env_file.exists():
+        load_dotenv(env_file, override=False)
+        loaded_env_files.append(env_file)
+
+if loaded_env_files:
+    print(f"✅ 已加载环境变量文件: {', '.join(str(path) for path in loaded_env_files)}")
 else:
-    # 回退到 backend/.env
-    backend_env = project_root / "backend" / ".env"
-    if backend_env.exists():
-        load_dotenv(backend_env)
-        print(f"✅ 已加载环境变量文件: {backend_env}")
-    else:
-        print("⚠️ 未找到 .env 文件，将使用系统环境变量")
+    print("⚠️ 未找到 .env 文件，将使用系统环境变量")
 
 
 class Settings:
@@ -34,12 +34,25 @@ class Settings:
     # OSS配置
     ALIYUN_OSS_ENDPOINT: str = os.getenv("ALIYUN_OSS_ENDPOINT", "")
     ALIYUN_OSS_BUCKET: str = os.getenv("ALIYUN_OSS_BUCKET", "")
+    ENABLE_OSS_UPLOADS: bool = os.getenv("ENABLE_OSS_UPLOADS", "false").lower() in {"1", "true", "yes", "on"}
+    OSS_USE_SIGNED_URLS: bool = os.getenv("OSS_USE_SIGNED_URLS", "true").lower() in {"1", "true", "yes", "on"}
+    OSS_SIGNED_URL_EXPIRES_SECONDS: int = int(os.getenv("OSS_SIGNED_URL_EXPIRES_SECONDS", str(24 * 60 * 60)))
     
     # DashScope配置 (使用 QWEN_API_KEY)
     QWEN_API_KEY: str = os.getenv("QWEN_API_KEY", "")
     
     # 音频转录服务 API Key（优先级最高）
     TRANSCRIPT_SERVICE_API_KEY: str = os.getenv("TRANSCRIPT_SERVICE_API_KEY", "")
+    PARAFORMER_TRANSCRIPTION_SUBMIT_RETRIES: int = int(os.getenv("PARAFORMER_TRANSCRIPTION_SUBMIT_RETRIES", "3"))
+    PARAFORMER_TRANSCRIPTION_FETCH_RETRIES: int = int(os.getenv("PARAFORMER_TRANSCRIPTION_FETCH_RETRIES", "5"))
+    PARAFORMER_TRANSCRIPTION_RETRY_BASE_SECONDS: float = float(os.getenv("PARAFORMER_TRANSCRIPTION_RETRY_BASE_SECONDS", "2"))
+    PARAFORMER_MAX_WAIT_SECONDS: int = int(os.getenv("PARAFORMER_MAX_WAIT_SECONDS", "1800"))
+    PARAFORMER_POLL_INTERVAL_SECONDS: int = int(os.getenv("PARAFORMER_POLL_INTERVAL_SECONDS", "5"))
+    DASHSCOPE_HTTP_BASE_URL: str = os.getenv("DASHSCOPE_HTTP_BASE_URL", "").rstrip("/")
+    PARAFORMER_AUDIO_FORMAT: str = os.getenv("PARAFORMER_AUDIO_FORMAT", "flac").lower()
+    PARAFORMER_CHUNK_SECONDS: int = int(os.getenv("PARAFORMER_CHUNK_SECONDS", "1800"))
+    PARAFORMER_MAX_PARALLEL_CHUNKS: int = int(os.getenv("PARAFORMER_MAX_PARALLEL_CHUNKS", "2"))
+    LOCAL_ASR_ENABLED: bool = os.getenv("LOCAL_ASR_ENABLED", "false").lower() in {"1", "true", "yes", "on"}
     
     # ============================================
     # Supabase 配置 - 已禁用
@@ -73,11 +86,6 @@ class Settings:
     # 应用配置
     TEMP_DIR: str = os.getenv("TEMP_DIR", "/tmp/video_analysis")
     
-    # YouTube 代理配置
-    # 服务器部署时设置为 http://127.0.0.1:7890 (Clash 代理)
-    # 本地开发可设置为 http://127.0.0.1:33210 (本地代理) 或留空禁用
-    YOUTUBE_PROXY: str = os.getenv("YOUTUBE_PROXY", "")
-    
     # Gmail SMTP 配置
     # 用于发送邮件通知给用户
     GMAIL_SMTP_USER: str = os.getenv("GMAIL_SMTP_USER", "")
@@ -104,7 +112,7 @@ class Settings:
     # 服务可用性检查
     @property
     def oss_available(self) -> bool:
-        return all([
+        return self.ENABLE_OSS_UPLOADS and all([
             self.ALIYUN_ACCESS_KEY_ID,
             self.ALIYUN_ACCESS_KEY_SECRET,
             self.ALIYUN_OSS_ENDPOINT,

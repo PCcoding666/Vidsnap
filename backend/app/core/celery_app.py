@@ -1,17 +1,15 @@
 """
 Celery应用配置
-用于后台任务处理，包括YouTube频道监控和自动视频分析
+用于后台任务处理
 """
 import os
 import logging
 from celery import Celery
-from celery.schedules import crontab
 from kombu import Queue
 
 # 禁用冗余的第三方库日志
 logging.getLogger("httpx").setLevel(logging.WARNING)
 logging.getLogger("httpcore").setLevel(logging.WARNING)
-logging.getLogger("yt_dlp").setLevel(logging.WARNING)
 logging.getLogger("urllib3").setLevel(logging.WARNING)
 
 # 从环境变量获取Redis配置
@@ -24,9 +22,7 @@ celery_app = Celery(
     "vidsnap",
     broker=CELERY_BROKER_URL,
     backend=CELERY_RESULT_BACKEND,
-    include=[
-        "app.tasks.monitor",  # 频道监控任务
-    ]
+    include=[]
 )
 
 # Celery配置
@@ -51,33 +47,11 @@ celery_app.conf.update(
     # 队列配置
     task_queues=(
         Queue("default", routing_key="default"),
-        Queue("monitor", routing_key="monitor"),  # 监控任务队列
-        Queue("analysis", routing_key="analysis"),  # 分析任务队列
     ),
     task_default_queue="default",
     task_default_routing_key="default",
-    
-    # 任务路由
-    task_routes={
-        "app.tasks.monitor.*": {"queue": "monitor"},
-        "app.tasks.analysis.*": {"queue": "analysis"},
-    },
-    
-    # 定时任务配置 (Celery Beat)
-    beat_schedule={
-        # 每5分钟检查所有活跃订阅
-        "check-subscriptions-every-5-minutes": {
-            "task": "app.tasks.monitor.check_all_subscriptions",
-            "schedule": 300.0,  # 5分钟 = 300秒
-            "options": {"queue": "monitor"}
-        },
-        # 每分钟处理待分析的视频
-        "process-pending-analysis-every-minute": {
-            "task": "app.tasks.monitor.process_pending_analysis",
-            "schedule": 60.0,  # 1分钟
-            "options": {"queue": "analysis"}
-        },
-    },
+    task_routes={},
+    beat_schedule={},
     
     # 并发配置
     worker_concurrency=4,  # 每个Worker的并发数
@@ -136,4 +110,3 @@ def configure_for_testing():
         task_always_eager=True,
         task_eager_propagates=True,
     )
-

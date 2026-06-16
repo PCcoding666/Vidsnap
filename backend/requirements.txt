@@ -5,8 +5,7 @@
 fastapi>=0.100.0
 uvicorn>=0.23.0
 
-# 视频处理 
-yt-dlp>=2024.10.7  # 更新到最新版本以支持最新的 YouTube 反爬虫机制
+# 视频处理
 ffmpeg-python>=0.2.0
 scenedetect[opencv]>=0.6.2  # PySceneDetect 场景检测库
 
@@ -53,14 +52,6 @@ pytest-asyncio>=0.21.0
 celery>=5.3.0
 redis>=4.5.0
 kombu>=5.3.0
-
-# YouTube Data API
-google-api-python-client>=2.100.0
-
-# YouTube字幕获取（无需下载视频）
-youtube-transcript-api>=0.6.0
-google-auth>=2.22.0
-google-auth-oauthlib>=1.0.0
 
 # 表单解析
 python-multipart>=0.0.6

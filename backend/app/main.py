@@ -11,7 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from .core.logging import logger
 from .core.config import settings
-from .api.routes import video, analysis, auth, user, websocket
+from .api.routes import video, analysis, auth, user, websocket, workspace
 
 
 @asynccontextmanager
@@ -90,6 +90,7 @@ app.include_router(auth.router, prefix=API_PREFIX)  # 认证路由
 app.include_router(video.router, prefix=API_PREFIX)  # 视频路由
 app.include_router(analysis.router, prefix=API_PREFIX)  # 分析路由
 app.include_router(user.router, prefix=API_PREFIX)  # 用户路由
+app.include_router(workspace.router, prefix=API_PREFIX)  # Query-first 工作区路由
 
 # WebSocket 路由
 app.include_router(websocket.router, prefix=API_PREFIX)  # WebSocket 实时推送
