@@ -3,6 +3,7 @@
 处理视频、音频、关键帧图片和metadata的上传和访问
 """
 import logging
+import mimetypes
 import os
 import uuid
 from datetime import datetime
@@ -19,10 +20,21 @@ class AliyunOSSService:
     
     def __init__(self):
         """初始化OSS服务"""
+        if not settings.ENABLE_OSS_UPLOADS:
+            self.access_key_id = ""
+            self.access_key_secret = ""
+            self.endpoint = ""
+            self.bucket_name = ""
+            self.available = False
+            self.auth = None
+            self.bucket = None
+            logger.info("OSS上传已禁用 (ENABLE_OSS_UPLOADS=false)")
+            return
+
         # 从配置获取阿里云OSS配置
         self.access_key_id = settings.ALIYUN_ACCESS_KEY_ID
         self.access_key_secret = settings.ALIYUN_ACCESS_KEY_SECRET
-        self.endpoint = settings.ALIYUN_OSS_ENDPOINT
+        self.endpoint = self._normalize_endpoint(settings.ALIYUN_OSS_ENDPOINT)
         self.bucket_name = settings.ALIYUN_OSS_BUCKET
         
         # 检查必要的配置
@@ -47,6 +59,45 @@ class AliyunOSSService:
     def is_available(self) -> bool:
         """检查OSS服务是否可用"""
         return self.available
+
+    def _normalize_endpoint(self, endpoint: str) -> str:
+        """规范化OSS endpoint，oss2 SDK 需要包含协议。"""
+        endpoint = (endpoint or "").strip().rstrip("/")
+        if not endpoint:
+            return ""
+        if endpoint.startswith(("http://", "https://")):
+            return endpoint
+        return f"https://{endpoint}"
+
+    def _public_url(self, object_key: str) -> str:
+        """生成未签名的标准OSS访问URL。"""
+        clean_endpoint = self.endpoint.replace('https://', '').replace('http://', '')
+        return f"https://{self.bucket_name}.{clean_endpoint}/{object_key}"
+
+    def _access_url(self, object_key: str) -> str:
+        """生成给外部服务读取的URL，默认使用签名URL兼容私有Bucket。"""
+        if settings.OSS_USE_SIGNED_URLS:
+            return self.bucket.sign_url(
+                "GET",
+                object_key,
+                settings.OSS_SIGNED_URL_EXPIRES_SECONDS,
+                slash_safe=True
+            )
+        return self._public_url(object_key)
+
+    def _content_type_for_file(self, file_path: str, default: str = "application/octet-stream") -> str:
+        """根据文件名推断Content-Type。"""
+        suffix = Path(file_path).suffix.lower()
+        explicit_types = {
+            ".flac": "audio/flac",
+            ".m4a": "audio/mp4",
+            ".opus": "audio/ogg",
+            ".wav": "audio/wav",
+        }
+        if suffix in explicit_types:
+            return explicit_types[suffix]
+        content_type, _ = mimetypes.guess_type(file_path)
+        return content_type or default
     
     def _generate_object_key(self, video_id: str, file_type: str, filename: str) -> str:
         """生成OSS对象键"""
@@ -74,14 +125,14 @@ class AliyunOSSService:
             
             logger.info(f"开始上传视频文件: {video_path} -> {object_key}")
             
+            headers = {"Content-Type": self._content_type_for_file(video_path, "video/webm")}
+
             # 上传文件
             with open(video_path, 'rb') as fileobj:
-                self.bucket.put_object(object_key, fileobj)
+                self.bucket.put_object(object_key, fileobj, headers=headers)
             
-            # 生成访问URL（处理endpoint格式）
-            clean_endpoint = self.endpoint.replace('https://', '').replace('http://', '')
-            url = f"https://{self.bucket_name}.{clean_endpoint}/{object_key}"
-            logger.info(f"视频上传成功: {url}")
+            url = self._access_url(object_key)
+            logger.info(f"视频上传成功: {object_key}")
             
             return url
             
@@ -110,14 +161,14 @@ class AliyunOSSService:
             
             logger.info(f"开始上传音频文件: {audio_path} -> {object_key}")
             
+            headers = {"Content-Type": self._content_type_for_file(audio_path, "audio/wav")}
+
             # 上传文件
             with open(audio_path, 'rb') as fileobj:
-                self.bucket.put_object(object_key, fileobj)
+                self.bucket.put_object(object_key, fileobj, headers=headers)
             
-            # 生成访问URL（处理endpoint格式）
-            clean_endpoint = self.endpoint.replace('https://', '').replace('http://', '')
-            url = f"https://{self.bucket_name}.{clean_endpoint}/{object_key}"
-            logger.info(f"音频上传成功: {url}")
+            url = self._access_url(object_key)
+            logger.info(f"音频上传成功: {object_key}")
             
             return url
             
@@ -147,14 +198,14 @@ class AliyunOSSService:
             
             logger.info(f"开始上传关键帧: {image_path} -> {object_key}")
             
+            headers = {"Content-Type": self._content_type_for_file(image_path, "image/jpeg")}
+
             # 上传文件
             with open(image_path, 'rb') as fileobj:
-                self.bucket.put_object(object_key, fileobj)
+                self.bucket.put_object(object_key, fileobj, headers=headers)
             
-            # 生成访问URL（处理endpoint格式）
-            clean_endpoint = self.endpoint.replace('https://', '').replace('http://', '')
-            url = f"https://{self.bucket_name}.{clean_endpoint}/{object_key}"
-            logger.debug(f"关键帧上传成功: {url}")
+            url = self._access_url(object_key)
+            logger.debug(f"关键帧上传成功: {object_key}")
             
             return url
             
@@ -189,12 +240,14 @@ class AliyunOSSService:
             metadata_json = json.dumps(metadata, ensure_ascii=False, indent=2)
             
             # 上传JSON内容
-            self.bucket.put_object(object_key, metadata_json.encode('utf-8'))
+            self.bucket.put_object(
+                object_key,
+                metadata_json.encode('utf-8'),
+                headers={"Content-Type": "application/json; charset=utf-8"}
+            )
             
-            # 生成访问URL（处理endpoint格式）
-            clean_endpoint = self.endpoint.replace('https://', '').replace('http://', '')
-            url = f"https://{self.bucket_name}.{clean_endpoint}/{object_key}"
-            logger.info(f"Metadata上传成功: {url}")
+            url = self._access_url(object_key)
+            logger.info(f"Metadata上传成功: {object_key}")
             
             return url
             
