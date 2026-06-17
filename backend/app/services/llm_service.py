@@ -670,6 +670,32 @@ class QwenVLService:
         
         return summaries
     
+    @staticmethod
+    def _extract_generation_text(response) -> Optional[str]:
+        """兼容两种 DashScope 输出格式：message（qwen3 代）与 text（老模型）。"""
+        output = getattr(response, "output", None)
+        if output is None:
+            return None
+        # message 格式：output.choices[0].message.content
+        choices = getattr(output, "choices", None)
+        if choices:
+            try:
+                content = choices[0]["message"]["content"]
+            except (KeyError, TypeError, IndexError):
+                message = getattr(choices[0], "message", None)
+                content = getattr(message, "content", None) if message else None
+            if isinstance(content, list):  # 多模态分块返回
+                content = "".join(
+                    part.get("text", "") for part in content if isinstance(part, dict)
+                )
+            if content and str(content).strip():
+                return str(content).strip()
+        # text 格式：output.text
+        text = getattr(output, "text", None)
+        if text and text.strip():
+            return text.strip()
+        return None
+
     async def _call_text_generation(self, prompt: str, max_tokens: int = 500, model: Optional[str] = None) -> Optional[str]:
         """
         调用文本生成 API（纯文本任务）
@@ -689,25 +715,26 @@ class QwenVLService:
             
             logger.info(f"调用文本生成 API, max_tokens={max_tokens}, model={target_model}")
             
-            # 使用 Generation.call 进行纯文本生成
+            # 使用 message 输出格式：qwen3 代（qwen3-max / qwen3.7-max 等）只通过
+            # output.choices[].message.content 返回；老模型（qwen-max）仍兼容 output.text。
             response = await asyncio.to_thread(
                 Generation.call,
                 model=target_model,
                 prompt=prompt,
                 temperature=self.temperature,
-                max_tokens=max_tokens
+                max_tokens=max_tokens,
+                result_format="message",
             )
-            
+
             logger.info(f"API 响应状态: {response.status_code if response else 'None'}")
-            
+
             if response and response.status_code == 200:
-                if hasattr(response, 'output') and hasattr(response.output, 'text'):
-                    result = response.output.text
-                    
+                result = self._extract_generation_text(response)
+                if result:
                     logger.info(f"文本生成成功，长度: {len(result)} 字符")
                     logger.info(f"生成内容: {result[:200]}...")  # 只显示前200字符
                     return result
-            
+
             logger.error(f"文本生成失败: {response.message if response else 'No response'}")
             if response:
                 logger.error(f"Response details: {response}")
