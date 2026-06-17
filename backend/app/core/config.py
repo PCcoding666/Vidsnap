@@ -46,6 +46,10 @@ class Settings:
     LLM_SUMMARY_MODEL: str = os.getenv("LLM_SUMMARY_MODEL", "qwen3.7-max")         # 摘要生成
     LLM_FRAME_SELECT_MODEL: str = os.getenv("LLM_FRAME_SELECT_MODEL", "qwen3.7-max")  # 模型选帧
     ASR_MODEL: str = os.getenv("ASR_MODEL", "fun-asr")                             # 语音转录（DashScope FunASR）
+
+    # 多模态模型（关键帧分析、视频总结等）
+    VISION_MODEL: str = os.getenv("VISION_MODEL", "qwen3.7-plus")                  # 关键帧分析
+    VISION_SUMMARY_MODEL: str = os.getenv("VISION_SUMMARY_MODEL", "qwen3.7-plus")  # 视频总结
     
     # 音频转录服务 API Key（优先级最高）
     TRANSCRIPT_SERVICE_API_KEY: str = os.getenv("TRANSCRIPT_SERVICE_API_KEY", "")

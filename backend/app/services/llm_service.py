@@ -88,10 +88,16 @@ class QwenVLService:
             os.environ["DASHSCOPE_API_KEY"] = self.api_key
             dashscope.api_key = self.api_key
             logger.info("Qwen VL 服务使用 QWEN_API_KEY 初始化")
+
+        # 支持自定义 DashScope base URL
+        if settings.DASHSCOPE_HTTP_BASE_URL:
+            os.environ["DASHSCOPE_HTTP_BASE_URL"] = settings.DASHSCOPE_HTTP_BASE_URL
+            dashscope.base_http_api_url = settings.DASHSCOPE_HTTP_BASE_URL
+            logger.info(f"DashScope HTTP endpoint: {settings.DASHSCOPE_HTTP_BASE_URL}")
         
         # 模型配置（在检查可用性之前定义）
-        self.vision_model = "qwen-vl-max"  # Qwen3-VL-Flash - 用于关键帧图像分析
-        self.text_model = "qwen-vl-plus"  # Qwen3-VL-Plus - 用于主视频总结
+        self.vision_model = settings.VISION_MODEL
+        self.text_model = settings.VISION_SUMMARY_MODEL
         self.temperature = 0.7  # 创造性和准确性的平衡
         self.max_tokens = 2000  # 最大输出长度
         
