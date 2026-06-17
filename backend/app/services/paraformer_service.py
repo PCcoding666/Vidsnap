@@ -130,7 +130,7 @@ class ParaformerSpeechService:
         for attempt in range(1, max_attempts + 1):
             try:
                 response = Transcription.async_call(
-                    model='paraformer-v2',
+                    model=settings.ASR_MODEL,
                     file_urls=[audio_oss_url],
                     diarization_enabled=enable_diarization,
                 )

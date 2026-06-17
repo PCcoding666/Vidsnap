@@ -19,6 +19,7 @@ from datetime import datetime
 import dashscope
 from dashscope import MultiModalConversation, Generation
 
+from ..core.config import settings
 from ..core.logging import logger
 from ..models.video import KeyframeInfo
 from ..models.analysis import (
@@ -354,11 +355,11 @@ class QwenVLService:
             
             logger.info(f"提示词长度: {len(prompt)} 字符")
             
-            # 步骤 4: 调用 qwen3-max API
+            # 步骤 4: 调用摘要模型 API
             detailed_summary = await self._call_text_generation(
                 prompt=prompt,
                 max_tokens=2000,  # 增加以支持灵活长度
-                model="qwen-max"  # 使用 qwen3-max 模型
+                model=settings.LLM_SUMMARY_MODEL  # 摘要模型（config 集中配置）
             )
             
             if not detailed_summary:

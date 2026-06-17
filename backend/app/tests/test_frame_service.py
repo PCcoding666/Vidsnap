@@ -24,7 +24,7 @@ async def test_model_picks_timestamps_and_extracts(tmp_path, monkeypatch):
     monkeypatch.setattr(frame_module.settings, "STORAGE_DIR", str(tmp_path / "storage"))
     monkeypatch.setattr(frame_module.llm_service, "is_available", lambda: True)
 
-    async def fake_llm(prompt, max_tokens=600):
+    async def fake_llm(prompt, max_tokens=600, model=None):
         # 模型挑了片段 1 和 2，时间点落在各自范围内
         return '[{"segment_index": 1, "timestamp": 15.0, "reason": "attention 核心"}, '\
                '{"segment_index": 2, "timestamp": 30.0, "reason": "训练演示"}]'
@@ -62,7 +62,7 @@ async def test_clamps_out_of_range_timestamp(tmp_path, monkeypatch):
     monkeypatch.setattr(frame_module.settings, "STORAGE_DIR", str(tmp_path / "storage"))
     monkeypatch.setattr(frame_module.llm_service, "is_available", lambda: True)
 
-    async def fake_llm(prompt, max_tokens=600):
+    async def fake_llm(prompt, max_tokens=600, model=None):
         # 模型给了越界时间点 999，应被钳制到片段范围内
         return '[{"segment_index": 0, "timestamp": 999.0, "reason": "x"}]'
 

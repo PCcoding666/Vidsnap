@@ -115,7 +115,9 @@ class FrameService:
             "不要输出 JSON 以外的任何文字。"
         )
 
-        raw = await llm_service._call_text_generation(prompt, max_tokens=600)
+        raw = await llm_service._call_text_generation(
+            prompt, max_tokens=600, model=settings.LLM_FRAME_SELECT_MODEL
+        )
         if not raw:
             return []
 

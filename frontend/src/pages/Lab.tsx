@@ -6,6 +6,8 @@
  * 后端 force_skills 会尊重补充并改写执行链路。
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import { apiClient } from "@/services/api";
 import type {
   WorkspacePlan,
@@ -46,6 +48,11 @@ function fmtTime(s: number): string {
   const m = Math.floor(s / 60);
   const r = Math.floor(s % 60);
   return `${String(m).padStart(2, "0")}:${String(r).padStart(2, "0")}`;
+}
+
+// 去掉正文里的「Visual References」内联图——右侧画廊已交互式展示，避免重复。
+function stripVisualReferences(md: string): string {
+  return md.replace(/\n*##\s*Visual References[\s\S]*?(?=\n##\s|$)/g, "\n").trim();
 }
 
 export default function Lab() {
@@ -399,9 +406,11 @@ export default function Lab() {
           {artifact?.artifact?.content && (
             <div>
               <h3 className="text-sm font-semibold text-slate-300 mb-2">产物：{artifact.artifact.title}</h3>
-              <pre className="whitespace-pre-wrap text-xs text-slate-300 bg-slate-900/50 border border-slate-800 rounded-lg p-3 max-h-96 overflow-auto">
-                {artifact.artifact.content}
-              </pre>
+              <div className="bg-slate-900/50 border border-slate-800 rounded-lg p-4 max-h-[32rem] overflow-auto prose prose-sm prose-invert max-w-none prose-headings:text-slate-100 prose-p:text-slate-300 prose-li:text-slate-300 prose-strong:text-slate-100 prose-a:text-emerald-400 prose-img:rounded-md prose-img:border prose-img:border-slate-800">
+                <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                  {stripVisualReferences(artifact.artifact.content)}
+                </ReactMarkdown>
+              </div>
             </div>
           )}
         </section>

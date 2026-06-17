@@ -40,6 +40,12 @@ class Settings:
     
     # DashScope配置 (使用 QWEN_API_KEY)
     QWEN_API_KEY: str = os.getenv("QWEN_API_KEY", "")
+
+    # 各环节使用的模型 ID（集中配置，便于切换）
+    # 注意：必须是 DashScope 支持的有效模型 ID，否则对应环节会失败
+    LLM_SUMMARY_MODEL: str = os.getenv("LLM_SUMMARY_MODEL", "qwen3.7-plus")        # 摘要生成
+    LLM_FRAME_SELECT_MODEL: str = os.getenv("LLM_FRAME_SELECT_MODEL", "qwen3.7-max")  # 模型选帧
+    ASR_MODEL: str = os.getenv("ASR_MODEL", "funasr-1.5")                          # 语音转录（DashScope 型号）
     
     # 音频转录服务 API Key（优先级最高）
     TRANSCRIPT_SERVICE_API_KEY: str = os.getenv("TRANSCRIPT_SERVICE_API_KEY", "")
