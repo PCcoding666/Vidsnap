@@ -230,22 +230,20 @@ class WorkspaceService:
 
         self._mark_running(trace, "generate_notes")
         start = time.time()
-        top_segments = transcript_index[:6]
-        section_lines = []
-        for idx, segment in enumerate(top_segments, 1):
-            section_lines.append(
-                f"{idx}. **{self._format_time(segment.start_time)}** - {segment.text}"
-            )
+        # 图文交织：截图插到对应转录段落下方（取代末尾堆图）
+        notes_body, cited_segments = self._render_illustrated_notes(transcript_index, frames)
+        if not cited_segments:
+            cited_segments = transcript_index[:6]
 
         content = (
             f"# {video_asset.title}\n\n"
             f"## User Goal\n{query.strip()}\n\n"
             f"## Condensed Understanding\n{summary_artifact.content}\n\n"
             "## Timestamped Notes\n"
-            + ("\n".join(section_lines) if section_lines else "No transcript-backed notes are available.")
-            + visual_note
+            + notes_body
+            + visual_note  # 仅降级场景（视频不可用/截帧失败）才非空
             + "\n\n## Source Boundary\n"
-            "This note is grounded in the video's transcript. It does not claim visual details unless frame extraction is explicitly available."
+            "This note is grounded in the video's transcript. Visual details come only from frames the model actually analyzed."
         )
         self._mark_done(trace, "generate_notes", start, "Markdown notes generated")
 
@@ -254,7 +252,7 @@ class WorkspaceService:
             artifact_type="notes",
             title=f"{video_asset.title} - Notes",
             content=content,
-            citations=self._citations_from_segments(top_segments),
+            citations=self._citations_from_segments(cited_segments),
             metadata={"frames": frames} if frames else {},
         )
 
@@ -267,7 +265,11 @@ class WorkspaceService:
         trace: List[SkillTraceEntry],
         video_file_path: Optional[str],
     ) -> tuple:
-        """执行 ExtractFrames：模型在转录时间轴上选点截帧，返回 (frames, markdown 片段)。"""
+        """执行 ExtractFrames，返回 (frames, 降级提示)。
+
+        成功时只返回 frames（由 _render_illustrated_notes 图文交织渲染）；
+        仅在视频不可用/截帧失败等降级场景返回提示文案。
+        """
         # 再版本化等场景下原始视频已被清理，无法截帧，优雅降级。
         if not video_file_path:
             self._mark_skipped(
@@ -312,20 +314,59 @@ class WorkspaceService:
             return [], ""
 
         self._mark_done(trace, step_id, start, f"{len(frames)} frames extracted")
-        lines = ["\n\n## Visual References"]
-        for frame in frames:
-            ts = self._format_time(frame["timestamp"])
-            caption = frame.get("reason") or frame.get("text", "")
-            lines.append(f"\n![{ts}]({frame['frame_url']})")
-            lines.append(f"*[{ts}] {caption}*")
-            # zoom in 特写图（关键区域放大）
-            if frame.get("zoom_url"):
-                lines.append(f"\n🔍 ![{ts} 特写]({frame['zoom_url']})")
-            # OCR：画面文字入笔记（转录里没有的信息）
-            ocr = (frame.get("ocr_text") or "").strip()
-            if ocr:
-                lines.append(f"> 📃 画面文字：{ocr}")
-        return frames, "\n".join(lines) + "\n"
+        return frames, ""
+
+    def _render_frame_block(self, frame: Dict[str, Any]) -> str:
+        """渲染单帧的图文块：图 + 图注 + zoom 特写 + OCR 画面文字（顶层块，空行分隔）。"""
+        ts = self._format_time(frame["timestamp"])
+        caption = frame.get("reason") or frame.get("visual_summary") or frame.get("text", "")
+        # 图与图注用单换行（软换行）贴在一起；其余各自成块
+        parts = [f"![{ts}]({frame['frame_url']})\n*[{ts}] {caption}*"]
+        if frame.get("zoom_url"):
+            parts.append(f"🔍 ![{ts} 特写]({frame['zoom_url']})")
+        ocr = (frame.get("ocr_text") or "").strip()
+        if ocr:
+            parts.append(f"> 📃 画面文字：{ocr}")
+        return "\n\n".join(parts)
+
+    def _render_illustrated_notes(
+        self,
+        segments: List[TranscriptIndexEntry],
+        frames: List[Dict[str, Any]],
+    ) -> tuple:
+        """图文交织：把每张帧插到它时间点所在的转录段落下方，返回 (markdown, 引用用的段落)。"""
+        if not segments:
+            body = "\n\n".join(self._render_frame_block(f) for f in frames)
+            return (body or "No transcript-backed notes are available."), []
+
+        frame_ts = [f.get("timestamp", -1) for f in frames]
+        # 展示的段落 = 前 8 段 ∪ 含有帧的段落（保证每张帧都有归属段落）
+        show_idx = set(range(min(8, len(segments))))
+        for i, seg in enumerate(segments):
+            end = seg.end_time or seg.start_time
+            if any(seg.start_time <= ts <= end for ts in frame_ts):
+                show_idx.add(i)
+        shown = [segments[i] for i in sorted(show_idx)]
+
+        used = set()
+        blocks = []
+        for seg in shown:
+            blocks.append(f"**[{self._format_time(seg.start_time)}]** {seg.text}")
+            end = seg.end_time or seg.start_time
+            for fi, frame in enumerate(frames):
+                if fi in used:
+                    continue
+                if seg.start_time <= frame.get("timestamp", -1) <= end:
+                    blocks.append(self._render_frame_block(frame))
+                    used.add(fi)
+
+        # 落在所有展示段落之外的帧（极少数）统一放到末尾
+        leftover = [f for i, f in enumerate(frames) if i not in used]
+        if leftover:
+            blocks.append("### 其他关键画面")
+            blocks.extend(self._render_frame_block(f) for f in leftover)
+
+        return "\n\n".join(blocks), shown
 
     def _create_locations_artifact(
         self,
