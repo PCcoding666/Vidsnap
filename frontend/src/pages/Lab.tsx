@@ -25,12 +25,15 @@ interface LabSkill {
 
 interface FrameRef {
   timestamp: number;
-  segment_index: number;
-  start_time: number;
-  end_time: number;
-  text: string;
+  segment_index?: number;
+  start_time?: number;
+  end_time?: number;
+  text?: string;
   reason: string;
   frame_url: string;
+  frame_type?: string;
+  ocr_text?: string;
+  zoom_url?: string | null;
 }
 
 // 可被用户「补充」的可选工具（planner 不一定自动选）。
@@ -382,21 +385,43 @@ export default function Lab() {
               </h3>
               <div className="grid grid-cols-2 gap-3">
                 {frames.map((f, i) => (
-                  <button
-                    key={i}
-                    onClick={() => seekTo(f.timestamp)}
-                    className="text-left group"
-                    title="点击跳转到视频对应时间点"
-                  >
-                    <img
-                      src={f.frame_url}
-                      alt={`frame@${f.timestamp}`}
-                      className="w-full rounded-md border border-slate-800 group-hover:border-emerald-500 transition"
-                    />
-                    <div className="text-[11px] text-slate-400 mt-1">
-                      <span className="text-emerald-400">{fmtTime(f.timestamp)}</span> · {f.reason}
-                    </div>
-                  </button>
+                  <div key={i} className="space-y-1">
+                    <button
+                      onClick={() => seekTo(f.timestamp)}
+                      className="text-left group block w-full"
+                      title="点击跳转到视频对应时间点"
+                    >
+                      <img
+                        src={f.frame_url}
+                        alt={`frame@${f.timestamp}`}
+                        className="w-full rounded-md border border-slate-800 group-hover:border-emerald-500 transition"
+                      />
+                      <div className="text-[11px] text-slate-400 mt-1 flex items-center gap-1.5">
+                        <span className="text-emerald-400">{fmtTime(f.timestamp)}</span>
+                        {f.frame_type && (
+                          <span className="px-1 rounded bg-slate-800 text-slate-400">{f.frame_type}</span>
+                        )}
+                      </div>
+                      <div className="text-[11px] text-slate-400">{f.reason}</div>
+                    </button>
+                    {/* zoom in 特写：点击在新标签打开放大图 */}
+                    {f.zoom_url && (
+                      <a
+                        href={f.zoom_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-[11px] text-emerald-400 hover:underline inline-block"
+                      >
+                        🔍 查看关键区域特写
+                      </a>
+                    )}
+                    {/* OCR：画面文字 */}
+                    {f.ocr_text && (
+                      <div className="text-[11px] text-slate-500 bg-slate-900/60 border border-slate-800 rounded px-1.5 py-1">
+                        📃 {f.ocr_text}
+                      </div>
+                    )}
+                  </div>
                 ))}
               </div>
             </div>

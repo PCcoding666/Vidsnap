@@ -213,3 +213,40 @@ async def test_extract_keyframes_returns_empty_when_vlm_unavailable(tmp_path, mo
         video_path=str(video), video_id="v1", query="q", transcript_index=None
     )
     assert frames == []
+
+
+def test_crop_salient_region_produces_zoom(tmp_path, monkeypatch):
+    """zoom in：对图表帧裁剪 salient_region 生成放大特写。"""
+    from PIL import Image
+    monkeypatch.setattr(frame_module.settings, "STORAGE_DIR", str(tmp_path / "storage"))
+    service = FrameService()
+    # 造一张 400x300 测试图
+    frame_dir = service._frames_dir("v1")
+    src = frame_dir / "frame_000.jpg"
+    Image.new("RGB", (400, 300), (10, 20, 30)).save(str(src), "JPEG")
+
+    url = service._crop_salient_region(
+        str(src), "v1", 0, [0.25, 0.25, 0.5, 0.5], "chart"
+    )
+    assert url == "/static/frames/v1/frame_000_zoom.jpg"
+    zoom_path = frame_dir / "frame_000_zoom.jpg"
+    assert zoom_path.exists()
+    # 裁剪区域 0.5x0.5 = 200x150，放大≥2x，应明显大于原裁剪
+    with Image.open(str(zoom_path)) as z:
+        assert z.width >= 400 and z.height >= 300
+
+
+def test_crop_skips_non_zoomable_type(tmp_path, monkeypatch):
+    """口播帧不生成特写。"""
+    from PIL import Image
+    monkeypatch.setattr(frame_module.settings, "STORAGE_DIR", str(tmp_path / "storage"))
+    service = FrameService()
+    frame_dir = service._frames_dir("v2")
+    src = frame_dir / "f.jpg"
+    Image.new("RGB", (400, 300)).save(str(src), "JPEG")
+
+    assert service._crop_salient_region(str(src), "v2", 0, [0.2, 0.2, 0.5, 0.5], "talking_head") is None
+    # 区域太小也跳过
+    assert service._crop_salient_region(str(src), "v2", 0, [0.1, 0.1, 0.05, 0.05], "chart") is None
+    # 无区域跳过
+    assert service._crop_salient_region(str(src), "v2", 0, None, "chart") is None

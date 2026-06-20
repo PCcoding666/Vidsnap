@@ -81,16 +81,22 @@ class FrameService:
                 continue
 
             filename = Path(frame_path).name
+            region = understanding.get("salient_region")
+            # zoom in：把关键区域裁剪+放大成独立特写图（图表/代码/幻灯片这类细节帧才值得）
+            zoom_url = self._crop_salient_region(
+                frame_path, video_id, order, region, understanding.get("frame_type")
+            )
             analyzed.append(
                 {
                     "timestamp": round(ts, 2),
                     "frame_type": understanding.get("frame_type"),
                     "ocr_text": (understanding.get("ocr_text") or "").strip(),
                     "visual_summary": (understanding.get("visual_summary") or "").strip(),
-                    "salient_region": understanding.get("salient_region"),
+                    "salient_region": region,
                     # caption 来自像素理解（取代盲选的转录猜测）
                     "reason": (understanding.get("visual_summary") or "").strip(),
                     "frame_url": self._public_url(video_id, filename),
+                    "zoom_url": zoom_url,  # 关键区域特写（无则 None）
                 }
             )
 
@@ -115,6 +121,58 @@ class FrameService:
             key=lambda s: abs(((s.start_time + (s.end_time or s.start_time)) / 2) - timestamp),
         )
         return nearest.text
+
+    # 值得 zoom in 的帧类型（细节密集，特写有价值）
+    _ZOOMABLE_TYPES = {"chart", "code", "slide", "demo"}
+
+    def _crop_salient_region(
+        self,
+        frame_path: str,
+        video_id: str,
+        order: int,
+        region: Optional[List[float]],
+        frame_type: Optional[str],
+    ) -> Optional[str]:
+        """把归一化 salient_region [x,y,w,h] 裁剪出来并放大，存为特写图，返回 url。
+
+        仅对细节型帧(图表/代码/幻灯片/演示)生成特写；区域非法或太小则跳过。
+        """
+        if not region or frame_type not in self._ZOOMABLE_TYPES:
+            return None
+        try:
+            x, y, w, h = (float(v) for v in region)
+        except (TypeError, ValueError):
+            return None
+        # 归一化区域校验：必须在 [0,1] 且占比不能太小（太小裁出来没意义）
+        if not (0 <= x < 1 and 0 <= y < 1 and 0 < w <= 1 and 0 < h <= 1):
+            return None
+        if w * h < 0.02 or w * h > 0.95:  # 太小或几乎整图，没必要 zoom
+            return None
+
+        try:
+            from PIL import Image
+
+            with Image.open(frame_path) as img:
+                W, H = img.size
+                left = int(x * W)
+                top = int(y * H)
+                right = min(int((x + w) * W), W)
+                bottom = min(int((y + h) * H), H)
+                if right - left < 10 or bottom - top < 10:
+                    return None
+                crop = img.crop((left, top, right, bottom))
+                # 放大到至少 2 倍，便于看清细节
+                scale = max(2, 800 // max(crop.width, 1))
+                crop = crop.resize(
+                    (crop.width * scale, crop.height * scale), Image.LANCZOS
+                )
+                zoom_name = f"frame_{order:03d}_zoom.jpg"
+                zoom_path = self._frames_dir(video_id) / zoom_name
+                crop.convert("RGB").save(str(zoom_path), "JPEG", quality=90)
+            return self._public_url(video_id, zoom_name)
+        except Exception as e:
+            logger.warning(f"zoom 裁剪失败: {e}")
+            return None
 
     @staticmethod
     def _remove_quietly(path: str) -> None:

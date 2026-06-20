@@ -314,11 +314,17 @@ class WorkspaceService:
         self._mark_done(trace, step_id, start, f"{len(frames)} frames extracted")
         lines = ["\n\n## Visual References"]
         for frame in frames:
+            ts = self._format_time(frame["timestamp"])
             caption = frame.get("reason") or frame.get("text", "")
-            lines.append(
-                f"\n![{self._format_time(frame['timestamp'])}]({frame['frame_url']})\n"
-                f"*[{self._format_time(frame['timestamp'])}] {caption}*"
-            )
+            lines.append(f"\n![{ts}]({frame['frame_url']})")
+            lines.append(f"*[{ts}] {caption}*")
+            # zoom in 特写图（关键区域放大）
+            if frame.get("zoom_url"):
+                lines.append(f"\n🔍 ![{ts} 特写]({frame['zoom_url']})")
+            # OCR：画面文字入笔记（转录里没有的信息）
+            ocr = (frame.get("ocr_text") or "").strip()
+            if ocr:
+                lines.append(f"> 📃 画面文字：{ocr}")
         return frames, "\n".join(lines) + "\n"
 
     def _create_locations_artifact(
