@@ -104,6 +104,8 @@ class Settings:
     # ExtractFrames：当 plan 含 ExtractFrames 步骤时，由模型在转录时间轴上挑选关键时间点截帧
     WORKSPACE_FRAMES_ENABLED: bool = os.getenv("WORKSPACE_FRAMES_ENABLED", "true").lower() == "true"
     MAX_FRAMES_PER_NOTE: int = int(os.getenv("MAX_FRAMES_PER_NOTE", "4"))
+    # AnalyzeFrame：scene detection 抽出的候选关键帧上限（每帧 1 次 VLM 调用，控制成本）
+    MAX_KEYFRAME_CANDIDATES: int = int(os.getenv("MAX_KEYFRAME_CANDIDATES", "12"))
 
     # Gmail SMTP 配置
     # 用于发送邮件通知给用户

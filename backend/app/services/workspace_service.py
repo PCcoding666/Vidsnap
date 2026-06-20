@@ -284,12 +284,21 @@ class WorkspaceService:
         self._mark_running(trace, step_id)
         start = time.time()
         try:
-            frames = await frame_service.select_and_extract_frames(
+            # 首选"看图"路径：scene detection 抽帧 + VLM 逐帧理解
+            frames = await frame_service.extract_keyframes_with_understanding(
                 video_path=video_file_path,
                 video_id=video_asset.video_id,
-                transcript_index=transcript_index,
                 query=query,
+                transcript_index=transcript_index,
             )
+            # VLM 不可用或无产出时回退到盲选（转录驱动）
+            if not frames:
+                frames = await frame_service.select_and_extract_frames(
+                    video_path=video_file_path,
+                    video_id=video_asset.video_id,
+                    transcript_index=transcript_index,
+                    query=query,
+                )
         except Exception as e:  # 截帧失败不应让整个笔记任务挂掉
             logger.warning(f"ExtractFrames 失败: {e}")
             self._mark_failed(trace, step_id, f"frame extraction failed: {e}")

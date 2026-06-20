@@ -118,3 +118,98 @@ async def test_disabled_returns_empty(tmp_path, monkeypatch):
         video_path="x", video_id="v", transcript_index=_index(), query="q"
     )
     assert frames == []
+
+
+@pytest.mark.asyncio
+async def test_analyze_frame_parses_structured_json(monkeypatch):
+    """analyze_frame 能从 VLM 输出里解析结构化理解。"""
+    from app.services.llm_service import llm_service
+
+    monkeypatch.setattr(llm_service, "available", True)
+    monkeypatch.setattr(llm_service, "api_key", "k")
+
+    class FakeResp:
+        status_code = 200
+        class output:
+            class _c:
+                message = {"content": '{"frame_type":"chart","is_informative":true,"ocr_text":"SMT","visual_summary":"K线对比","salient_region":[0.1,0.2,0.3,0.4]}'}
+            choices = [_c]
+
+    import app.services.llm_service as mod
+
+    def fake_call(*a, **k):
+        return FakeResp()
+
+    monkeypatch.setattr(mod.MultiModalConversation, "call", fake_call)
+
+    import tempfile, os as _os
+    f = tempfile.NamedTemporaryFile(suffix=".jpg", delete=False)
+    f.write(b"img"); f.close()
+    try:
+        result = await llm_service.analyze_frame(f.name, context="讲解SMT背离")
+    finally:
+        _os.remove(f.name)
+
+    assert result["frame_type"] == "chart"
+    assert result["is_informative"] is True
+    assert result["salient_region"] == [0.1, 0.2, 0.3, 0.4]
+
+
+@pytest.mark.asyncio
+async def test_extract_keyframes_with_understanding_filters_uninformative(tmp_path, monkeypatch):
+    """看图路径：丢弃 VLM 判定无信息的帧。"""
+    service = FrameService()
+    video = tmp_path / "v.mp4"
+    video.write_bytes(b"fake")
+
+    monkeypatch.setattr(frame_module.settings, "WORKSPACE_FRAMES_ENABLED", True)
+    monkeypatch.setattr(frame_module.settings, "STORAGE_DIR", str(tmp_path / "storage"))
+    monkeypatch.setattr(frame_module.settings, "MAX_KEYFRAME_CANDIDATES", 12)
+    monkeypatch.setattr(frame_module.llm_service, "is_available", lambda: True)
+
+    async def fake_scenes(_path):
+        return [2.0, 5.0]
+
+    monkeypatch.setattr(frame_module.video_service, "_detect_scenes_with_ffmpeg", fake_scenes)
+
+    async def fake_extract(video_path, timestamp, order, output_dir):
+        p = output_dir / f"f{order}.jpg"
+        p.write_bytes(b"j")
+        return str(p)
+
+    monkeypatch.setattr(frame_module.video_service, "_extract_frame_at_timestamp", fake_extract)
+
+    calls = []
+
+    async def fake_analyze(image_path, context=""):
+        calls.append(image_path)
+        # 第一帧有信息，第二帧无信息（应被丢弃）
+        if len(calls) == 1:
+            return {"frame_type": "slide", "is_informative": True, "ocr_text": "标题",
+                    "visual_summary": "幻灯片首页", "salient_region": None}
+        return {"is_informative": False}
+
+    monkeypatch.setattr(frame_module.llm_service, "analyze_frame", fake_analyze)
+
+    frames = await service.extract_keyframes_with_understanding(
+        video_path=str(video), video_id="v1", query="笔记", transcript_index=None
+    )
+
+    assert len(frames) == 1
+    assert frames[0]["frame_type"] == "slide"
+    assert frames[0]["reason"] == "幻灯片首页"  # caption 来自像素理解
+
+
+@pytest.mark.asyncio
+async def test_extract_keyframes_returns_empty_when_vlm_unavailable(tmp_path, monkeypatch):
+    """VLM 不可用 → 看图路径返回空，交回调用方回退盲选。"""
+    service = FrameService()
+    video = tmp_path / "v.mp4"
+    video.write_bytes(b"fake")
+    monkeypatch.setattr(frame_module.settings, "WORKSPACE_FRAMES_ENABLED", True)
+    monkeypatch.setattr(frame_module.llm_service, "is_available", lambda: False)
+
+    frames = await service.extract_keyframes_with_understanding(
+        video_path=str(video), video_id="v1", query="q", transcript_index=None
+    )
+    assert frames == []

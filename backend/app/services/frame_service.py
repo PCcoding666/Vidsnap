@@ -6,6 +6,7 @@ ExtractFrames 服务：由模型在转录时间轴上挑选关键时间点，再
 transcript 时间轴上，可被 artifact 引用、可溯源。
 """
 import json
+import os
 import re
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -27,6 +28,100 @@ class FrameService:
 
     def _public_url(self, video_id: str, filename: str) -> str:
         return f"/static/frames/{video_id}/{filename}"
+
+    async def extract_keyframes_with_understanding(
+        self,
+        video_path: str,
+        video_id: str,
+        query: str,
+        transcript_index: Optional[List[TranscriptIndexEntry]] = None,
+        max_frames: Optional[int] = None,
+    ) -> List[Dict[str, Any]]:
+        """目标链路：scene detection 抽全部关键帧 → VLM 逐帧看图理解 → 丢无信息帧。
+
+        与盲选(select_and_extract_frames)的本质区别：模型真正"看"了每一帧，
+        caption/类型/OCR 都来自像素而非转录猜测。VLM 不可用时返回空（调用方回退盲选）。
+        """
+        if not settings.WORKSPACE_FRAMES_ENABLED:
+            return []
+        if not video_path or not Path(video_path).exists():
+            return []
+        if not llm_service.is_available():
+            return []  # 没有 VLM 就走不了"看图"路径，交回调用方回退
+
+        limit = max_frames or settings.MAX_FRAMES_PER_NOTE
+
+        # 1) 视觉关键帧时间点：优先场景检测，退化为均匀采样
+        timestamps = await video_service._detect_scenes_with_ffmpeg(video_path)
+        if not timestamps:
+            timestamps = await video_service._uniform_sampling(
+                video_path, max(limit * 2, 8)
+            )
+        timestamps = sorted(timestamps)[: settings.MAX_KEYFRAME_CANDIDATES]
+        if not timestamps:
+            return []
+
+        output_dir = self._frames_dir(video_id)
+        analyzed: List[Dict[str, Any]] = []
+        for order, ts in enumerate(timestamps):
+            frame_path = await video_service._extract_frame_at_timestamp(
+                video_path, ts, order, output_dir
+            )
+            if not frame_path:
+                continue
+
+            context = self._nearest_transcript_text(ts, transcript_index)
+            understanding = await llm_service.analyze_frame(frame_path, context=context)
+            if not understanding:
+                self._remove_quietly(frame_path)
+                continue
+            if not understanding.get("is_informative", True):
+                # 无信息帧（黑屏/转场/纯人脸）丢弃，不留垃圾文件
+                self._remove_quietly(frame_path)
+                continue
+
+            filename = Path(frame_path).name
+            analyzed.append(
+                {
+                    "timestamp": round(ts, 2),
+                    "frame_type": understanding.get("frame_type"),
+                    "ocr_text": (understanding.get("ocr_text") or "").strip(),
+                    "visual_summary": (understanding.get("visual_summary") or "").strip(),
+                    "salient_region": understanding.get("salient_region"),
+                    # caption 来自像素理解（取代盲选的转录猜测）
+                    "reason": (understanding.get("visual_summary") or "").strip(),
+                    "frame_url": self._public_url(video_id, filename),
+                }
+            )
+
+        logger.info(
+            f"AnalyzeFrame 完成: {len(analyzed)} 帧有信息 / {len(timestamps)} 候选 (video_id={video_id})"
+        )
+        # 已按时间排序；先截断到 limit（后续可按 query 相关性重排）
+        return analyzed[:limit]
+
+    @staticmethod
+    def _nearest_transcript_text(
+        timestamp: float, transcript_index: Optional[List[TranscriptIndexEntry]]
+    ) -> str:
+        """取该时间点所在/最近的转录片段文本，作为看图的上下文提示。"""
+        if not transcript_index:
+            return ""
+        for seg in transcript_index:
+            if seg.start_time <= timestamp <= (seg.end_time or seg.start_time):
+                return seg.text
+        nearest = min(
+            transcript_index,
+            key=lambda s: abs(((s.start_time + (s.end_time or s.start_time)) / 2) - timestamp),
+        )
+        return nearest.text
+
+    @staticmethod
+    def _remove_quietly(path: str) -> None:
+        try:
+            os.remove(path)
+        except OSError:
+            pass
 
     async def select_and_extract_frames(
         self,

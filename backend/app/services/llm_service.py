@@ -10,6 +10,8 @@
 - 关键帧分析方法保留但默认返回空结果
 """
 import os
+import json
+import re
 import logging
 import asyncio
 from typing import Dict, Any, List, Optional
@@ -676,6 +678,80 @@ class QwenVLService:
         
         return summaries
     
+    async def analyze_frame(
+        self,
+        image_path: str,
+        context: str = "",
+        max_retries: int = 2,
+    ) -> Optional[Dict[str, Any]]:
+        """多模态逐帧理解：把单帧图片喂给 VLM，返回结构化理解。
+
+        返回 {frame_type, is_informative, ocr_text, visual_summary, salient_region}，
+        失败/不可用时返回 None。salient_region 为可 zoom in 的归一化区域 [x,y,w,h]。
+        """
+        if not self.is_available():
+            return None
+
+        # 远程 URL 直接用；本地文件用 file:// 让 DashScope 读取
+        if image_path.startswith("http://") or image_path.startswith("https://"):
+            image_ref = image_path
+        else:
+            abs_path = os.path.abspath(image_path)
+            if not os.path.exists(abs_path):
+                return None
+            image_ref = f"file://{abs_path}"
+
+        prompt = (
+            "你在为视频学习笔记分析一帧画面。严格只输出一个 JSON 对象，字段如下：\n"
+            '{"frame_type": "slide|chart|code|talking_head|demo|transition|blank|other", '
+            '"is_informative": true 或 false, '
+            '"ocr_text": "画面中的文字/数字/代码，没有则空串", '
+            '"visual_summary": "一句话描述这帧的关键视觉内容", '
+            '"salient_region": [x, y, w, h] 或 null}\n'
+            "is_informative=false 表示黑屏、转场、纯人脸无信息等不值得放进笔记的帧。\n"
+            "salient_region 是最值得放大查看的关键区域，用 0-1 归一化坐标，无则 null。\n"
+            "不要输出 JSON 以外的任何文字。"
+        )
+        if context:
+            prompt += f"\n参考（转录上下文）：{context[:300]}"
+
+        messages = [{"role": "user", "content": [{"image": image_ref}, {"text": prompt}]}]
+
+        for attempt in range(max_retries):
+            try:
+                response = await asyncio.to_thread(
+                    MultiModalConversation.call,
+                    model=self.vision_model,
+                    messages=messages,
+                    temperature=self.temperature,
+                )
+                if response and response.status_code == 200:
+                    parsed = self._parse_json_object(self._extract_generation_text(response))
+                    if parsed:
+                        return parsed
+                else:
+                    logger.warning(
+                        f"analyze_frame 返回非200: {getattr(response, 'message', 'no response')}"
+                    )
+            except Exception as e:
+                logger.warning(f"analyze_frame 调用异常(attempt {attempt + 1}): {e}")
+            if attempt < max_retries - 1:
+                await asyncio.sleep(1.5 * (attempt + 1))
+        return None
+
+    @staticmethod
+    def _parse_json_object(raw: Optional[str]) -> Optional[Dict[str, Any]]:
+        """从模型输出里解析单个 JSON 对象（容忍 ```json 包裹和前后噪声）。"""
+        if not raw:
+            return None
+        match = re.search(r"\{.*\}", raw, re.DOTALL)
+        text = match.group(0) if match else raw
+        try:
+            data = json.loads(text)
+            return data if isinstance(data, dict) else None
+        except json.JSONDecodeError:
+            return None
+
     @staticmethod
     def _extract_generation_text(response) -> Optional[str]:
         """兼容两种 DashScope 输出格式：message（qwen3 代）与 text（老模型）。"""
@@ -683,14 +759,16 @@ class QwenVLService:
         if output is None:
             return None
         # message 格式：output.choices[0].message.content
+        # message / content 可能是 dict 或对象（多模态/纯文本返回结构略有差异），都兼容
         choices = getattr(output, "choices", None)
         if choices:
-            try:
-                content = choices[0]["message"]["content"]
-            except (KeyError, TypeError, IndexError):
-                message = getattr(choices[0], "message", None)
-                content = getattr(message, "content", None) if message else None
-            if isinstance(content, list):  # 多模态分块返回
+            first = choices[0]
+            message = first.get("message") if isinstance(first, dict) else getattr(first, "message", None)
+            if isinstance(message, dict):
+                content = message.get("content")
+            else:
+                content = getattr(message, "content", None) if message is not None else None
+            if isinstance(content, list):  # 多模态分块返回 [{"text": ...}, ...]
                 content = "".join(
                     part.get("text", "") for part in content if isinstance(part, dict)
                 )
