@@ -17,6 +17,7 @@ from ..models.workspace import (
     WorkspaceProcessResponse,
 )
 from .frame_service import frame_service
+from .llm_service import llm_service
 from .pipeline_service import pipeline
 from .planner_service import planner_service
 from .skill_registry_service import skill_registry
@@ -230,21 +231,33 @@ class WorkspaceService:
 
         self._mark_running(trace, "generate_notes")
         start = time.time()
-        # 图文交织：截图插到对应转录段落下方（取代末尾堆图）
-        notes_body, cited_segments = self._render_illustrated_notes(transcript_index, frames)
-        if not cited_segments:
-            cited_segments = transcript_index[:6]
 
-        content = (
-            f"# {video_asset.title}\n\n"
-            f"## User Goal\n{query.strip()}\n\n"
-            f"## Condensed Understanding\n{summary_artifact.content}\n\n"
-            "## Timestamped Notes\n"
-            + notes_body
-            + visual_note  # 仅降级场景（视频不可用/截帧失败）才非空
-            + "\n\n## Source Boundary\n"
-            "This note is grounded in the video's transcript. Visual details come only from frames the model actually analyzed."
-        )
+        # 首选：LLM 围绕主题编排结构化笔记，按相关性插帧 / 没合适帧则生成 mermaid 示意图
+        body = await self._compose_note_body(transcript_index, frames, query)
+        cited_segments = transcript_index[:6]
+        if body:
+            content = (
+                f"# {video_asset.title}\n\n"
+                f"## User Goal\n{query.strip()}\n\n"
+                f"{body}\n\n"
+                "## Source Boundary\n"
+                "This note is grounded in the video's transcript and the frames the model actually analyzed. "
+                "Diagrams are schematic illustrations generated from the content."
+            )
+        else:
+            # 回退：LLM 不可用 → 摘要 + 转录段落图文交织
+            notes_body, cited = self._render_illustrated_notes(transcript_index, frames)
+            cited_segments = cited or transcript_index[:6]
+            content = (
+                f"# {video_asset.title}\n\n"
+                f"## User Goal\n{query.strip()}\n\n"
+                f"## Condensed Understanding\n{summary_artifact.content}\n\n"
+                "## Timestamped Notes\n"
+                + notes_body
+                + visual_note
+                + "\n\n## Source Boundary\n"
+                "This note is grounded in the video's transcript. Visual details come only from frames the model actually analyzed."
+            )
         self._mark_done(trace, "generate_notes", start, "Markdown notes generated")
 
         return Artifact(
@@ -255,6 +268,55 @@ class WorkspaceService:
             citations=self._citations_from_segments(cited_segments),
             metadata={"frames": frames} if frames else {},
         )
+
+    async def _compose_note_body(
+        self,
+        transcript_index: List[TranscriptIndexEntry],
+        frames: List[Dict[str, Any]],
+        query: str,
+    ) -> Optional[str]:
+        """调 LLM 编排图文笔记，并把 [[FRAME:Fn]] 占位符替换成真实图块。"""
+        transcript_text = " ".join(seg.text for seg in transcript_index).strip()
+        if not transcript_text:
+            return None
+
+        # 帧清单：给模型编号 + 描述 + OCR，供它按相关性选用
+        manifest_lines = []
+        for i, f in enumerate(frames):
+            ts = self._format_time(f["timestamp"])
+            desc = f.get("visual_summary") or f.get("reason") or ""
+            ocr = (f.get("ocr_text") or "").strip()
+            line = f"- F{i} [{ts}, {f.get('frame_type') or 'frame'}] {desc}"
+            if ocr:
+                line += f"；画面文字: {ocr[:120]}"
+            manifest_lines.append(line)
+        manifest = "\n".join(manifest_lines)
+
+        composed = await llm_service.compose_illustrated_note(
+            transcript_text=transcript_text,
+            frames_manifest=manifest,
+            query=query,
+        )
+        if not composed or not composed.strip():
+            return None
+
+        return self._embed_frame_placeholders(composed, frames)
+
+    def _embed_frame_placeholders(self, markdown: str, frames: List[Dict[str, Any]]) -> str:
+        """把模型输出里的 [[FRAME:Fn]] 占位符替换为真实图块（图+图注+zoom+OCR）。"""
+        import re
+
+        def repl(match: "re.Match") -> str:
+            try:
+                idx = int(match.group(1))
+            except (TypeError, ValueError):
+                return ""
+            if 0 <= idx < len(frames):
+                return "\n" + self._render_frame_block(frames[idx]) + "\n"
+            return ""
+
+        # 容忍 [[FRAME:F2]] / [[frame: 2]] 等写法
+        return re.sub(r"\[\[\s*FRAME\s*:\s*F?(\d+)\s*\]\]", repl, markdown, flags=re.IGNORECASE)
 
     async def _extract_frames_for_notes(
         self,

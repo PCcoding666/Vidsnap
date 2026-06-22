@@ -44,3 +44,28 @@ def test_no_segments_falls_back_to_plain_frame_list():
     body, cited = workspace_service._render_illustrated_notes([], frames)
     assert "a.jpg" in body
     assert cited == []
+
+
+def test_embed_frame_placeholders_replaces_with_real_blocks():
+    frames = [
+        {"timestamp": 10.0, "reason": "概念图", "frame_url": "/static/frames/v/a.jpg",
+         "zoom_url": None, "ocr_text": ""},
+        {"timestamp": 20.0, "reason": "代码图", "frame_url": "/static/frames/v/b.jpg",
+         "zoom_url": "/static/frames/v/b_zoom.jpg", "ocr_text": "import x"},
+    ]
+    md = "## 概念\n讲到概念。\n[[FRAME:F0]]\n## 代码\n讲到代码。\n[[frame: 1]]\n## 无图主题\n纯文字。"
+    out = workspace_service._embed_frame_placeholders(md, frames)
+
+    assert "[[FRAME" not in out and "[[frame" not in out  # 占位符都被替换
+    assert "a.jpg" in out and "b.jpg" in out
+    assert "b_zoom.jpg" in out  # zoom 跟着进来
+    assert "import x" in out    # OCR 跟着进来
+    # a.jpg 出现在"代码"小标题之前（位置正确）
+    assert out.index("a.jpg") < out.index("## 代码")
+
+
+def test_embed_drops_out_of_range_placeholder():
+    frames = [{"timestamp": 1.0, "reason": "x", "frame_url": "/static/frames/v/a.jpg"}]
+    out = workspace_service._embed_frame_placeholders("text [[FRAME:F9]] end", frames)
+    assert "[[FRAME" not in out  # 越界编号被移除，不报错
+    assert "a.jpg" not in out

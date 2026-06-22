@@ -114,7 +114,44 @@ class QwenVLService:
     def is_available(self) -> bool:
         """检查服务是否可用"""
         return self.available and bool(self.api_key)
-    
+
+    async def compose_illustrated_note(
+        self,
+        transcript_text: str,
+        frames_manifest: str,
+        query: str,
+    ) -> Optional[str]:
+        """把转录编排成结构化、图文并茂的笔记。
+
+        模型按主题组织主篇幅，讲到某主题时按相关性插 [[FRAME:Fn]] 占位符引用关键帧；
+        没有合适关键帧但需要图示的概念/流程，直接生成 ```mermaid 代码块。
+        返回带占位符与 mermaid 的 markdown；不可用时返回 None。
+        """
+        if not self.is_available():
+            return None
+        if not transcript_text.strip():
+            return None
+
+        prompt = (
+            "你在把一段视频的转录整理成一份结构化、图文并茂的学习笔记。\n"
+            f"用户目标：{query.strip() or '整理成结构化图文笔记'}\n\n"
+            f"可用关键帧（截图，按相关性选用，不相关就别用）：\n{frames_manifest or '（无可用关键帧）'}\n\n"
+            f"视频转录全文：\n{transcript_text}\n\n"
+            "要求：\n"
+            "1. 用 markdown 写，按【主题】用 ## 小标题组织（如概念、流程、要点），"
+            "围绕内容逻辑而非逐句复述转录。\n"
+            "2. 讲到某个主题时，如果某张关键帧能直接说明它，就在该处单独一行写 [[FRAME:F2]]"
+            "（用对应编号；只在真正相关处插入；同一帧最多用一次；不相关的帧不要用）。\n"
+            "3. 如果某个重要概念或流程没有合适的关键帧，但用示意图能讲得更清楚，"
+            "就直接生成一个简洁正确的 mermaid 代码块（```mermaid 开头）来图解它。\n"
+            "4. 笔记要忠于转录内容，不要编造视频里没有的事实。\n"
+            "5. 只输出 markdown 笔记正文，不要额外说明。"
+        )
+
+        return await self._call_text_generation(
+            prompt, max_tokens=3000, model=settings.LLM_SUMMARY_MODEL
+        )
+
     async def analyze_keyframe(self, image_url: str, context: str = "", max_retries: int = 3) -> Optional[str]:
         """
         分析单个关键帧，生成描述（带重试机制）
