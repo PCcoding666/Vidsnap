@@ -1,9 +1,11 @@
 """
 Query-first workspace execution service.
 """
+import base64
 from dataclasses import asdict, is_dataclass
 from datetime import datetime
 import hashlib
+from pathlib import Path
 import re
 import time
 from typing import Any, Dict, List, Optional
@@ -378,14 +380,31 @@ class WorkspaceService:
         self._mark_done(trace, step_id, start, f"{len(frames)} frames extracted")
         return frames, ""
 
+    @staticmethod
+    def _to_data_uri(url: str) -> str:
+        """把 /static/frames/... 相对路径转成 base64 data URI，失败则原样返回。"""
+        from ..core.config import settings
+        if not url or not url.startswith("/static/"):
+            return url
+        rel = url[len("/static/"):]  # "frames/{video_id}/{filename}"
+        file_path = Path(settings.STORAGE_DIR) / rel
+        try:
+            data = file_path.read_bytes()
+            ext = file_path.suffix.lstrip(".").lower()
+            mime = "image/jpeg" if ext in ("jpg", "jpeg") else f"image/{ext}"
+            return f"data:{mime};base64,{base64.b64encode(data).decode()}"
+        except Exception:
+            return url
+
     def _render_frame_block(self, frame: Dict[str, Any]) -> str:
         """渲染单帧的图文块：图 + 图注 + zoom 特写 + OCR 画面文字（顶层块，空行分隔）。"""
         ts = self._format_time(frame["timestamp"])
         caption = frame.get("reason") or frame.get("visual_summary") or frame.get("text", "")
-        # 图与图注用单换行（软换行）贴在一起；其余各自成块
-        parts = [f"![{ts}]({frame['frame_url']})\n*[{ts}] {caption}*"]
+        img_src = self._to_data_uri(frame["frame_url"])
+        parts = [f"![{ts}]({img_src})\n*[{ts}] {caption}*"]
         if frame.get("zoom_url"):
-            parts.append(f"🔍 ![{ts} 特写]({frame['zoom_url']})")
+            zoom_src = self._to_data_uri(frame["zoom_url"])
+            parts.append(f"🔍 ![{ts} 特写]({zoom_src})")
         ocr = (frame.get("ocr_text") or "").strip()
         if ocr:
             parts.append(f"> 📃 画面文字：{ocr}")
