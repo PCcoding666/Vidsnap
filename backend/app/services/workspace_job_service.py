@@ -33,6 +33,7 @@ from ..models.workspace import (
 )
 from .planner_service import planner_service
 from .database_service import database_service
+from .llm_gateway_service import llm_gateway
 from .skill_registry_service import skill_registry
 from .transcription_provider_service import transcription_provider_registry
 from .workspace_service import workspace_service
@@ -68,6 +69,7 @@ class WorkspaceJobService:
         self.input_paths: Dict[str, str] = {}
         self.user_ids: Dict[str, Optional[str]] = {}
         self.tasks: Dict[str, asyncio.Task] = {}
+        self.token_usage: Dict[str, Dict[str, Any]] = {}  # job_id -> LLM token 消耗汇总
         self._lock = asyncio.Lock()
         self._admission_reservations: set[str] = set()
 
@@ -325,13 +327,22 @@ class WorkspaceJobService:
 
         try:
             start = time.time()
-            result = await workspace_service.process_video_query(
-                video_file_path=input_path,
-                original_filename=job.original_filename,
-                query=job.query,
-                user_id=self.user_ids.get(job_id),
-                progress_callback=lambda message: self._progress_from_pipeline(job_id, message),
-                plan=job.plan,
+            # 用 LLM 网关作用域包住整个处理流程，统计本 job 消耗的全部 token
+            with llm_gateway.scope(job_id) as usage:
+                result = await workspace_service.process_video_query(
+                    video_file_path=input_path,
+                    original_filename=job.original_filename,
+                    query=job.query,
+                    user_id=self.user_ids.get(job_id),
+                    progress_callback=lambda message: self._progress_from_pipeline(job_id, message),
+                    plan=job.plan,
+                )
+            self.token_usage[job_id] = usage.to_dict()
+            logger.info(
+                f"[LLM网关] job {job_id} 完成，LLM token 消耗："
+                f"总计={usage.total_tokens} (输入={usage.input_tokens} "
+                f"输出={usage.output_tokens} 图像={usage.image_tokens}) "
+                f"调用次数={usage.calls} 按模型={usage.to_dict()['by_model']}"
             )
             self.results[job_id] = result
             self._append_artifact_version(job_id, result, job.query)

@@ -23,6 +23,7 @@ from dashscope import MultiModalConversation, Generation
 
 from ..core.config import settings
 from ..core.logging import logger
+from .llm_gateway_service import llm_gateway
 from ..models.video import KeyframeInfo
 from ..models.analysis import (
     TranscriptMetadata, 
@@ -201,11 +202,10 @@ class QwenVLService:
                     await asyncio.sleep(wait_time)
                 
                 logger.info(f"分析关键帧: {image_url}")
-                
-                # 调用 API (使用 asyncio 包装同步调用)
+
+                # 调用 API（经 LLM 网关统计 token；网关内部用 to_thread 包装同步 SDK）
                 # 使用 vision_model (qwen-vl-max) 进行图像分析
-                response = await asyncio.to_thread(
-                    MultiModalConversation.call,
+                response = await llm_gateway.call_multimodal(
                     model=self.vision_model,
                     messages=messages,
                     temperature=self.temperature,
@@ -756,8 +756,7 @@ class QwenVLService:
 
         for attempt in range(max_retries):
             try:
-                response = await asyncio.to_thread(
-                    MultiModalConversation.call,
+                response = await llm_gateway.call_multimodal(
                     model=self.vision_model,
                     messages=messages,
                     temperature=self.temperature,
@@ -838,8 +837,8 @@ class QwenVLService:
             
             # 使用 message 输出格式：qwen3 代（qwen3-max / qwen3.7-max 等）只通过
             # output.choices[].message.content 返回；老模型（qwen-max）仍兼容 output.text。
-            response = await asyncio.to_thread(
-                Generation.call,
+            # 经 LLM 网关统计 token（网关内部用 to_thread 包装同步 SDK）。
+            response = await llm_gateway.call_generation(
                 model=target_model,
                 prompt=prompt,
                 temperature=self.temperature,
