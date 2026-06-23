@@ -39,7 +39,8 @@ class ModelUsage:
 
     @property
     def total_tokens(self) -> int:
-        return self.input_tokens + self.output_tokens + self.image_tokens
+        # image_tokens 是 input_tokens 的子项（明细），不重复计入总数
+        return self.input_tokens + self.output_tokens
 
 
 @dataclass
@@ -54,7 +55,8 @@ class UsageStats:
 
     @property
     def total_tokens(self) -> int:
-        return self.input_tokens + self.output_tokens + self.image_tokens
+        # image_tokens 是 input_tokens 的子项（明细），不重复计入总数
+        return self.input_tokens + self.output_tokens
 
     def add(self, model: str, input_tokens: int, output_tokens: int, image_tokens: int = 0) -> None:
         self.calls += 1
@@ -143,9 +145,12 @@ class LLMGateway:
         # usage 是 DictMixin，可像 dict 一样 .get；不同模型字段略有差异，全部容错取值。
         in_tok = self._as_int(usage.get("input_tokens"))
         out_tok = self._as_int(usage.get("output_tokens"))
-        # qwen-vl 把图像 token 单列在 image_tokens（不计入 input_tokens），单独累计避免漏算。
+        # qwen-vl 的 image_tokens 是 input_tokens 中图像部分的明细拆分（已含在 input_tokens 内），
+        # 仅作 breakdown 记录，不重复计入总数。
         img_tok = self._as_int(usage.get("image_tokens"))
         model = model or "unknown"
+        # 原始 usage 结构因模型而异，DEBUG 级别留痕便于核对字段语义。
+        logger.debug(f"[LLM网关] 原始 usage={dict(usage)}")
 
         with self._lock:
             self._global.add(model, in_tok, out_tok, img_tok)
@@ -158,7 +163,7 @@ class LLMGateway:
         logger.info(
             f"[LLM网关] {api_type} model={model} "
             f"in={in_tok} out={out_tok} img={img_tok} "
-            f"call_total={in_tok + out_tok + img_tok} 全局累计={global_total}"
+            f"call_total={in_tok + out_tok} 全局累计={global_total}"
         )
 
     @staticmethod

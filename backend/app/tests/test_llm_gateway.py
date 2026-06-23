@@ -46,18 +46,21 @@ async def test_generation_records_tokens(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_multimodal_counts_image_tokens(monkeypatch):
+async def test_multimodal_image_tokens_not_double_counted(monkeypatch):
+    """qwen-vl 的 image_tokens 是 input_tokens 的子项（明细），不重复计入总数。"""
     gateway = LLMGateway()
     _patch_sdk(
         monkeypatch, gateway,
-        [_FakeUsage(input_tokens=30, output_tokens=10, image_tokens=1000)],
+        # 真实 qwen-vl：input_tokens 已含图像，image_tokens 只是其中图像部分的明细
+        [_FakeUsage(input_tokens=2248, output_tokens=1604, image_tokens=2042)],
     )
 
     await gateway.call_multimodal(model="qwen3.7-plus", messages=[])
 
     g = gateway.global_stats()
-    assert g.image_tokens == 1000
-    assert g.total_tokens == 1040  # 30 + 10 + 1000
+    assert g.image_tokens == 2042              # 图像明细单独保留
+    assert g.total_tokens == 2248 + 1604       # 总数=input+output，image 不重复加
+    assert g.by_model["qwen3.7-plus"].total_tokens == 2248 + 1604
 
 
 @pytest.mark.asyncio
