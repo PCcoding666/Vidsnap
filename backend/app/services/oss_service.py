@@ -2,6 +2,7 @@
 阿里云OSS存储服务
 处理视频、音频、关键帧图片和metadata的上传和访问
 """
+import asyncio
 import logging
 import mimetypes
 import os
@@ -103,6 +104,15 @@ class AliyunOSSService:
         """生成OSS对象键"""
         timestamp = datetime.now().strftime("%Y%m%d")
         return f"videos/{timestamp}/{video_id}/{file_type}/{filename}"
+
+    def _put_object_from_file(self, object_key: str, file_path: str, headers: Dict[str, str]) -> None:
+        """同步读取本地文件并上传到OSS。
+
+        oss2 SDK 是同步阻塞的；本方法连同文件读取一起设计为在
+        ``asyncio.to_thread`` 内运行，避免大文件上传卡死事件循环。
+        """
+        with open(file_path, 'rb') as fileobj:
+            self.bucket.put_object(object_key, fileobj, headers=headers)
     
     async def upload_video(self, video_path: str, video_id: str) -> Optional[str]:
         """
@@ -127,10 +137,9 @@ class AliyunOSSService:
             
             headers = {"Content-Type": self._content_type_for_file(video_path, "video/webm")}
 
-            # 上传文件
-            with open(video_path, 'rb') as fileobj:
-                self.bucket.put_object(object_key, fileobj, headers=headers)
-            
+            # 上传文件（同步阻塞的 oss2 调用放到线程，避免卡死事件循环）
+            await asyncio.to_thread(self._put_object_from_file, object_key, video_path, headers)
+
             url = self._access_url(object_key)
             logger.info(f"视频上传成功: {object_key}")
             
@@ -163,10 +172,9 @@ class AliyunOSSService:
             
             headers = {"Content-Type": self._content_type_for_file(audio_path, "audio/wav")}
 
-            # 上传文件
-            with open(audio_path, 'rb') as fileobj:
-                self.bucket.put_object(object_key, fileobj, headers=headers)
-            
+            # 上传文件（同步阻塞的 oss2 调用放到线程，避免卡死事件循环）
+            await asyncio.to_thread(self._put_object_from_file, object_key, audio_path, headers)
+
             url = self._access_url(object_key)
             logger.info(f"音频上传成功: {object_key}")
             
@@ -200,10 +208,9 @@ class AliyunOSSService:
             
             headers = {"Content-Type": self._content_type_for_file(image_path, "image/jpeg")}
 
-            # 上传文件
-            with open(image_path, 'rb') as fileobj:
-                self.bucket.put_object(object_key, fileobj, headers=headers)
-            
+            # 上传文件（同步阻塞的 oss2 调用放到线程，避免卡死事件循环）
+            await asyncio.to_thread(self._put_object_from_file, object_key, image_path, headers)
+
             url = self._access_url(object_key)
             logger.debug(f"关键帧上传成功: {object_key}")
             
@@ -239,13 +246,14 @@ class AliyunOSSService:
             # 将metadata转换为JSON字符串
             metadata_json = json.dumps(metadata, ensure_ascii=False, indent=2)
             
-            # 上传JSON内容
-            self.bucket.put_object(
+            # 上传JSON内容（同步阻塞的 oss2 调用放到线程，避免卡死事件循环）
+            await asyncio.to_thread(
+                self.bucket.put_object,
                 object_key,
                 metadata_json.encode('utf-8'),
-                headers={"Content-Type": "application/json; charset=utf-8"}
+                headers={"Content-Type": "application/json; charset=utf-8"},
             )
-            
+
             url = self._access_url(object_key)
             logger.info(f"Metadata上传成功: {object_key}")
             
@@ -275,10 +283,10 @@ class AliyunOSSService:
             
             # 确保本地目录存在
             os.makedirs(os.path.dirname(local_path), exist_ok=True)
-            
-            # 下载文件
-            self.bucket.get_object_to_file(object_key, local_path)
-            
+
+            # 下载文件（同步阻塞的 oss2 调用放到线程，避免卡死事件循环）
+            await asyncio.to_thread(self.bucket.get_object_to_file, object_key, local_path)
+
             logger.info(f"文件下载成功: {local_path}")
             return True
             
