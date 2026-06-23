@@ -20,6 +20,7 @@ from ...models.workspace import (
     WorkspaceJobCreateResponse,
     WorkspaceQARequest,
 )
+from ...services.llm_gateway_service import llm_gateway
 from ...services.planner_service import planner_service
 from ...services.skill_registry_service import skill_registry
 from ...services.transcription_provider_service import transcription_provider_registry
@@ -163,6 +164,23 @@ async def get_workspace_job_artifact(job_id: str):
     if not response:
         raise HTTPException(status_code=404, detail="artifact not ready")
     return response
+
+
+@router.get("/jobs/{job_id}/token-usage")
+async def get_workspace_job_token_usage(job_id: str):
+    """返回该 job 处理过程中消耗的 LLM token 汇总（输入/输出/图像，按模型细分）。"""
+    if not workspace_job_service.get_job(job_id):
+        raise HTTPException(status_code=404, detail="job not found")
+    usage = workspace_job_service.token_usage.get(job_id)
+    if usage is None:
+        raise HTTPException(status_code=404, detail="token usage not ready")
+    return {"status": "success", "job_id": job_id, "token_usage": usage}
+
+
+@router.get("/token-usage")
+async def get_global_token_usage():
+    """返回进程启动以来所有 LLM 调用的 token 累计（全局，跨所有 job）。"""
+    return {"status": "success", "token_usage": llm_gateway.global_stats().to_dict()}
 
 
 @router.post("/jobs/{job_id}/retry")
