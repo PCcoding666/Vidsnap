@@ -83,3 +83,7 @@ backend/youtube_cookies.txt
 # 运行时产物：ExtractFrames 截帧等
 backend/storage/
 storage/
+
+# 修正：上面的 Python 模板规则 lib/ 无路径前缀，误伤了前端 shadcn 的 src/lib
+!frontend/src/lib/
+!backend/app/evals/
