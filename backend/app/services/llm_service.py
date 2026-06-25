@@ -1,13 +1,12 @@
 """
-阿里云 Qwen3-VL 多模态视频总结服务（双模型架构）
-- Qwen3-VL-Flash (qwen-vl-max): 用于关键帧图像分析
-- Qwen3-VL-Plus (qwen-vl-plus): 用于主视频总结生成
-支持基于关键帧图像和转录文本的智能总结
+阿里云 DashScope 多模态视频分析服务（双模型架构）
+- vision_model：关键帧图像分析
+- text_model：主视频总结生成
+两个型号都由 config 决定（VISION_MODEL / VISION_SUMMARY_MODEL，当前均为 qwen3.7-plus），
+不要在此硬编码型号。支持基于关键帧图像 + 转录文本的智能总结。
 
-安全更新 (2025-12):
-- 多模态图像分析功能已禁用（ENABLE_MULTIMODAL_ANALYSIS=False）
-- 系统改为基于逐字稿的纯文本分析
-- 关键帧分析方法保留但默认返回空结果
+关键帧分析仅在 workspace plan 含 ExtractFrames 步骤时启用
+（受 WORKSPACE_FRAMES_ENABLED 控制）；否则走纯转录文本链路。
 """
 import os
 import json
@@ -72,9 +71,9 @@ class VideoSummaryOld:
 
 class QwenVLService:
     """
-    阿里云 Qwen3-VL 多模态服务（双模型架构）
-    - vision_model (qwen-vl-max): Qwen3-VL-Flash，专用于图像分析
-    - text_model (qwen-vl-plus): Qwen3-VL-Plus，专用于文本总结
+    阿里云 DashScope 多模态服务（双模型架构）
+    - vision_model：图像分析，取自 settings.VISION_MODEL（当前 qwen3.7-plus）
+    - text_model：文本总结，取自 settings.VISION_SUMMARY_MODEL（当前 qwen3.7-plus）
     """
     
     def __init__(self):
@@ -204,7 +203,7 @@ class QwenVLService:
                 logger.info(f"分析关键帧: {image_url}")
 
                 # 调用 API（经 LLM 网关统计 token；网关内部用 to_thread 包装同步 SDK）
-                # 使用 vision_model (qwen-vl-max) 进行图像分析
+                # 使用 vision_model（settings.VISION_MODEL，当前 qwen3.7-plus）进行图像分析
                 response = await llm_gateway.call_multimodal(
                     model=self.vision_model,
                     messages=messages,
