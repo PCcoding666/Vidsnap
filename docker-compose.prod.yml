@@ -1,0 +1,78 @@
+# VidSnap 生产部署（全容器化，单机 Docker Compose）
+# 用法：cp .env.prod.example .env && 填写 .env，然后：
+#   docker compose -f docker-compose.prod.yml up -d --build
+# 对外只暴露 frontend 的 HTTP_PORT（默认 8080）；backend/pg/redis 仅走内网。
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: vidsnap-postgres-prod
+    restart: unless-stopped
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./backend/database/migrations:/docker-entrypoint-initdb.d:ro
+    environment:
+      POSTGRES_USER: vidsnap
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?请在 .env 设置 POSTGRES_PASSWORD}
+      POSTGRES_DB: vidsnap
+      TZ: Asia/Shanghai
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U vidsnap -d vidsnap"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: vidsnap-redis-prod
+    restart: unless-stopped
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build: ./backend
+    container_name: vidsnap-backend-prod
+    restart: unless-stopped
+    # .env 提供 DashScope/OSS/SECRET_KEY 等业务密钥
+    env_file: .env
+    # 容器内部连接 pg/redis，并把临时/存储目录指向挂载卷
+    environment:
+      DATABASE_URL: postgresql+asyncpg://vidsnap:${POSTGRES_PASSWORD}@postgres:5432/vidsnap
+      REDIS_URL: redis://redis:6379/0
+      TEMP_DIR: /data/tmp
+      STORAGE_DIR: /data/storage
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    volumes:
+      - backend_data:/data
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  frontend:
+    build: ./frontend
+    container_name: vidsnap-frontend-prod
+    restart: unless-stopped
+    # 唯一对外入口：nginx 托管前端 dist + 反代 /api 到 backend
+    ports:
+      - "${HTTP_PORT:-8080}:80"
+    depends_on:
+      - backend
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+  backend_data:
+    driver: local
+
+networks:
+  default:
+    name: vidsnap-prod-network
