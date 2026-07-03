@@ -434,6 +434,7 @@ export default function Lab() {
               <h3 className="text-sm font-semibold text-slate-300 mb-2">产物：{artifact.artifact.title}</h3>
               <div className="bg-slate-900/50 border border-slate-800 rounded-lg p-4 max-h-[32rem] overflow-auto prose prose-sm prose-invert max-w-none prose-headings:text-slate-100 prose-p:text-slate-300 prose-li:text-slate-300 prose-strong:text-slate-100 prose-a:text-emerald-400 prose-img:rounded-md prose-img:border prose-img:border-slate-800">
                 <ReactMarkdown
+                  urlTransform={(u) => u}
                   remarkPlugins={[remarkGfm]}
                   components={{
                     code({ className, children }) {
