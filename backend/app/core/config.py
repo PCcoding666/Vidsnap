@@ -5,6 +5,7 @@ Handles environment variables and application settings.
 本地数据库模式 - Supabase 已禁用
 """
 import os
+import secrets
 from typing import Optional
 from pathlib import Path
 from dotenv import load_dotenv
@@ -24,6 +25,14 @@ if loaded_env_files:
     print(f"✅ 已加载环境变量文件: {', '.join(str(path) for path in loaded_env_files)}")
 else:
     print("⚠️ 未找到 .env 文件，将使用系统环境变量")
+
+
+# JWT 签名密钥：不再内置公开常量默认值（旧默认值会让任何人伪造登录/重置 token）。
+# 未设置时生成进程级随机密钥（重启即失效），从而强制生产环境通过环境变量注入固定密钥。
+_jwt_secret = os.getenv("JWT_SECRET", "").strip()
+if not _jwt_secret:
+    _jwt_secret = secrets.token_urlsafe(48)
+    print("⚠️ 未设置 JWT_SECRET，已生成进程级临时密钥；生产环境必须通过环境变量设置固定值。")
 
 
 class Settings:
@@ -81,8 +90,8 @@ class Settings:
         "postgresql+asyncpg://vidsnap:vidsnap_secret_2024@localhost:5432/vidsnap"
     )
     
-    # JWT 认证配置
-    JWT_SECRET: str = os.getenv("JWT_SECRET", "your-super-secret-jwt-key-change-in-production")
+    # JWT 认证配置（密钥统一来源：模块级 _jwt_secret，env 未设则为进程级随机值）
+    JWT_SECRET: str = _jwt_secret
     JWT_LIFETIME_SECONDS: int = int(os.getenv("JWT_LIFETIME_SECONDS", str(3600 * 24 * 7)))  # 7天
     
     # Google OAuth 配置
@@ -117,6 +126,13 @@ class Settings:
     
     # 应用 URL（用于邮件中的链接）
     APP_URL: str = os.getenv("APP_URL", "https://vidsnap.space")
+
+    # CORS 允许来源（逗号分隔）。默认仅本地开发来源；生产通过环境变量收紧，
+    # 不再在代码里写死 allow_origins=["*"]。设为 "*" 时会自动关闭凭证携带以符合规范。
+    CORS_ALLOW_ORIGINS: str = os.getenv(
+        "CORS_ALLOW_ORIGINS",
+        "http://localhost:8081,http://localhost:8080,http://localhost:5173",
+    )
     
     @property
     def DASHSCOPE_API_KEY(self) -> str:
@@ -176,6 +192,11 @@ class Settings:
         # return self.DATABASE_MODE == "local" and self.local_db_available
         return True  # Supabase 已禁用，强制使用本地数据库
     
+    @property
+    def cors_allow_origins_list(self) -> list:
+        """解析逗号分隔的 CORS 来源为列表。"""
+        return [o.strip() for o in self.CORS_ALLOW_ORIGINS.split(",") if o.strip()]
+
     @property
     def email_available(self) -> bool:
         """检查邮件服务配置是否完整"""

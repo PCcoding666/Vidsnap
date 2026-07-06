@@ -4,7 +4,7 @@
 ![Frontend](https://img.shields.io/badge/frontend-React%20%2B%20Vite-646CFF)
 ![Python](https://img.shields.io/badge/python-%3E%3D3.10-blue)
 ![Node](https://img.shields.io/badge/node-%3E%3D18-green)
-![License](https://img.shields.io/badge/license-TBD-lightgrey)
+![License](https://img.shields.io/badge/license-MIT-green)
 
 VidSnap 是一个面向本地视频文件的 AI-native 知识工作区：上传视频，输入自然语言目标，系统把视频转成可搜索、可引用、可复用的文本资产。
 
@@ -248,4 +248,6 @@ cd frontend && npm run build
 
 ## License
 
-当前仓库未提交开源许可证文件。对外分发或开源前，请先补充 `LICENSE`。
+本项目采用 [MIT License](LICENSE)。
+
+> ⚠️ 开源发布前请先完成 [`SECURITY_PREPUBLISH_CHECKLIST.md`](SECURITY_PREPUBLISH_CHECKLIST.md)：轮换历史中泄露的密钥并清理 git 历史。

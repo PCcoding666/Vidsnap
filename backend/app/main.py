@@ -75,11 +75,13 @@ async def log_requests(request: Request, call_next):
     
     return response
 
-# 添加CORS中间件
+# 添加CORS中间件（来源由 settings.CORS_ALLOW_ORIGINS 控制，默认仅本地开发来源）
+_cors_origins = settings.cors_allow_origins_list
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # 在生产环境中应该指定具体的域名
-    allow_credentials=True,
+    allow_origins=_cors_origins,
+    # 通配符来源与凭证携带不能并存（浏览器会拒绝），故 "*" 时自动关闭 credentials
+    allow_credentials=("*" not in _cors_origins),
     allow_methods=["*"],
     allow_headers=["*"],
 )

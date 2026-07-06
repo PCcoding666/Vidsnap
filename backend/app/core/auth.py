@@ -30,7 +30,8 @@ from app.core.logging import logger
 # ============================================
 # 配置常量
 # ============================================
-JWT_SECRET = os.getenv("JWT_SECRET", "your-super-secret-jwt-key-change-in-production")
+# 统一使用 config.settings 的 JWT_SECRET（env 未设时为进程级随机值），不再内置公开常量默认值
+JWT_SECRET = settings.JWT_SECRET
 JWT_LIFETIME_SECONDS = 3600 * 24 * 7  # 7 天
 GOOGLE_CLIENT_ID = os.getenv("GOOGLE_OAUTH_CLIENT_ID", "")
 GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_OAUTH_CLIENT_SECRET", "")

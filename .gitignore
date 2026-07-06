@@ -84,6 +84,15 @@ backend/youtube_cookies.txt
 backend/storage/
 storage/
 
+# 个人工作笔记 / 生成产物（含隐私，勿提交）
+note_output.md
+notes_*.md
+*_图文版.md
+
+# 本地 AI 工具目录
+.qoder/
+.understand-anything/
+
 # 修正：上面的 Python 模板规则 lib/ 无路径前缀，误伤了前端 shadcn 的 src/lib
 !frontend/src/lib/
 !backend/app/evals/
