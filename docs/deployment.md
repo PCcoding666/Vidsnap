@@ -223,3 +223,43 @@ npm run build
 cd backend
 pytest
 ```
+
+## YouTube 下载 · bgutil PO Token runtime
+
+`FetchYouTube` skill 需要 bgutil 提供 PO Token（YouTube 反爬）。两种运行模式，按场景选：
+
+### 本地 / 单机 —— script 模式（零运维，推荐开源用户）
+
+```bash
+pip install bgutil-ytdlp-pot-provider
+```
+
+`.env` 指向 bgutil 的 node 生成脚本（yt-dlp 每次调用时临时执行，无需常驻服务）：
+
+```bash
+BGUTIL_SCRIPT_PATH=/path/to/bgutil-ytdlp-pot-provider/server/build/generate_once.js
+```
+
+### 服务器 / 多用户 —— HTTP sidecar（token 缓存，推荐部署）
+
+用官方镜像做**可选 sidecar**，放进 compose profile，默认不启：
+
+```yaml
+# docker-compose.prod.yml
+services:
+  bgutil-pot:
+    image: brainicism/bgutil-ytdlp-pot-provider
+    container_name: vidsnap-bgutil-pot
+    restart: unless-stopped
+    profiles: ["youtube"]        # 默认不启；要 YouTube 才 COMPOSE_PROFILES=youtube up
+  backend:
+    # 装 pip 插件后 yt-dlp 默认调 http://127.0.0.1:4416；sidecar 场景指向 bgutil-pot 容器
+    environment:
+      BGUTIL_BASE_URL: http://bgutil-pot:4416
+```
+
+### 两种模式的公共前置
+
+- **Deno**：解 nsig challenge（镜像内装 deno；缺则报 `No video formats found`）。
+- **cookie**：过 bot check，由运行方提供（`YOUTUBE_COOKIES_FROM_BROWSER` 或 cookie 文件）——**绝不内置账号凭证**。
+- skill 只认接口：三件套（Deno + bgutil + cookie）齐则下、缺任一则 fail，代码不对反爬兜底。

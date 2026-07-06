@@ -86,6 +86,35 @@ cd ../frontend
 npm run dev -- --port 8081 --host 0.0.0.0
 ```
 
+## YouTube 视频支持（可选）
+
+除本地文件外，VidSnap 支持直接分析 YouTube 链接。交互是 **AI-native 的斜杠命令**：在「目标」输入框打 `/` 唤起命令菜单，选 `/youtube`：
+
+```
+/youtube <YouTube 链接> <你的目标>
+例：/youtube https://youtu.be/xxxx 整理成带截图的图文笔记
+```
+
+> ⚠️ **要真正下载成功，需配齐下面三件套（缺一不可）。** 这是 YouTube 反爬的现状；`FetchYouTube` skill 只提供接口、**不对反爬兜底**。
+
+1. **Deno**（解 YouTube nsig challenge；缺了会报 `No video formats found`）
+   ```bash
+   brew install deno            # 或见 https://deno.com
+   ```
+2. **bgutil PO Token**（过 YouTube PO Token 要求；本地推荐 script 模式，零运维）
+   ```bash
+   pip install bgutil-ytdlp-pot-provider
+   # .env 指向 bgutil 的 node 生成脚本：
+   BGUTIL_SCRIPT_PATH=/path/to/bgutil-ytdlp-pot-provider/server/build/generate_once.js
+   ```
+3. **cookie**（过 bot check；浏览器需已登录 YouTube）
+   ```bash
+   # .env
+   YOUTUBE_COOKIES_FROM_BROWSER=chrome     # 或 safari / firefox
+   ```
+
+**提示**：真实**住宅 IP** 反爬宽松；数据中心/代理 IP 会触发最严反爬（captcha / SABR）。三件套齐则下、缺任一则失败。bgutil 的两种运行模式（本地 `script` vs 服务器 `http` sidecar）见 [部署文档](docs/deployment.md)。
+
 ## 第一个 API Demo
 
 先验证服务：

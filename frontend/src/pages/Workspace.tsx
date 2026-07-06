@@ -58,6 +58,11 @@ const QUICK_QUERIES = [
   "按时间线整理重点，并标注时间戳",
 ];
 
+// 斜杠命令（AI-native 触发 skill；输入 / 唤起）
+const SLASH_COMMANDS = [
+  { cmd: "/youtube", desc: "下载并分析 YouTube 视频", hint: "/youtube <链接> <目标>" },
+];
+
 const STATUS_STYLE: Record<string, { dot: string; label: string; text: string }> = {
   planned: { dot: "bg-slate-500", label: "待执行", text: "text-slate-400" },
   running: { dot: "bg-amber-400 animate-pulse", label: "执行中", text: "text-amber-300" },
@@ -107,6 +112,7 @@ function stripVisualReferences(md: string): string {
 export default function Workspace() {
   const [file, setFile] = useState<File | null>(null);
   const [videoUrl, setVideoUrl] = useState<string>("");
+  const [slashOpen, setSlashOpen] = useState(false);
   const [query, setQuery] = useState<string>("把这个视频整理成可复用的结构化笔记");
   const [skills, setSkills] = useState<LabSkill[]>([]);
   const [forceSkills, setForceSkills] = useState<Set<string>>(new Set());
@@ -126,6 +132,7 @@ export default function Workspace() {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const pollRef = useRef<number | null>(null);
   const chatEndRef = useRef<HTMLDivElement | null>(null);
+  const queryRef = useRef<HTMLTextAreaElement | null>(null);
 
   useEffect(() => setHistory(loadHist()), []);
 
@@ -198,7 +205,11 @@ export default function Workspace() {
   }, []);
 
   const run = async () => {
-    if (!file || !query.trim() || running) return;
+    // 解析斜杠命令：/youtube <url> <目标>；否则整句是目标
+    const cmd = query.trim().match(/^\/youtube\s+(\S+)\s*([\s\S]*)$/i);
+    const cmdUrl = cmd ? cmd[1] : "";
+    const goal = cmd ? (cmd[2].trim() || "把这个视频整理成可复用的结构化笔记") : query.trim();
+    if ((!file && !cmdUrl) || !goal || running) return;
     setRunning(true);
     setError("");
     setArtifact(null);
@@ -206,8 +217,9 @@ export default function Workspace() {
     setChatMsgs([]);
     try {
       const fd = new FormData();
-      fd.append("video_file", file);
-      fd.append("query", query.trim());
+      if (file) fd.append("video_file", file);
+      if (cmdUrl) fd.append("video_url", cmdUrl);
+      fd.append("query", goal);
       fd.append("provider", "paraformer");
       fd.append("force_skills", Array.from(forceSkills).join(","));
 
@@ -349,15 +361,47 @@ export default function Workspace() {
             </label>
           )}
 
-          <div>
-            <label className="text-xs text-slate-400 mb-1 block">你的目标（自然语言）</label>
+          <div className="relative">
+            <label className="text-xs text-slate-400 mb-1 block">你的目标（自然语言，输入 / 唤起命令）</label>
             <textarea
+              ref={queryRef}
               value={query}
-              onChange={(e) => setQuery(e.target.value)}
+              onChange={(e) => {
+                const v = e.target.value;
+                setQuery(v);
+                setSlashOpen(/^\/[a-z]*$/i.test(v.trim()));
+              }}
+              onKeyDown={(e) => {
+                if (slashOpen && (e.key === "Tab" || e.key === "Enter")) {
+                  const match = SLASH_COMMANDS.find((c) => c.cmd.startsWith(query.trim().toLowerCase()));
+                  if (match) {
+                    e.preventDefault();
+                    setQuery(match.cmd + " ");
+                    setSlashOpen(false);
+                  }
+                }
+              }}
               rows={3}
               className="w-full rounded-lg bg-slate-900 border border-slate-800 p-3 text-sm resize-none focus:outline-none focus:border-slate-600"
-              placeholder="例如：把视频整理成带截图的结构化笔记"
+              placeholder="例如：把视频整理成带截图的结构化笔记；或输入 / 唤起命令（如 /youtube）"
             />
+            {slashOpen && SLASH_COMMANDS.some((c) => c.cmd.startsWith(query.trim().toLowerCase())) && (
+              <div className="absolute z-30 left-0 right-0 mt-1 rounded-lg border border-slate-700 bg-slate-900 shadow-xl overflow-hidden">
+                <div className="px-3 py-1.5 text-[10px] text-slate-600 border-b border-slate-800">命令 · Tab/Enter 选中</div>
+                {SLASH_COMMANDS.filter((c) => c.cmd.startsWith(query.trim().toLowerCase())).map((c) => (
+                  <button
+                    key={c.cmd}
+                    type="button"
+                    onClick={() => { setQuery(c.cmd + " "); setSlashOpen(false); queryRef.current?.focus(); }}
+                    className="w-full text-left px-3 py-2 hover:bg-slate-800 flex items-center gap-2"
+                  >
+                    <span className="text-emerald-400 text-sm font-mono">{c.cmd}</span>
+                    <span className="text-xs text-slate-500">{c.desc}</span>
+                    <span className="ml-auto text-[10px] text-slate-600 font-mono">{c.hint}</span>
+                  </button>
+                ))}
+              </div>
+            )}
             <div className="flex flex-wrap gap-1.5 mt-2">
               {QUICK_QUERIES.map((q) => (
                 <button
@@ -406,7 +450,7 @@ export default function Workspace() {
 
           <button
             onClick={run}
-            disabled={!file || !query.trim() || running}
+            disabled={(!file && !/^\/youtube\s+\S+/i.test(query.trim())) || !query.trim() || running}
             className="w-full rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-800 disabled:text-slate-600 py-2.5 text-sm font-medium transition"
           >
             {running ? `执行中… ${job?.progress ?? 0}%` : "运行工具链"}

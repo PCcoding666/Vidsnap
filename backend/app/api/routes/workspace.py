@@ -78,7 +78,8 @@ async def create_plan(payload: QueryPlanRequest):
 @router.post("/jobs", response_model=WorkspaceJobCreateResponse)
 async def create_workspace_job(
     request: Request,
-    video_file: UploadFile = File(...),
+    video_file: Optional[UploadFile] = File(None),
+    video_url: str = Form(""),
     query: str = Form(...),
     provider: str = Form("paraformer"),
     force_skills: str = Form(""),
@@ -91,26 +92,40 @@ async def create_workspace_job(
     if not query.strip():
         raise HTTPException(status_code=400, detail="query 不能为空")
 
-    if not video_file or not video_file.filename:
-        raise HTTPException(status_code=400, detail="必须上传本地视频文件")
-
-    file_suffix = Path(video_file.filename).suffix.lower()
-    if file_suffix not in ALLOWED_VIDEO_EXTENSIONS:
-        raise HTTPException(
-            status_code=400,
-            detail=(
-                f"不支持的视频格式: {file_suffix or 'unknown'}，"
-                "请上传 MP4、MOV、MKV、AVI、WEBM 或 M4V 文件"
-            ),
-        )
+    video_url = (video_url or "").strip()
+    has_file = bool(video_file and video_file.filename)
+    if not has_file and not video_url:
+        raise HTTPException(status_code=400, detail="必须上传本地视频文件，或提供 YouTube 链接")
 
     user_id, quota = await resolve_user_context(credentials)
     upload_dir = tempfile.mkdtemp(prefix="vidsnap_workspace_job_")
-    safe_filename = Path(video_file.filename).name
-    video_path = os.path.join(upload_dir, safe_filename)
 
     try:
-        upload_bytes = await save_upload_with_size_limit(video_file, video_path)
+        if video_url:
+            # YouTube 链接 → FetchYouTube skill 下载到本地，再走现有链路（不对反爬兜底）
+            from ..services.youtube_service import fetch_youtube, is_youtube_url, YouTubeFetchError
+            if not is_youtube_url(video_url):
+                raise HTTPException(status_code=400, detail="目前仅支持 YouTube 链接")
+            try:
+                video_path = await fetch_youtube(video_url, upload_dir)
+            except YouTubeFetchError as e:
+                raise HTTPException(status_code=502, detail=str(e))
+            safe_filename = Path(video_path).name
+            upload_bytes = os.path.getsize(video_path)
+        else:
+            file_suffix = Path(video_file.filename).suffix.lower()
+            if file_suffix not in ALLOWED_VIDEO_EXTENSIONS:
+                raise HTTPException(
+                    status_code=400,
+                    detail=(
+                        f"不支持的视频格式: {file_suffix or 'unknown'}，"
+                        "请上传 MP4、MOV、MKV、AVI、WEBM 或 M4V 文件"
+                    ),
+                )
+            safe_filename = Path(video_file.filename).name
+            video_path = os.path.join(upload_dir, safe_filename)
+            upload_bytes = await save_upload_with_size_limit(video_file, video_path)
+
         enforce_storage_quota(quota, upload_bytes)
         await enforce_media_duration_limit(video_path, quota)
 
@@ -142,10 +157,8 @@ async def create_workspace_job(
         raise HTTPException(status_code=500, detail=f"workspace job 创建失败: {str(e)}")
     finally:
         try:
-            if os.path.exists(video_path):
-                os.remove(video_path)
-            if os.path.isdir(upload_dir):
-                os.rmdir(upload_dir)
+            import shutil
+            shutil.rmtree(upload_dir, ignore_errors=True)
         except Exception as e:
             logger.warning(f"清理 workspace job 上传临时文件失败: {e}")
 

@@ -61,3 +61,6 @@ email-validator>=2.0.0
 
 # 系统监控
 psutil>=5.9.0
+
+# YouTube 下载（FetchYouTube skill）
+yt-dlp>=2024.1.0
