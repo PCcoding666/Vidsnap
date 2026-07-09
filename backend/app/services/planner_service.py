@@ -195,7 +195,6 @@ class PlannerService:
             "Transcript text is the source of truth unless the plan explicitly includes ExtractFrames.",
         ]
         rejected = [
-            "YouTube downloading is out of scope for Slim.",
             "Cross-video knowledge base search is out of scope for P0.",
         ]
 

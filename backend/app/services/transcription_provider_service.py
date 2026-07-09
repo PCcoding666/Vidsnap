@@ -31,9 +31,11 @@ class TranscriptionProviderRegistry:
         whisper_available = bool(shutil.which("whisper") or shutil.which("faster-whisper"))
 
         self._providers = {
+            # 内部 provider id 沿用历史 "paraformer" 作为稳定标识（前端/接口按此传参、
+            # 失败阶段分类按此匹配）；实际调用的 DashScope 模型是 Fun-ASR-Flash（settings.ASR_MODEL）。
             "paraformer": TranscriptionProvider(
                 name="paraformer",
-                display_name="Aliyun Paraformer",
+                display_name="Fun-ASR-Flash",
                 available=bool(settings.DASHSCOPE_API_KEY),
                 retryable_errors=[
                     "timeout",
@@ -49,7 +51,7 @@ class TranscriptionProviderRegistry:
                 ],
                 supports_chunking=True,
                 supports_local_files=False,
-                notes="Requires an OSS-accessible audio URL.",
+                notes="DashScope Fun-ASR-Flash；需要 OSS 可访问的音频 URL。",
             ),
             "local_asr": TranscriptionProvider(
                 name="local_asr",

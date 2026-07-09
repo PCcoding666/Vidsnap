@@ -1,7 +1,9 @@
 """
-阿里云 Paraformer-v2 语音识别服务
-使用阿里云 DashScope SDK 的 Paraformer 模型进行音频转录
-支持说话人分离、高精度时间戳、更好的分句效果
+阿里云 DashScope 录音文件识别（Transcription）服务。
+
+实际使用的模型由 settings.ASR_MODEL 决定（默认 Fun-ASR-Flash）；类名/文件名沿用
+历史 "Paraformer" 命名，仅作为内部实现符号，不代表所调用的模型。
+支持分片、重试、轮询、高精度时间戳。
 """
 import logging
 import os
@@ -33,7 +35,7 @@ class TranscriptionResult:
 
 
 class ParaformerSpeechService:
-    """阿里云 Paraformer-v2 语音识别服务"""
+    """阿里云 Fun-ASR-Flash 语音识别服务"""
     
     def __init__(self):
         """初始化阿里云 Paraformer 语音服务"""
@@ -65,7 +67,7 @@ class ParaformerSpeechService:
             self.available = False
         else:
             self.available = True
-            logger.info("阿里云 Paraformer-v2 语音服务初始化成功")
+            logger.info("阿里云 Fun-ASR-Flash 语音服务初始化成功")
         self.last_error: Optional[str] = None
         self.last_failure_stage: Optional[str] = None
     
@@ -211,7 +213,7 @@ class ParaformerSpeechService:
         enable_words: bool = True
     ) -> Optional[Any]:
         """
-        使用阿里云 Paraformer-v2 API 转录音频并获取详细时间戳
+        使用阿里云 Fun-ASR-Flash API 转录音频并获取详细时间戳
         
         Args:
             audio_oss_url: 音频文件的OSS公共URL
@@ -230,9 +232,9 @@ class ParaformerSpeechService:
             logger.info(f"开始转录音频文件: {self._redact_url_for_log(audio_oss_url)}")
             logger.info(f"配置 - 说话人分离: {enable_diarization}, 词级时间戳: {enable_words}")
             
-            # 调用 Paraformer-v2 异步转录 API
+            # 调用 Fun-ASR-Flash 异步转录 API
             # 参考: https://help.aliyun.com/zh/model-studio/paraformer-recorded-speech-recognition-python-sdk
-            logger.info("发送转录请求到阿里云 Paraformer-v2...")
+            logger.info("发送转录请求到阿里云 Fun-ASR-Flash...")
             
             transcribe_response = await self._submit_transcription_task(
                 audio_oss_url=audio_oss_url,
@@ -325,9 +327,9 @@ class ParaformerSpeechService:
         audio_oss_url: str
     ) -> Optional[TranscriptionResult]:
         """
-        将阿里云 Paraformer-v2 结果解析为段落级时间戳
+        将阿里云 Fun-ASR-Flash 结果解析为段落级时间戳
         
-        Paraformer-v2 返回格式:
+        Fun-ASR-Flash 返回格式:
         {
             "transcripts": [
                 {
@@ -359,7 +361,7 @@ class ParaformerSpeechService:
             
             # ========== DEBUG: 打印 Paraformer 返回结果结构 ==========
             logger.info("=" * 80)
-            logger.info("Paraformer-v2 转录结果原始数据:")
+            logger.info("Fun-ASR-Flash 转录结果原始数据:")
             logger.info(f"transcription_output 类型: {type(transcription_output)}")
             logger.info(f"results 类型: {type(results)}")
             logger.info(f"results 数量: {len(results) if results else 0}")
@@ -399,7 +401,7 @@ class ParaformerSpeechService:
                     transcription_data = response.json()
                     logger.info(f"转录JSON数据结构: {list(transcription_data.keys())}")
                     
-                    # Paraformer-v2 标准格式
+                    # Fun-ASR-Flash 标准格式
                     if 'transcripts' in transcription_data:
                         transcripts = transcription_data['transcripts']
                         

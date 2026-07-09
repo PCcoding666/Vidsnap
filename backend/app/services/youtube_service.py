@@ -5,12 +5,12 @@ YouTube 下载服务（skill: FetchYouTube）。
 交给现有的 IngestVideo / 转录 / 帧 / 笔记链路。
 
 定位（开源本地版）：
-- VidSnap 面向"用户在自己住宅 IP 上运行"的开源场景。住宅 IP 是普通用户，
-  YouTube 基本不反爬，所以这里就是一层薄薄的 yt-dlp 封装 —— 不装 bgutil node 服务、
-  不接 AgentGo 浏览器自动化。
 - **不对反爬兜底**：按策略阶梯尽力下载，全部失败就抛 YouTubeFetchError，让 job 正常失败。
-- 反爬三件套（cookie / proxy / PO Token）**全部可选**：给"某视频要登录"或"就是想在云上跑"
-  的边缘情况留口子，默认都不需要。
+- 要真正下载成功，运行环境需自备"三件套"（缺一不可，详见 README / docs/deployment.md）：
+    1. Deno —— 解 YouTube nsig challenge（缺则报 "No video formats found"）；
+    2. bgutil PO Token（script 或 http 模式）—— 过 PO Token 要求；
+    3. cookie（YOUTUBE_COOKIES_FROM_BROWSER / cookie 文件）—— 过 bot check。
+- 住宅 IP 反爬宽松、数据中心/代理 IP 最严；本 skill 只提供接口，凭证与运行时由用户/环境提供。
 """
 import asyncio
 import os

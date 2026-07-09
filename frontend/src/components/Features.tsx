@@ -23,7 +23,7 @@ const features = [
   {
     icon: Mic,
     title: "High-Accuracy Transcription",
-    description: "Powered by Paraformer-v2 for >95% accuracy with speaker separation and diarization.",
+    description: "Powered by Fun-ASR-Flash for high-accuracy timestamped transcription.",
     gradient: "from-green-500 to-emerald-500"
   },
   {
