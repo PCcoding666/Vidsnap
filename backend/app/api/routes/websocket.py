@@ -1,6 +1,6 @@
 """
 WebSocket 实时推送端点
-替代 Supabase Realtime，实现本地实时消息推送
+本地实时消息推送
 """
 import asyncio
 import json

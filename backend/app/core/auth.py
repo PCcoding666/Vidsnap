@@ -1,6 +1,6 @@
 """
 FastAPI-Users 认证配置
-替代 Supabase Auth，实现本地用户认证和 Google OAuth
+本地用户认证和 Google OAuth
 """
 import os
 import uuid
@@ -30,7 +30,8 @@ from app.core.logging import logger
 # ============================================
 # 配置常量
 # ============================================
-JWT_SECRET = os.getenv("JWT_SECRET", "your-super-secret-jwt-key-change-in-production")
+# 统一使用 config.settings 的 JWT_SECRET（env 未设时为进程级随机值），不再内置公开常量默认值
+JWT_SECRET = settings.JWT_SECRET
 JWT_LIFETIME_SECONDS = 3600 * 24 * 7  # 7 天
 GOOGLE_CLIENT_ID = os.getenv("GOOGLE_OAUTH_CLIENT_ID", "")
 GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_OAUTH_CLIENT_SECRET", "")
@@ -203,7 +204,7 @@ async def get_current_user_dict(
     """
     获取当前用户字典（兼容原有 API）
     
-    返回格式与原 Supabase 兼容：
+    返回格式与旧接口兼容：
     {"id": "uuid", "email": "xxx@example.com"}
     """
     return {

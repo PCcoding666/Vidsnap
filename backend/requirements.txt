@@ -1,5 +1,5 @@
 # 阿里云视频分析平台依赖包
-# 更新版本：使用阿里云 DashScope SenseVoice 进行音频转录
+# 更新版本：使用阿里云 DashScope Fun-ASR 进行音频转录
 
 # Web框架
 fastapi>=0.100.0
@@ -13,10 +13,7 @@ scenedetect[opencv]>=0.6.2  # PySceneDetect 场景检测库
 oss2>=2.18.0
 
 # AI服务
-dashscope>=1.14.0  # 阿里云 DashScope SDK (SenseVoice + Qwen3-VL-Flash)
-
-# 数据库服务
-supabase>=2.10.0  # Supabase Python SDK (保留兼容性)
+dashscope>=1.14.0  # 阿里云 DashScope SDK（Fun-ASR 转录 + Qwen 多模态）
 
 # 本地数据库 (PostgreSQL + SQLAlchemy)
 sqlalchemy[asyncio]>=2.0.25

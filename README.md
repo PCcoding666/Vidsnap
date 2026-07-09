@@ -4,7 +4,7 @@
 ![Frontend](https://img.shields.io/badge/frontend-React%20%2B%20Vite-646CFF)
 ![Python](https://img.shields.io/badge/python-%3E%3D3.10-blue)
 ![Node](https://img.shields.io/badge/node-%3E%3D18-green)
-![License](https://img.shields.io/badge/license-TBD-lightgrey)
+![License](https://img.shields.io/badge/license-MIT-green)
 
 VidSnap 是一个面向本地视频文件的 AI-native 知识工作区：上传视频，输入自然语言目标，系统把视频转成可搜索、可引用、可复用的文本资产。
 
@@ -13,8 +13,8 @@ VidSnap 是一个面向本地视频文件的 AI-native 知识工作区：上传�
 - 本地视频上传：支持 MP4、MOV、MKV、AVI、WEBM、M4V。
 - Query-first 工作区：先写目标，再生成结构化技能计划，不让用户手动选择处理菜单。
 - 可恢复异步任务：`/workspace/jobs` 返回 job 状态、阶段进度、重试信息和 artifact 版本。
-- 转录优先事实源：Paraformer-v2 生成带时间戳的 transcript，摘要、笔记、定位和问答都基于 transcript。
-- 云端音频中转：通过阿里云 OSS 提供 Paraformer 可访问的音频 URL，默认使用签名 URL 支持私有 bucket。
+- 转录优先事实源：Fun-ASR 生成带时间戳的 transcript，摘要、笔记、定位和问答都基于 transcript。
+- 云端音频中转：通过阿里云 OSS 提供 Fun-ASR 可访问的音频 URL，默认使用签名 URL 支持私有 bucket。
 - 本地开发闭环：FastAPI + React/Vite + PostgreSQL + Redis，一条脚本启动完整环境。
 
 ## 快速上手
@@ -168,7 +168,7 @@ flowchart LR
     VR --> Pipeline
     Pipeline --> FFmpeg[FFmpeg audio/video processing]
     Pipeline --> OSS[Aliyun OSS signed audio URL]
-    OSS --> ASR[DashScope Paraformer-v2]
+    OSS --> ASR[DashScope Fun-ASR]
     Pipeline --> LLM[DashScope Qwen summary/QA]
     Pipeline --> PG[(local PostgreSQL)]
     API --> Redis[(Redis for async infra)]
@@ -248,4 +248,6 @@ cd frontend && npm run build
 
 ## License
 
-当前仓库未提交开源许可证文件。对外分发或开源前，请先补充 `LICENSE`。
+本项目采用 [MIT License](LICENSE)。
+
+> ⚠️ 开源发布前请先完成 [`SECURITY_PREPUBLISH_CHECKLIST.md`](SECURITY_PREPUBLISH_CHECKLIST.md)：轮换历史中泄露的密钥并清理 git 历史。

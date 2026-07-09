@@ -4,9 +4,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What VidSnap is
 
-VidSnap is an AI-native workspace for local video files: a user uploads a video and writes a natural-language goal ("query-first"), and the system turns the video into searchable, citable, reusable text assets. The transcript (from Aliyun Paraformer-v2) is the single source of truth; summaries, notes, timestamps, and Q&A are all derived from it. **Key-frame / visual analysis is disabled — processing is transcript/text only.**
+VidSnap is an AI-native workspace for local video files: a user uploads a video and writes a natural-language goal ("query-first"), and the system turns the video into searchable, citable, reusable text assets. The transcript (from Aliyun Fun-ASR) is the single source of truth; summaries, notes, timestamps, and Q&A are all derived from it. **Key-frame / visual analysis is an opt-in, plan-driven capability** (`visual_mode` = `auto`/`on`/`off`, default `auto`): frames are extracted only when the query asks for visuals (auto) or `visual_mode=on`; `off` forces text-only with no image skills in the plan.
 
-This is the "slim" variant (`vidsnap_slim` branch): only the video-analysis core is kept, and Supabase is disabled in favor of a local PostgreSQL database (see the commented-out Supabase code throughout `backend/app`).
+This is the "slim" variant (`vidsnap_slim` branch): only the video-analysis core is kept, and it runs on a local PostgreSQL database (the earlier hosted-BaaS integration has been removed; the local sync-store compat layer is `store_service.py`).
 
 ## Commands
 
@@ -42,7 +42,7 @@ Notable: `DASHSCOPE_API_KEY` is a computed property with precedence `TRANSCRIPT_
 - `services/` — all business logic; modules end in `_service.py`. Core flow:
   - `planner_service.py` — **deterministic, rule-based** (P0) mapping of a query → `SkillPlan` (keyword matching against term sets). Kept rule-based so plan quality is reproducibly evaluable against a golden set; LLM planning can later slot behind the same `SkillPlan` contract.
   - `pipeline_service.py` (`AliyunVideoProcessingPipeline`) — orchestrates video → audio extraction → transcription → LLM analysis, producing unified metadata.
-  - `paraformer_service.py` — Paraformer-v2 transcription (chunking, retries, polling; tunable via `PARAFORMER_*` env vars).
+  - `paraformer_service.py` — Fun-ASR transcription (chunking, retries, polling; tunable via `PARAFORMER_*` env vars).
   - `oss_service.py` — uploads audio to Aliyun OSS and produces signed URLs for Paraformer.
   - `llm_service.py` — Qwen/DashScope LLM calls for summaries/notes/Q&A.
   - `workspace_job_service.py` — **resumable async jobs run as in-process `asyncio.Task`s** (`self.tasks: Dict[str, asyncio.Task]`), tracking stage progress, retries, and versioned artifacts. This is the primary execution path.
@@ -57,7 +57,7 @@ Notable: `DASHSCOPE_API_KEY` is a computed property with precedence `TRANSCRIPT_
 
 ## Frontend (`frontend/src/`)
 
-Vite + React + TypeScript + Tailwind + shadcn/ui. `pages/` route screens, `components/` (with `components/ui/` shadcn primitives), `contexts/` React context, `services/` API clients, `integrations/` Supabase wiring, `i18n/` localization. Use the `@/` alias for `frontend/src`. Components `PascalCase`, hooks `useSomething`.
+Vite + React + TypeScript + Tailwind + shadcn/ui. `pages/` route screens, `components/` (with `components/ui/` shadcn primitives), `contexts/` React context, `services/` API clients, `i18n/` localization. Use the `@/` alias for `frontend/src`. Components `PascalCase`, hooks `useSomething`.
 
 ## Conventions
 

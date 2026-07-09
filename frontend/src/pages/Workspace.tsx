@@ -116,6 +116,7 @@ export default function Workspace() {
   const [query, setQuery] = useState<string>("把这个视频整理成可复用的结构化笔记");
   const [skills, setSkills] = useState<LabSkill[]>([]);
   const [forceSkills, setForceSkills] = useState<Set<string>>(new Set());
+  const [visualMode, setVisualMode] = useState<"auto" | "on" | "off">("auto");
   const [plan, setPlan] = useState<WorkspacePlan | null>(null);
 
   const [jobId, setJobId] = useState<string>("");
@@ -155,12 +156,13 @@ export default function Workspace() {
         .post<{ plan: WorkspacePlan }>("/workspace/plan", {
           query: query.trim(),
           force_skills: Array.from(forceSkills),
+          visual_mode: visualMode,
         })
         .then((d) => setPlan(d.plan))
         .catch(() => setPlan(null));
     }, 350);
     return () => window.clearTimeout(handle);
-  }, [query, forceSkills]);
+  }, [query, forceSkills, visualMode]);
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -180,7 +182,8 @@ export default function Workspace() {
   const toggleForce = (name: string) => {
     setForceSkills((prev) => {
       const next = new Set(prev);
-      next.has(name) ? next.delete(name) : next.add(name);
+      if (next.has(name)) next.delete(name);
+      else next.add(name);
       return next;
     });
   };
@@ -222,6 +225,7 @@ export default function Workspace() {
       fd.append("query", goal);
       fd.append("provider", "paraformer");
       fd.append("force_skills", Array.from(forceSkills).join(","));
+      fd.append("visual_mode", visualMode);
 
       const created = await apiClient.postFormData<{ job_id: string; job: WorkspaceJobStatus }>(
         "/workspace/jobs",
@@ -412,6 +416,33 @@ export default function Workspace() {
                   {q}
                 </button>
               ))}
+            </div>
+          </div>
+
+          {/* 画面截帧模式：帧是计划驱动的可选项（auto/on/off） */}
+          <div>
+            <div className="text-xs text-slate-400 mb-2">
+              画面截帧 <span className="text-slate-600">（图文笔记里的关键帧）</span>
+            </div>
+            <div className="flex rounded-lg border border-slate-800 overflow-hidden text-xs">
+              {([
+                ["auto", "自动"],
+                ["on", "强制"],
+                ["off", "关闭"],
+              ] as const).map(([m, label]) => (
+                <button
+                  key={m}
+                  onClick={() => setVisualMode(m)}
+                  className={`flex-1 py-1.5 transition ${visualMode === m ? "bg-emerald-600 text-white" : "bg-slate-900/50 text-slate-400 hover:text-slate-200"}`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            <div className="text-[11px] text-slate-600 mt-1">
+              {visualMode === "auto" && "按目标里的“图文/截图”等词自动决定是否截帧"}
+              {visualMode === "on" && "强制生成带关键帧的图文笔记"}
+              {visualMode === "off" && "纯文本，不做任何截帧/画面分析"}
             </div>
           </div>
 

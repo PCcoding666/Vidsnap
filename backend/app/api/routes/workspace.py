@@ -68,7 +68,9 @@ async def create_plan(payload: QueryPlanRequest):
         raise HTTPException(status_code=400, detail="query 不能为空")
 
     try:
-        plan = planner_service.create_plan(payload.query, payload.force_skills)
+        plan = planner_service.create_plan(
+            payload.query, force_skills=payload.force_skills, visual_mode=payload.visual_mode
+        )
         validation = skill_registry.validate_plan(plan)
         return QueryPlanResponse(status="success", plan=plan, validation=validation)
     except ValueError as e:
@@ -83,6 +85,7 @@ async def create_workspace_job(
     query: str = Form(...),
     provider: str = Form("paraformer"),
     force_skills: str = Form(""),
+    visual_mode: str = Form("auto"),
     credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
 ):
     """Create a recoverable async workspace job."""
@@ -91,6 +94,10 @@ async def create_workspace_job(
 
     if not query.strip():
         raise HTTPException(status_code=400, detail="query 不能为空")
+
+    visual_mode = (visual_mode or "auto").strip().lower()
+    if visual_mode not in {"auto", "on", "off"}:
+        raise HTTPException(status_code=400, detail="visual_mode 必须是 auto / on / off 之一")
 
     video_url = (video_url or "").strip()
     has_file = bool(video_file and video_file.filename)
@@ -136,6 +143,7 @@ async def create_workspace_job(
             user_id=user_id,
             provider=provider,
             force_skills=forced_skills,
+            visual_mode=visual_mode,
         )
 
         ctx_logger.info(

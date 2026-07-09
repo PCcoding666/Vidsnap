@@ -16,7 +16,7 @@ from ..models.analysis import (
     KeyframeMetadata,
 )
 from .llm_service import llm_service
-from .supabase_service import supabase_service
+from .store_service import store_service
 from dashscope import MultiModalConversation
 
 
@@ -95,7 +95,7 @@ class VideoChatService:
         启动新的聊天会话
         支持两种模式：
         1. 直接传入 metadata（兼容旧用法）
-        2. 仅传入 video_id 时，自动从 Supabase 汇聚完整上下文（关键帧+转录+元数据+AI总结）
+        2. 仅传入 video_id 时，自动从本地数据库汇聚完整上下文（关键帧+转录+元数据+AI总结）
         
         Args:
             video_id: 视频 ID
@@ -114,7 +114,7 @@ class VideoChatService:
             # 记录输入参数用于调试
             logger.info(f"[DEBUG] start_session: video_id={video_id}, metadata={'provided' if metadata else 'None'}")
             
-            # 若未提供 metadata 或 metadata 为空，自动从 Supabase 编译完整上下文
+            # 若未提供 metadata 或 metadata 为空，自动从本地数据库编译完整上下文
             compiled = None
             # 检查metadata是否为空或没有有效内容
             has_valid_metadata = (
@@ -123,16 +123,16 @@ class VideoChatService:
             )
             
             if not has_valid_metadata:
-                if supabase_service.is_available():
-                    logger.info(f"从 Supabase 自动加载视频上下文: {video_id}")
-                    compiled = supabase_service.get_compiled_metadata(video_id)
+                if store_service.is_available():
+                    logger.info(f"从本地数据库自动加载视频上下文: {video_id}")
+                    compiled = store_service.get_compiled_metadata(video_id)
                     if not compiled:
-                        logger.warning(f"未能从 Supabase 获取上下文: {video_id}，使用空上下文")
+                        logger.warning(f"未能从本地数据库获取上下文: {video_id}，使用空上下文")
                         compiled = {"transcript": {"segments": []}, "keyframes": [], "video": {}, "summaries": {}}
                     else:
                         logger.info(f"[DEBUG] 编译成功: keyframes={len(compiled.get('keyframes', []))}, segments={len(compiled.get('transcript', {}).get('segments', []))}")
                 else:
-                    logger.warning("Supabase 服务不可用，无法自动加载上下文")
+                    logger.warning("本地存储服务不可用，无法自动加载上下文")
                     compiled = {"transcript": {"segments": []}, "keyframes": [], "video": {}, "summaries": {}}
                 metadata = {"transcript": compiled.get("transcript"), "keyframes": compiled.get("keyframes")}
             else:

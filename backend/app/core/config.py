@@ -2,9 +2,10 @@
 Configuration management for the video analysis platform.
 Handles environment variables and application settings.
 
-本地数据库模式 - Supabase 已禁用
+本地数据库模式
 """
 import os
+import secrets
 from typing import Optional
 from pathlib import Path
 from dotenv import load_dotenv
@@ -26,6 +27,14 @@ else:
     print("⚠️ 未找到 .env 文件，将使用系统环境变量")
 
 
+# JWT 签名密钥：不再内置公开常量默认值（旧默认值会让任何人伪造登录/重置 token）。
+# 未设置时生成进程级随机密钥（重启即失效），从而强制生产环境通过环境变量注入固定密钥。
+_jwt_secret = os.getenv("JWT_SECRET", "").strip()
+if not _jwt_secret:
+    _jwt_secret = secrets.token_urlsafe(48)
+    print("⚠️ 未设置 JWT_SECRET，已生成进程级临时密钥；生产环境必须通过环境变量设置固定值。")
+
+
 class Settings:
     # 阿里云访问密钥
     ALIYUN_ACCESS_KEY_ID: str = os.getenv("ALIYUN_ACCESS_KEY_ID", "")
@@ -45,7 +54,7 @@ class Settings:
     # 注意：必须是 DashScope 支持的有效模型 ID，否则对应环节会失败
     LLM_SUMMARY_MODEL: str = os.getenv("LLM_SUMMARY_MODEL", "qwen3.7-max")         # 摘要生成
     LLM_FRAME_SELECT_MODEL: str = os.getenv("LLM_FRAME_SELECT_MODEL", "qwen3.7-max")  # 模型选帧
-    ASR_MODEL: str = os.getenv("ASR_MODEL", "fun-asr")                             # 语音转录（DashScope FunASR）
+    ASR_MODEL: str = os.getenv("ASR_MODEL", "fun-asr")                       # 语音转录：DashScope Fun-ASR（可用 ASR_MODEL 覆盖）
 
     # 多模态模型（关键帧分析、视频总结等）
     VISION_MODEL: str = os.getenv("VISION_MODEL", "qwen3.7-plus")                  # 关键帧分析
@@ -64,16 +73,6 @@ class Settings:
     PARAFORMER_MAX_PARALLEL_CHUNKS: int = int(os.getenv("PARAFORMER_MAX_PARALLEL_CHUNKS", "2"))
     LOCAL_ASR_ENABLED: bool = os.getenv("LOCAL_ASR_ENABLED", "false").lower() in {"1", "true", "yes", "on"}
     
-    # ============================================
-    # Supabase 配置 - 已禁用
-    # ============================================
-    # SUPABASE_URL: str = os.getenv("SUPABASE_URL", "")
-    # SUPABASE_ANON_KEY: str = os.getenv("SUPABASE_ANON_KEY", "")
-    # SUPABASE_SERVICE_KEY: str = os.getenv("SUPABASE_SERVICE_KEY", "")
-    SUPABASE_URL: str = ""
-    SUPABASE_ANON_KEY: str = ""
-    SUPABASE_SERVICE_KEY: str = ""
-    
     # 本地 PostgreSQL 数据库配置
     # 格式: postgresql+asyncpg://user:password@host:port/database
     DATABASE_URL: str = os.getenv(
@@ -81,8 +80,8 @@ class Settings:
         "postgresql+asyncpg://vidsnap:vidsnap_secret_2024@localhost:5432/vidsnap"
     )
     
-    # JWT 认证配置
-    JWT_SECRET: str = os.getenv("JWT_SECRET", "your-super-secret-jwt-key-change-in-production")
+    # JWT 认证配置（密钥统一来源：模块级 _jwt_secret，env 未设则为进程级随机值）
+    JWT_SECRET: str = _jwt_secret
     JWT_LIFETIME_SECONDS: int = int(os.getenv("JWT_LIFETIME_SECONDS", str(3600 * 24 * 7)))  # 7天
     
     # Google OAuth 配置
@@ -91,7 +90,7 @@ class Settings:
     
     # 数据库模式 - 强制使用本地数据库
     # DATABASE_MODE: str = os.getenv("DATABASE_MODE", "local")
-    DATABASE_MODE: str = "local"  # Supabase 已禁用，强制使用本地
+    DATABASE_MODE: str = "local"  # 强制使用本地数据库
     
     # 应用配置
     TEMP_DIR: str = os.getenv("TEMP_DIR", "/tmp/video_analysis")
@@ -117,6 +116,13 @@ class Settings:
     
     # 应用 URL（用于邮件中的链接）
     APP_URL: str = os.getenv("APP_URL", "https://vidsnap.space")
+
+    # CORS 允许来源（逗号分隔）。默认仅本地开发来源；生产通过环境变量收紧，
+    # 不再在代码里写死 allow_origins=["*"]。设为 "*" 时会自动关闭凭证携带以符合规范。
+    CORS_ALLOW_ORIGINS: str = os.getenv(
+        "CORS_ALLOW_ORIGINS",
+        "http://localhost:8081,http://localhost:8080,http://localhost:5173",
+    )
     
     @property
     def DASHSCOPE_API_KEY(self) -> str:
@@ -145,19 +151,6 @@ class Settings:
         return bool(self.QWEN_API_KEY)
     
     @property
-    def supabase_available(self) -> bool:
-        """检查 Supabase 配置是否完整 - 已禁用，始终返回 False"""
-        # ============================================
-        # Supabase 已禁用
-        # ============================================
-        # return all([
-        #     self.SUPABASE_URL,
-        #     self.SUPABASE_ANON_KEY,
-        #     self.SUPABASE_SERVICE_KEY
-        # ])
-        return False
-    
-    @property
     def local_db_available(self) -> bool:
         """检查本地数据库配置是否完整"""
         return bool(self.DATABASE_URL)
@@ -174,8 +167,13 @@ class Settings:
     def use_local_database(self) -> bool:
         """是否使用本地数据库 - 强制使用本地"""
         # return self.DATABASE_MODE == "local" and self.local_db_available
-        return True  # Supabase 已禁用，强制使用本地数据库
+        return True  # 强制使用本地数据库
     
+    @property
+    def cors_allow_origins_list(self) -> list:
+        """解析逗号分隔的 CORS 来源为列表。"""
+        return [o.strip() for o in self.CORS_ALLOW_ORIGINS.split(",") if o.strip()]
+
     @property
     def email_available(self) -> bool:
         """检查邮件服务配置是否完整"""

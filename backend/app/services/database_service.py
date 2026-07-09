@@ -1,6 +1,6 @@
 """
 Database Service - 本地 PostgreSQL 数据持久化服务
-替代 Supabase Service，提供用户认证和数据存储功能
+提供用户认证和数据存储功能
 保持 API 兼容性以便平滑迁移
 """
 import logging
@@ -28,7 +28,7 @@ class DatabaseService:
     """
     本地数据库服务类
     
-    提供与 SupabaseService 兼容的接口，便于平滑迁移
+    提供与 StoreService 兼容的接口，便于平滑迁移
     """
     
     def __init__(self):
@@ -827,7 +827,7 @@ database_service = DatabaseService()
 
 
 # ============================================
-# 兼容层：提供与 supabase_service 相同的同步接口
+# 兼容层：提供与 store_service 相同的同步接口
 # ============================================
 class SyncDatabaseServiceWrapper:
     """

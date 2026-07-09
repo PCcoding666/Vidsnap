@@ -1,6 +1,6 @@
 """
 Main application entry point.
-本地数据库模式 - Supabase 已禁用
+本地数据库模式
 """
 import os
 import logging
@@ -31,15 +31,7 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.error(f"❌ 本地数据库初始化失败: {e}")
         # 数据库初始化失败时继续运行，但某些功能可能不可用
-    
-    # ============================================
-    # Supabase 初始化代码已禁用
-    # ============================================
-    # if settings.use_local_database:
-    #     ...
-    # else:
-    #     logger.info("☁️ 使用 Supabase 云数据库")
-    
+
     yield
     
     # 关闭时清理
@@ -75,11 +67,13 @@ async def log_requests(request: Request, call_next):
     
     return response
 
-# 添加CORS中间件
+# 添加CORS中间件（来源由 settings.CORS_ALLOW_ORIGINS 控制，默认仅本地开发来源）
+_cors_origins = settings.cors_allow_origins_list
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # 在生产环境中应该指定具体的域名
-    allow_credentials=True,
+    allow_origins=_cors_origins,
+    # 通配符来源与凭证携带不能并存（浏览器会拒绝），故 "*" 时自动关闭 credentials
+    allow_credentials=("*" not in _cors_origins),
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -103,18 +97,6 @@ _frames_dir.mkdir(parents=True, exist_ok=True)
 app.mount("/static/frames", StaticFiles(directory=str(_frames_dir)), name="frames")
 
 # 注意：FastAPI-Users 路由已在 auth.router 中包含，无需重复注册
-
-# ============================================
-# Supabase 认证路由代码已禁用
-# ============================================
-# if settings.use_local_database:
-#     try:
-#         from .core.auth import get_auth_router
-#         auth_router = get_auth_router()
-#         app.include_router(auth_router, prefix=f"{API_PREFIX}/auth", tags=["auth"])
-#         logger.info("✅ FastAPI-Users 认证路由已加载")
-#     except Exception as e:
-#         logger.warning(f"⚠️ FastAPI-Users 认证路由加载失败: {e}")
 
 
 @app.get("/")

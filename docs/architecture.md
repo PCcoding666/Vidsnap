@@ -222,7 +222,7 @@ Artifact 包含 `artifact_id`、`artifact_type`、`title`、`content`、`format`
 
 ## 数据持久化边界
 
-当前后端强制本地 PostgreSQL，Supabase 主路径已经禁用，但部分兼容命名仍保留在 `supabase_service.py` 和旧前端集成中。
+当前后端使用本地 PostgreSQL；早期的云托管 BaaS 集成已移除，本地同步存储兼容层为 `store_service.py`。
 
 本地 PostgreSQL 初始化：
 

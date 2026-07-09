@@ -118,7 +118,7 @@ async def process_video(
         # 获取用户 ID
         # user_id 已在上面处理过
         
-        # 处理视频(传递 user_id 用于 Supabase 集成)
+        # 处理视频(传递 user_id 用于本地数据持久化)
         pipeline_start = time.time()
         ctx_logger.info(
             "🚀 开始处理视频管道",

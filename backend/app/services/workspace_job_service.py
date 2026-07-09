@@ -82,8 +82,9 @@ class WorkspaceJobService:
         provider: str = "paraformer",
         start_immediately: bool = True,
         force_skills: Optional[List[str]] = None,
+        visual_mode: str = "auto",
     ) -> WorkspaceJobStatus:
-        plan = planner_service.create_plan(query, force_skills)
+        plan = planner_service.create_plan(query, force_skills=force_skills, visual_mode=visual_mode)
         validation = skill_registry.validate_plan(plan)
         if not validation.valid:
             raise ValueError("; ".join(validation.errors))

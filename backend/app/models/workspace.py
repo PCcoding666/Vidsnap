@@ -47,6 +47,8 @@ class SkillPlan(BaseModel):
     steps: List[PlanStep]
     requires_user_confirmation: bool = False
     cost_tier: Literal["low", "medium", "high"] = "low"
+    # 帧/视觉可选性：auto=按 query 推断，on=强制截帧，off=纯文本（不含任何图像 skill）
+    visual_mode: Literal["auto", "on", "off"] = "auto"
     assumptions: List[str] = Field(default_factory=list)
     rejected_capabilities: List[str] = Field(default_factory=list)
 
@@ -115,6 +117,8 @@ class QueryPlanRequest(BaseModel):
     query: str
     # 用户手动补充的工具（如 "ExtractFrames"）；planner 会强制纳入对应步骤。
     force_skills: List[str] = Field(default_factory=list)
+    # 帧/视觉可选性：auto（默认，按 query 推断）、on（强制截帧）、off（纯文本，不截帧）
+    visual_mode: Literal["auto", "on", "off"] = "auto"
 
 
 class QueryPlanResponse(BaseModel):

@@ -10,7 +10,7 @@ from datetime import date
 import logging
 import jwt
 
-from ...services.supabase_service import supabase_service
+from ...services.store_service import store_service
 from ...services.database_service import database_service
 from ...core.config import settings
 
@@ -198,7 +198,7 @@ async def update_user_profile(
             )
         
         # 更新数据库
-        response = supabase_service.admin_client.table("profiles").update(
+        response = store_service.admin_client.table("profiles").update(
             update_data
         ).eq("id", user_id).execute()
         
@@ -408,7 +408,7 @@ async def get_user_stats(
     
     try:
         # 获取视频统计
-        videos = supabase_service.get_user_videos(user_id, limit=1000)
+        videos = store_service.get_user_videos(user_id, limit=1000)
         total_videos = len(videos)
         completed_videos = len([v for v in videos if v.get("processing_status") == "completed"])
         

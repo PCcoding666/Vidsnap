@@ -75,3 +75,35 @@ def test_force_skills_supplements_extract_frames():
     forced = planner_service.create_plan("总结这个视频", force_skills=["ExtractFrames"])
     assert forced.artifact_type == "notes"
     assert "ExtractFrames" in {s.skill for s in forced.steps}
+
+
+def test_visual_mode_off_never_extracts_frames():
+    # off：即便 query 含视觉词也不加任何图像 skill，且不被强制转成 notes
+    plan = planner_service.create_plan("制作图文并茂的截图笔记", visual_mode="off")
+    assert "ExtractFrames" not in {s.skill for s in plan.steps}
+    assert plan.visual_mode == "off"
+    assert not plan.requires_user_confirmation
+
+    # 解除"视觉词强制转 notes"耦合：off 下"带截图的总结"仍是 summary，且不截帧
+    plan2 = planner_service.create_plan("给我一个带截图的总结", visual_mode="off")
+    assert plan2.artifact_type == "summary"
+    assert "ExtractFrames" not in {s.skill for s in plan2.steps}
+
+
+def test_visual_mode_on_forces_illustrated_notes():
+    # on：即便纯文本总结 query，也强制走带截帧的 notes 链路
+    plan = planner_service.create_plan("总结这个视频", visual_mode="on")
+    assert plan.artifact_type == "notes"
+    assert "ExtractFrames" in {s.skill for s in plan.steps}
+    assert plan.visual_mode == "on"
+
+
+def test_visual_mode_auto_matches_query_inference():
+    # auto（默认）：保持既有行为——视觉词才截帧，否则不截，且与不传参一致（golden set 基线）
+    visual = planner_service.create_plan("整理成图文笔记", visual_mode="auto")
+    plain = planner_service.create_plan("总结这个视频", visual_mode="auto")
+    assert "ExtractFrames" in {s.skill for s in visual.steps}
+    assert "ExtractFrames" not in {s.skill for s in plain.steps}
+    assert {s.skill for s in visual.steps} == {
+        s.skill for s in planner_service.create_plan("整理成图文笔记").steps
+    }

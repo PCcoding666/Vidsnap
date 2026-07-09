@@ -1,6 +1,6 @@
 """
 API dependencies and middleware.
-本地 PostgreSQL 认证模式 - Supabase 已禁用
+本地 PostgreSQL 认证模式
 """
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
@@ -12,12 +12,6 @@ from ..core.config import settings
 
 # 安全方案
 security = HTTPBearer()
-
-
-# ============================================
-# Supabase 服务导入已禁用
-# ============================================
-# from ..services.supabase_service import supabase_service
 
 
 async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)) -> Dict[str, Any]:
@@ -49,27 +43,6 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
     
     logger.debug(f"✅ 用户认证成功: {user.get('email')}")
     return user
-    
-    # ============================================
-    # Supabase 认证代码已禁用
-    # ============================================
-    # from ..services.supabase_service import supabase_service
-    # 
-    # if not supabase_service.is_available():
-    #     logger.warning("⚠️ Supabase 不可用,跳过认证")
-    #     return {"id": "anonymous", "email": "anonymous@example.com"}
-    # 
-    # user = supabase_service.verify_token(token)
-    # 
-    # if not user:
-    #     raise HTTPException(
-    #         status_code=status.HTTP_401_UNAUTHORIZED,
-    #         detail="无效的认证令牌",
-    #         headers={"WWW-Authenticate": "Bearer"},
-    #     )
-    # 
-    # logger.debug(f"✅ 用户认证成功 (Supabase): {user['email']}")
-    # return user
 
 
 async def get_current_user_optional(
@@ -121,24 +94,6 @@ async def check_quota(current_user: Dict[str, Any] = Depends(get_current_user)) 
         )
     
     return current_user
-    
-    # ============================================
-    # Supabase 配额检查代码已禁用
-    # ============================================
-    # from ..services.supabase_service import supabase_service
-    # 
-    # if not supabase_service.is_available():
-    #     return current_user
-    # 
-    # quota_ok = supabase_service.check_user_quota(str(user_id))
-    # 
-    # if not quota_ok:
-    #     raise HTTPException(
-    #         status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-    #         detail="已达到本月视频处理上限或存储空间已满,请升级订阅或等待下月重置"
-    #     )
-    # 
-    # return current_user
 
 
 # 保留旧的 verify_token 函数以保持向后兼容

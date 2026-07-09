@@ -1,9 +1,9 @@
 """
-Supabase Service 兼容层
+本地数据库兼容层
 ========================================
-Supabase 已禁用，此模块作为兼容层代理到本地数据库
+此模块作为兼容层，将旧接口代理到本地数据库
 
-所有对 supabase_service 的调用都会被转发到本地 PostgreSQL
+所有对 store_service 的调用都会被转发到本地 PostgreSQL
 这样可以保持业务代码不变，同时使用本地数据库
 """
 import logging
@@ -59,25 +59,25 @@ def _get_models():
     }
 
 
-class SupabaseServiceProxy:
+class StoreServiceProxy:
     """
-    Supabase 服务代理类
+    本地存储代理类
     
-    将所有调用转发到本地 PostgreSQL
-    保持与原 SupabaseService 相同的接口
+    将所有调用转发到本地 PostgreSQL。
+    方法签名沿用历史云托管 BaaS 客户端的形状（链式 .table() 等），便于旧调用点平滑迁移。
     """
     
     def __init__(self):
         """初始化"""
         self._available = True
-        logger.info("⚠️ Supabase 已禁用，使用本地数据库代理")
+        logger.info("使用本地数据库代理")
     
     def is_available(self) -> bool:
         """检查数据库服务是否可用"""
         return self._available
     
     # ========================================================================
-    # 兼容属性 - 模拟 Supabase 客户端
+    # 兼容属性 - 模拟存储客户端
     # ========================================================================
     
     @property
@@ -563,7 +563,7 @@ class SupabaseServiceProxy:
 
 class _AdminClientProxy:
     """
-    模拟 Supabase admin_client 的链式调用
+    模拟链式 admin_client 的链式调用
     支持 .table().select().eq().execute() 等调用链
     """
     
@@ -957,7 +957,7 @@ def _model_to_dict(obj) -> Dict[str, Any]:
 
 
 class _MockResponse:
-    """模拟 Supabase 响应对象"""
+    """模拟数据库响应对象"""
     
     def __init__(self, data):
         self.data = data if data is not None else []
@@ -967,4 +967,4 @@ class _MockResponse:
 
 
 # 创建全局实例
-supabase_service = SupabaseServiceProxy()
+store_service = StoreServiceProxy()
