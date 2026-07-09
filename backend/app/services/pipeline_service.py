@@ -5,7 +5,8 @@
 
 安全更新 (2025-12):
 - 仅支持本地上传视频
-- 关键帧提取功能已禁用，改为纯文本分析
+- 本管道内不做场景检测截帧；图文笔记的关键帧由 workspace 的 ExtractFrames 技能
+  （frame_service）按 visual_mode 单独产出
 """
 import logging
 import asyncio

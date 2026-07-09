@@ -100,15 +100,39 @@ class PlannerService:
         "key points",
     }
 
-    def create_plan(self, query: str, force_skills: Optional[List[str]] = None) -> SkillPlan:
+    def create_plan(
+        self,
+        query: str,
+        force_skills: Optional[List[str]] = None,
+        visual_mode: str = "auto",
+    ) -> SkillPlan:
         forced = set(force_skills or [])
+        if visual_mode not in {"auto", "on", "off"}:
+            visual_mode = "auto"
         normalized_query = self._normalize_query(query)
-        artifact_type = self._detect_artifact_type(normalized_query)
-        requires_visual = self._contains_any(normalized_query, self.visual_terms)
-        # 用户手动补充 ExtractFrames：强制走带截帧的 notes 链路（帧锚定在 notes 产物上）
-        if "ExtractFrames" in forced:
-            requires_visual = True
+
+        has_visual_terms = self._contains_any(normalized_query, self.visual_terms)
+        forced_frames = "ExtractFrames" in forced
+
+        # 帧=首class可选项：由 visual_mode 决定是否允许/强制图像 skill。
+        #   off  —— 永不截帧，且视觉词不再把产物强制转成 notes（解除"视觉词→notes"耦合）
+        #   on   —— 强制走带截帧的 notes 链路
+        #   auto —— 保持既有行为：由 query 视觉词或手动补帧推断（golden set 基线）
+        if visual_mode == "off":
+            wants_visual = False
+            visual_influences_type = False
+        elif visual_mode == "on":
+            wants_visual = True
+            visual_influences_type = True
+        else:  # auto
+            wants_visual = has_visual_terms or forced_frames
+            visual_influences_type = has_visual_terms
+
+        artifact_type = self._detect_artifact_type(normalized_query, visual_influences_type)
+        # 手动补充 ExtractFrames 或 visual_mode=on：强制走带截帧的 notes 链路（帧锚定在 notes 产物上）
+        if wants_visual and (forced_frames or visual_mode == "on"):
             artifact_type = "notes"
+        requires_visual = wants_visual and artifact_type == "notes"
         cost_tier = "medium" if artifact_type in {"notes", "summary"} or requires_visual else "low"
 
         steps: List[PlanStep] = [
@@ -205,6 +229,7 @@ class PlannerService:
             steps=steps,
             requires_user_confirmation=requires_visual,
             cost_tier=cost_tier,
+            visual_mode=visual_mode,
             assumptions=assumptions,
             rejected_capabilities=rejected,
         )
@@ -215,11 +240,10 @@ class PlannerService:
 
         return plan
 
-    def _detect_artifact_type(self, normalized_query: str) -> ArtifactType:
+    def _detect_artifact_type(self, normalized_query: str, has_visual: bool) -> ArtifactType:
         has_transcript = self._contains_any(normalized_query, self.transcript_terms)
         has_locate = self._contains_any(normalized_query, self.locate_terms)
         has_notes = self._contains_any(normalized_query, self.notes_terms)
-        has_visual = self._contains_any(normalized_query, self.visual_terms)
         has_qa = self._contains_any(normalized_query, self.qa_terms)
         has_summary = self._contains_any(normalized_query, self.summary_terms)
 

@@ -68,7 +68,7 @@ async def create_plan(payload: QueryPlanRequest):
         raise HTTPException(status_code=400, detail="query 不能为空")
 
     try:
-        plan = planner_service.create_plan(payload.query, payload.force_skills)
+        plan = planner_service.create_plan(payload.query, payload.force_skills, payload.visual_mode)
         validation = skill_registry.validate_plan(plan)
         return QueryPlanResponse(status="success", plan=plan, validation=validation)
     except ValueError as e:
@@ -83,6 +83,7 @@ async def create_workspace_job(
     query: str = Form(...),
     provider: str = Form("paraformer"),
     force_skills: str = Form(""),
+    visual_mode: str = Form("auto"),
     credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
 ):
     """Create a recoverable async workspace job."""
@@ -136,6 +137,7 @@ async def create_workspace_job(
             user_id=user_id,
             provider=provider,
             force_skills=forced_skills,
+            visual_mode=visual_mode,
         )
 
         ctx_logger.info(
