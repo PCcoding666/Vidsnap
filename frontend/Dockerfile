@@ -10,7 +10,7 @@ COPY . .
 # 同源部署：API 走相对路径 /api/v1，由 nginx 反代到 backend，
 # 换公网 IP / 域名都无需重新构建前端。
 ENV VITE_API_BASE_URL=/api/v1
-# 关闭前端登录墙：slim 版 auth 依赖 Supabase（已禁用），用代码内置的 isAuthDisabled 开关直接放行
+# slim 版无登录墙：AuthContext 为"打开即用"的 stub，无需身份系统
 ENV VITE_DISABLE_AUTH=true
 RUN npm run build
 

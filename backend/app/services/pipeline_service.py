@@ -30,7 +30,7 @@ from .video_service import video_service
 from .paraformer_service import paraformer_service  # DashScope 录音文件转录（模型 Fun-ASR-Flash，见 settings.ASR_MODEL）
 from .oss_service import oss_service
 from .llm_service import llm_service
-from .supabase_service import supabase_service
+from .store_service import store_service
 
 
 class AliyunVideoProcessingPipeline:
@@ -384,7 +384,7 @@ class AliyunVideoProcessingPipeline:
         
         Args:
             video_file: 上传的视频文件路径
-            user_id: 用户 ID(用于 Supabase 数据持久化)
+            user_id: 用户 ID(用于本地数据持久化)
             progress_callback: 进度回调函数（可选，主要用于日志记录）
             
         Returns:
@@ -411,8 +411,8 @@ class AliyunVideoProcessingPipeline:
             video_metadata = video_result["video_metadata"]
             session_temp_dir = video_result["session_temp_dir"]
             
-            # 【Supabase 集成点1】创建视频记录 (0% 初始化)
-            if supabase_service.is_available() and user_id:
+            # 【DB 写入点1】创建视频记录 (0% 初始化)
+            if store_service.is_available() and user_id:
                 try:
                     video_data = {
                         "video_id": video_id,
@@ -425,28 +425,28 @@ class AliyunVideoProcessingPipeline:
                         "processing_status": "processing",
                         "processing_progress": 0
                     }
-                    supabase_service.create_video_record(video_data)
-                    logger.info(f"✅ Supabase: 创建视频记录 {video_id}")
+                    store_service.create_video_record(video_data)
+                    logger.info(f"✅ DB: 创建视频记录 {video_id}")
                 except Exception as e:
-                    logger.error(f"⚠️ Supabase: 创建视频记录失败: {e}")
+                    logger.error(f"⚠️ DB: 创建视频记录失败: {e}")
             
-            # 【Supabase 集成点2】更新视频状态 (15% 视频上传完成)
-            if supabase_service.is_available() and user_id:
+            # 【DB 写入点2】更新视频状态 (15% 视频上传完成)
+            if store_service.is_available() and user_id:
                 try:
-                    supabase_service.update_video_status(video_id, "processing", 15)
-                    supabase_service.update_video_urls(video_id, oss_video_url=video_info.oss_video_url)
+                    store_service.update_video_status(video_id, "processing", 15)
+                    store_service.update_video_urls(video_id, oss_video_url=video_info.oss_video_url)
                 except Exception as e:
-                    logger.error(f"⚠️ Supabase: 更新视频状态失败: {e}")
+                    logger.error(f"⚠️ DB: 更新视频状态失败: {e}")
             
             # 步骤2: 并发执行关键帧提取和音频转录
             self._log_progress("并发执行关键帧提取和音频转录...", progress_callback)
             
-            # 【Supabase 集成点3】更新进度 (20% 准备并发执行)
-            if supabase_service.is_available() and user_id:
+            # 【DB 写入点3】更新进度 (20% 准备并发执行)
+            if store_service.is_available() and user_id:
                 try:
-                    supabase_service.update_video_status(video_id, "processing", 20)
+                    store_service.update_video_status(video_id, "processing", 20)
                 except Exception as e:
-                    logger.error(f"⚠️ Supabase: 更新进度失败: {e}")
+                    logger.error(f"⚠️ DB: 更新进度失败: {e}")
             
             # 记录并发执行开始时间
             concurrent_start_time = time.time()
@@ -479,13 +479,13 @@ class AliyunVideoProcessingPipeline:
                 logger.error(error_msg)
                 logger.exception(e)
                 
-                # 【Supabase 集成点7】并发任务失败
-                if supabase_service.is_available() and user_id and video_id:
+                # 【DB 写入点7】并发任务失败
+                if store_service.is_available() and user_id and video_id:
                     try:
-                        supabase_service.update_video_status(video_id, "failed", error_message=error_msg)
-                        logger.info(f"⚠️ Supabase: 标记视频处理失败 {video_id}")
+                        store_service.update_video_status(video_id, "failed", error_message=error_msg)
+                        logger.info(f"⚠️ DB: 标记视频处理失败 {video_id}")
                     except Exception as se:
-                        logger.error(f"⚠️ Supabase: 更新失败状态失败: {se}")
+                        logger.error(f"⚠️ DB: 更新失败状态失败: {se}")
                 
                 return {
                     "status": "error",
@@ -510,11 +510,11 @@ class AliyunVideoProcessingPipeline:
                     logger.error(error_msg)
                     self.video_service.cleanup_session(session_temp_dir)
 
-                    if supabase_service.is_available() and user_id and video_id:
+                    if store_service.is_available() and user_id and video_id:
                         try:
-                            supabase_service.update_video_status(video_id, "failed", error_message=error_msg)
+                            store_service.update_video_status(video_id, "failed", error_message=error_msg)
                         except Exception as se:
-                            logger.error(f"⚠️ Supabase: 更新失败状态失败: {se}")
+                            logger.error(f"⚠️ DB: 更新失败状态失败: {se}")
 
                     return {
                         "status": "error",
@@ -526,22 +526,22 @@ class AliyunVideoProcessingPipeline:
                 logger.warning("音频转录不可用，使用空转录对象继续")
                 transcript_result = self._create_empty_transcript()
             
-            # 【Supabase 集成点4】并发任务完成 (60%)
-            if supabase_service.is_available() and user_id:
+            # 【DB 写入点4】并发任务完成 (60%)
+            if store_service.is_available() and user_id:
                 try:
-                    supabase_service.update_video_status(video_id, "processing", 60)
+                    store_service.update_video_status(video_id, "processing", 60)
                     
                     # 保存关键帧
                     if keyframes:
-                        supabase_service.save_keyframes(video_id, keyframes)
-                        logger.info(f"✅ Supabase: 保存 {len(keyframes)} 个关键帧")
+                        store_service.save_keyframes(video_id, keyframes)
+                        logger.info(f"✅ DB: 保存 {len(keyframes)} 个关键帧")
                     
                     # 保存转录数据
                     if transcript_result and hasattr(transcript_result, 'segments') and transcript_result.segments:
-                        supabase_service.save_transcript_segments(video_id, transcript_result.segments)
-                        logger.info(f"✅ Supabase: 保存 {len(transcript_result.segments)} 个转录段落")
+                        store_service.save_transcript_segments(video_id, transcript_result.segments)
+                        logger.info(f"✅ DB: 保存 {len(transcript_result.segments)} 个转录段落")
                 except Exception as e:
-                    logger.error(f"⚠️ Supabase: 保存并发结果失败: {e}")
+                    logger.error(f"⚠️ DB: 保存并发结果失败: {e}")
             
             # 步骤3: 生成统一metadata
             self._log_progress("生成metadata...", progress_callback)
@@ -565,20 +565,20 @@ class AliyunVideoProcessingPipeline:
                     if video_summary:
                         logger.info(f"LLM 视频总结生成成功: {len(video_summary.detailed_summary)} 字符")
                         
-                        # 【Supabase 集成点5】LLM 总结完成 (80%)
-                        if supabase_service.is_available() and user_id:
+                        # 【DB 写入点5】LLM 总结完成 (80%)
+                        if store_service.is_available() and user_id:
                             try:
-                                supabase_service.update_video_status(video_id, "processing", 80)
+                                store_service.update_video_status(video_id, "processing", 80)
                                 # 保存三种粒度的总结
                                 if hasattr(video_summary, 'brief_summary'):
-                                    supabase_service.save_video_summary(video_id, "brief", video_summary.brief_summary)
+                                    store_service.save_video_summary(video_id, "brief", video_summary.brief_summary)
                                 if hasattr(video_summary, 'standard_summary'):
-                                    supabase_service.save_video_summary(video_id, "standard", video_summary.standard_summary)
+                                    store_service.save_video_summary(video_id, "standard", video_summary.standard_summary)
                                 if hasattr(video_summary, 'detailed_summary') and video_summary.detailed_summary:
-                                    supabase_service.save_video_summary(video_id, "detailed", video_summary.detailed_summary)
-                                logger.info(f"✅ Supabase: 保存视频总结(三种粒度)")
+                                    store_service.save_video_summary(video_id, "detailed", video_summary.detailed_summary)
+                                logger.info(f"✅ DB: 保存视频总结(三种粒度)")
                             except Exception as e:
-                                logger.error(f"⚠️ Supabase: 保存视频总结失败: {e}")
+                                logger.error(f"⚠️ DB: 保存视频总结失败: {e}")
                         
                         # 可选将总结上传到 OSS
                         if settings.ENABLE_OSS_UPLOADS and self.oss_service.is_available():
@@ -619,11 +619,11 @@ class AliyunVideoProcessingPipeline:
             # 完成
             self._log_progress("处理完成！", progress_callback)
             
-            # 【Supabase 集成点6】处理完成 (100%)
-            if supabase_service.is_available() and user_id:
+            # 【DB 写入点6】处理完成 (100%)
+            if store_service.is_available() and user_id:
                 try:
-                    supabase_service.update_video_status(video_id, "completed", 100)
-                    logger.info(f"✅ Supabase: 视频处理完成 {video_id}")
+                    store_service.update_video_status(video_id, "completed", 100)
+                    logger.info(f"✅ DB: 视频处理完成 {video_id}")
                     
                     # 【邮件通知】发送视频分析完成通知
                     await self._send_completion_notification(
@@ -633,7 +633,7 @@ class AliyunVideoProcessingPipeline:
                         thumbnail_url=keyframes[0].oss_image_url if keyframes else None
                     )
                 except Exception as e:
-                    logger.error(f"⚠️ Supabase: 更新完成状态失败: {e}")
+                    logger.error(f"⚠️ DB: 更新完成状态失败: {e}")
             
             logger.info(f"视频处理完成: {video_id}")
             
@@ -651,13 +651,13 @@ class AliyunVideoProcessingPipeline:
             error_msg = f"视频处理管道异常: {str(e)}"
             logger.exception(error_msg)
             
-            # 【Supabase 集成点7】处理失败
-            if supabase_service.is_available() and user_id and video_id:
+            # 【DB 写入点7】处理失败
+            if store_service.is_available() and user_id and video_id:
                 try:
-                    supabase_service.update_video_status(video_id, "failed", error_message=error_msg)
-                    logger.info(f"⚠️ Supabase: 标记视频处理失败 {video_id}")
+                    store_service.update_video_status(video_id, "failed", error_message=error_msg)
+                    logger.info(f"⚠️ DB: 标记视频处理失败 {video_id}")
                 except Exception as se:
-                    logger.error(f"⚠️ Supabase: 更新失败状态失败: {se}")
+                    logger.error(f"⚠️ DB: 更新失败状态失败: {se}")
             
             self._log_progress(f"处理失败: {error_msg}", progress_callback)
             

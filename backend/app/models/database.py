@@ -1,6 +1,6 @@
 """
 SQLAlchemy 数据库模型
-替代 Supabase，实现本地 PostgreSQL 数据持久化
+本地 PostgreSQL 数据持久化
 """
 from datetime import datetime, timezone
 from typing import Optional, List

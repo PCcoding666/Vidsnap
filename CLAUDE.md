@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 VidSnap is an AI-native workspace for local video files: a user uploads a video and writes a natural-language goal ("query-first"), and the system turns the video into searchable, citable, reusable text assets. The transcript (from Aliyun Fun-ASR-Flash) is the single source of truth; summaries, notes, timestamps, and Q&A are all derived from it. **Key-frame / visual analysis is disabled — processing is transcript/text only.**
 
-This is the "slim" variant (`vidsnap_slim` branch): only the video-analysis core is kept, and Supabase is disabled in favor of a local PostgreSQL database (see the commented-out Supabase code throughout `backend/app`).
+This is the "slim" variant (`vidsnap_slim` branch): only the video-analysis core is kept, and it runs on a local PostgreSQL database (the earlier hosted-BaaS integration has been removed; the local sync-store compat layer is `store_service.py`).
 
 ## Commands
 
@@ -57,7 +57,7 @@ Notable: `DASHSCOPE_API_KEY` is a computed property with precedence `TRANSCRIPT_
 
 ## Frontend (`frontend/src/`)
 
-Vite + React + TypeScript + Tailwind + shadcn/ui. `pages/` route screens, `components/` (with `components/ui/` shadcn primitives), `contexts/` React context, `services/` API clients, `integrations/` Supabase wiring, `i18n/` localization. Use the `@/` alias for `frontend/src`. Components `PascalCase`, hooks `useSomething`.
+Vite + React + TypeScript + Tailwind + shadcn/ui. `pages/` route screens, `components/` (with `components/ui/` shadcn primitives), `contexts/` React context, `services/` API clients, `i18n/` localization. Use the `@/` alias for `frontend/src`. Components `PascalCase`, hooks `useSomething`.
 
 ## Conventions
 

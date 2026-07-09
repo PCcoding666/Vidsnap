@@ -1,6 +1,6 @@
 """
 FastAPI-Users 认证配置
-替代 Supabase Auth，实现本地用户认证和 Google OAuth
+本地用户认证和 Google OAuth
 """
 import os
 import uuid
@@ -204,7 +204,7 @@ async def get_current_user_dict(
     """
     获取当前用户字典（兼容原有 API）
     
-    返回格式与原 Supabase 兼容：
+    返回格式与旧接口兼容：
     {"id": "uuid", "email": "xxx@example.com"}
     """
     return {

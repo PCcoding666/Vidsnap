@@ -2,7 +2,7 @@
 Configuration management for the video analysis platform.
 Handles environment variables and application settings.
 
-本地数据库模式 - Supabase 已禁用
+本地数据库模式
 """
 import os
 import secrets
@@ -73,16 +73,6 @@ class Settings:
     PARAFORMER_MAX_PARALLEL_CHUNKS: int = int(os.getenv("PARAFORMER_MAX_PARALLEL_CHUNKS", "2"))
     LOCAL_ASR_ENABLED: bool = os.getenv("LOCAL_ASR_ENABLED", "false").lower() in {"1", "true", "yes", "on"}
     
-    # ============================================
-    # Supabase 配置 - 已禁用
-    # ============================================
-    # SUPABASE_URL: str = os.getenv("SUPABASE_URL", "")
-    # SUPABASE_ANON_KEY: str = os.getenv("SUPABASE_ANON_KEY", "")
-    # SUPABASE_SERVICE_KEY: str = os.getenv("SUPABASE_SERVICE_KEY", "")
-    SUPABASE_URL: str = ""
-    SUPABASE_ANON_KEY: str = ""
-    SUPABASE_SERVICE_KEY: str = ""
-    
     # 本地 PostgreSQL 数据库配置
     # 格式: postgresql+asyncpg://user:password@host:port/database
     DATABASE_URL: str = os.getenv(
@@ -100,7 +90,7 @@ class Settings:
     
     # 数据库模式 - 强制使用本地数据库
     # DATABASE_MODE: str = os.getenv("DATABASE_MODE", "local")
-    DATABASE_MODE: str = "local"  # Supabase 已禁用，强制使用本地
+    DATABASE_MODE: str = "local"  # 强制使用本地数据库
     
     # 应用配置
     TEMP_DIR: str = os.getenv("TEMP_DIR", "/tmp/video_analysis")
@@ -161,19 +151,6 @@ class Settings:
         return bool(self.QWEN_API_KEY)
     
     @property
-    def supabase_available(self) -> bool:
-        """检查 Supabase 配置是否完整 - 已禁用，始终返回 False"""
-        # ============================================
-        # Supabase 已禁用
-        # ============================================
-        # return all([
-        #     self.SUPABASE_URL,
-        #     self.SUPABASE_ANON_KEY,
-        #     self.SUPABASE_SERVICE_KEY
-        # ])
-        return False
-    
-    @property
     def local_db_available(self) -> bool:
         """检查本地数据库配置是否完整"""
         return bool(self.DATABASE_URL)
@@ -190,7 +167,7 @@ class Settings:
     def use_local_database(self) -> bool:
         """是否使用本地数据库 - 强制使用本地"""
         # return self.DATABASE_MODE == "local" and self.local_db_available
-        return True  # Supabase 已禁用，强制使用本地数据库
+        return True  # 强制使用本地数据库
     
     @property
     def cors_allow_origins_list(self) -> list:

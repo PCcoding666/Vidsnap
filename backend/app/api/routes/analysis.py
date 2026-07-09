@@ -195,7 +195,7 @@ async def chat_start(payload: Dict[str, Any] = Body(...)):
     请求体:
         {
             "video_id": "视频ID",
-            // metadata 可选；若缺失将自动从 Supabase 加载完整上下文
+            // metadata 可选；若缺失将自动从本地数据库加载完整上下文
             "metadata": {  // 可选
                 "transcript": {...},  # 转录元数据
                 "keyframes": [...]   # 关键帧列表
@@ -213,7 +213,7 @@ async def chat_start(payload: Dict[str, Any] = Body(...)):
     """
     try:
         video_id = payload.get("video_id")
-        metadata = payload.get("metadata")  # 允许缺省，由服务自动从Supabase加载
+        metadata = payload.get("metadata")  # 允许缺省，由服务自动从本地数据库加载
         
         if not video_id:
             raise HTTPException(status_code=400, detail="缺少 video_id")

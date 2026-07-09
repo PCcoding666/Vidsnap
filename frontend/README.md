@@ -45,7 +45,6 @@ src/
 ├── config/            # frontend config helpers
 ├── contexts/          # React context
 ├── i18n/              # translations
-├── integrations/      # legacy Supabase client/types
 ├── pages/             # route screens
 └── services/          # API client and API types
 ```

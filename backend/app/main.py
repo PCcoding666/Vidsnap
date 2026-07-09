@@ -1,6 +1,6 @@
 """
 Main application entry point.
-本地数据库模式 - Supabase 已禁用
+本地数据库模式
 """
 import os
 import logging
@@ -31,15 +31,7 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.error(f"❌ 本地数据库初始化失败: {e}")
         # 数据库初始化失败时继续运行，但某些功能可能不可用
-    
-    # ============================================
-    # Supabase 初始化代码已禁用
-    # ============================================
-    # if settings.use_local_database:
-    #     ...
-    # else:
-    #     logger.info("☁️ 使用 Supabase 云数据库")
-    
+
     yield
     
     # 关闭时清理
@@ -105,18 +97,6 @@ _frames_dir.mkdir(parents=True, exist_ok=True)
 app.mount("/static/frames", StaticFiles(directory=str(_frames_dir)), name="frames")
 
 # 注意：FastAPI-Users 路由已在 auth.router 中包含，无需重复注册
-
-# ============================================
-# Supabase 认证路由代码已禁用
-# ============================================
-# if settings.use_local_database:
-#     try:
-#         from .core.auth import get_auth_router
-#         auth_router = get_auth_router()
-#         app.include_router(auth_router, prefix=f"{API_PREFIX}/auth", tags=["auth"])
-#         logger.info("✅ FastAPI-Users 认证路由已加载")
-#     except Exception as e:
-#         logger.warning(f"⚠️ FastAPI-Users 认证路由加载失败: {e}")
 
 
 @app.get("/")

@@ -116,12 +116,6 @@ check_config() {
             has_error=true
         fi
         
-        if grep -q "SUPABASE_URL" "$PROJECT_DIR/backend/.env"; then
-            echo -e "    - SUPABASE_URL: ${GREEN}✅${NC}"
-        else
-            echo -e "    - SUPABASE_URL: ${RED}❌ 未配置${NC}"
-            has_error=true
-        fi
     else
         echo -e "  环境变量: ${RED}❌ .env 文件不存在${NC}"
         has_error=true

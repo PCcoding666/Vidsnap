@@ -1,86 +1,31 @@
-import { createContext, useContext, useEffect, useState } from 'react';
-import { supabase } from '@/integrations/supabase/client';
-import type { User, Session } from '@supabase/supabase-js';
-import { apiClient } from '@/services/api';
-import { isAuthDisabled } from '@/config/auth';
+import { createContext, useContext } from 'react';
+import type { ReactNode } from 'react';
+
+// 登录已禁用：VidSnap slim 为"打开即用"，不接任何第三方身份系统（无登录墙）。
+// 保留 AuthContext 形状，避免历史消费方（Header / HistoryPanel / ProtectedRoute 等）编译报错。
+interface AuthUser {
+  id: string;
+  email?: string;
+}
 
 interface AuthContextType {
-  user: User | null;
-  session: Session | null;
+  user: AuthUser | null;
+  session: null;
   isLoading: boolean;
   signOut: () => Promise<void>;
 }
 
-const AuthContext = createContext<AuthContextType>({
+const stubValue: AuthContextType = {
   user: null,
   session: null,
-  isLoading: true,
+  isLoading: false,
   signOut: async () => {},
-});
-
-export const useAuth = () => {
-  const context = useContext(AuthContext);
-  if (!context) {
-    throw new Error('useAuth must be used within AuthProvider');
-  }
-  return context;
 };
 
-export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
-  const [user, setUser] = useState<User | null>(null);
-  const [session, setSession] = useState<Session | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+const AuthContext = createContext<AuthContextType>(stubValue);
 
-  useEffect(() => {
-    if (isAuthDisabled) {
-      apiClient.clearToken();
-      setSession(null);
-      setUser(null);
-      setIsLoading(false);
-      return;
-    }
+export const useAuth = () => useContext(AuthContext);
 
-    // 获取初始会话
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      setUser(session?.user ?? null);
-      
-      // 如果有session，将token设置到API客户端
-      if (session?.access_token) {
-        apiClient.setToken(session.access_token);
-      }
-      
-      setIsLoading(false);
-    });
-
-    // 监听认证状态变化
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session);
-      setUser(session?.user ?? null);
-      
-      // 更新API客户端的token
-      if (session?.access_token) {
-        apiClient.setToken(session.access_token);
-      } else {
-        apiClient.clearToken();
-      }
-    });
-
-    return () => subscription.unsubscribe();
-  }, []);
-
-  const signOut = async () => {
-    if (!isAuthDisabled) {
-      await supabase.auth.signOut();
-    }
-    apiClient.clearToken();
-  };
-
-  return (
-    <AuthContext.Provider value={{ user, session, isLoading, signOut }}>
-      {children}
-    </AuthContext.Provider>
-  );
+export const AuthProvider = ({ children }: { children: ReactNode }) => {
+  return <AuthContext.Provider value={stubValue}>{children}</AuthContext.Provider>;
 };

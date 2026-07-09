@@ -1,13 +1,13 @@
 -- VidSnap Database Schema v1.0
 -- 本地 PostgreSQL 初始化脚本
--- 替代 Supabase，自主管理用户和业务数据
+-- 自主管理用户和业务数据（本地 PostgreSQL）
 
 -- 启用必要的扩展
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 
 -- ============================================
--- 用户认证表 (替代 Supabase auth.users)
+-- 用户认证表（本地认证）
 -- ============================================
 CREATE TABLE IF NOT EXISTS users (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -203,7 +203,7 @@ CREATE TABLE IF NOT EXISTS schema_versions (
 
 -- 插入初始版本记录
 INSERT INTO schema_versions (version, description) 
-VALUES ('1.0.0', '初始化本地数据库 schema，替代 Supabase')
+VALUES ('1.0.0', '初始化本地数据库 schema')
 ON CONFLICT (version) DO NOTHING;
 
 -- ============================================

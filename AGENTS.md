@@ -2,9 +2,9 @@
 
 ## Project Structure & Module Organization
 
-VidSnap is a FastAPI backend plus a Vite/React frontend. Backend code lives in `backend/app/`: `api/routes/` for endpoints, `services/` for video/transcript/AI/database workflows, `models/` for data models, and `core/` for config, auth, logging, Celery, and app setup. SQL lives in `backend/sql/` and `backend/database/migrations/`.
+VidSnap is a FastAPI backend plus a Vite/React frontend. Backend code lives in `backend/app/`: `api/routes/` for endpoints, `services/` for video/transcript/AI/database workflows, `models/` for data models, and `core/` for config, auth, logging, Celery, and app setup. SQL migrations live in `backend/database/migrations/`.
 
-Frontend code lives in `frontend/src/`: `pages/` for route screens, `components/` for shared and feature UI, `components/ui/` for shadcn/ui primitives, `contexts/` for React context, `services/` for API clients, and `integrations/` for Supabase wiring. Public assets belong in `frontend/public/`.
+Frontend code lives in `frontend/src/`: `pages/` for route screens, `components/` for shared and feature UI, `components/ui/` for shadcn/ui primitives, `contexts/` for React context, and `services/` for API clients. Public assets belong in `frontend/public/`.
 
 ## Build, Test, and Development Commands
 

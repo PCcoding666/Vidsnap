@@ -403,7 +403,7 @@ export interface WorkspaceQAResponse {
 // Chat API 类型定义
 export interface ChatStartRequest {
   video_id: string;
-  metadata?: unknown;  // 可选，如果不提供，后端会自动从Supabase加载
+  metadata?: unknown;  // 可选，如果不提供，后端会自动从本地数据库加载
 }
 
 export interface ChatStartResponse {

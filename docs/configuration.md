@@ -92,7 +92,6 @@ TRANSCRIPT_SERVICE_API_KEY -> QWEN_API_KEY -> DASHSCOPE_API_KEY
 | --- | --- |
 | `VITE_API_BASE_URL` | 生产构建下的 API base URL。开发环境当前 API client 使用 `/api/v1` 触发 Vite 代理。 |
 | `VITE_DISABLE_AUTH` | 设为 `true` 时开发环境可绕过部分前端认证保护。 |
-| `VITE_SUPABASE_URL` / `VITE_SUPABASE_ANON_KEY` | 旧前端 Supabase 集成仍存在，但后端当前强制本地 PostgreSQL。新功能不应依赖 Supabase 作为主数据库。 |
 
 前端开发默认：
 

@@ -15,9 +15,6 @@ oss2>=2.18.0
 # AI服务
 dashscope>=1.14.0  # 阿里云 DashScope SDK（Fun-ASR-Flash 转录 + Qwen 多模态）
 
-# 数据库服务
-supabase>=2.10.0  # Supabase Python SDK (保留兼容性)
-
 # 本地数据库 (PostgreSQL + SQLAlchemy)
 sqlalchemy[asyncio]>=2.0.25
 asyncpg>=0.29.0

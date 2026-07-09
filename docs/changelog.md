@@ -19,7 +19,7 @@
 
 - Query-first workspace 已具备 planner、skill registry、同步 process、异步 jobs、artifact 版本、QA、SSE 和 planner eval API。
 - Workspace job 当前为 API 进程内 runner，适合 P0/P1 开发；生产化需要持久化 job 状态并迁移到任务队列。
-- 后端当前强制本地 PostgreSQL，Supabase 主数据库路径已禁用，但保留部分兼容命名。
+- 后端当前使用本地 PostgreSQL；早期云托管 BaaS 主数据库路径已移除，本地同步存储兼容层为 `store_service.py`。
 - Paraformer 默认中间音频格式为 FLAC，并支持重试、轮询、切块和 provider 错误分类。
 - OSS 支持 endpoint 规范化、私有 bucket 签名 URL 和可配置过期时间。
 
@@ -35,7 +35,7 @@
 
 ## Earlier History
 
-早期 README 中的 v2/v3 描述包含 Supabase-first、YouTube/多模态等历史方向，已经不再作为当前开发契约。当前权威产品边界见：
+早期 README 中的 v2/v3 描述包含托管数据库优先、YouTube/多模态等历史方向，已经不再作为当前开发契约。当前权威产品边界见：
 
 - [Slim 产品边界](vidsnap-slim-product-boundary.md)
 - [P0 Query-first 验收](vidsnap-p0-query-first-todo.md)
