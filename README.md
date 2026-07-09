@@ -1,12 +1,25 @@
-# VidSnap
+# VidSnap — a glass-box AI video workbench
 
+![Planner Evals](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/PCcoding666/Vidsnap/badges/planner-evals.json)
 ![Backend](https://img.shields.io/badge/backend-FastAPI-009688)
 ![Frontend](https://img.shields.io/badge/frontend-React%20%2B%20Vite-646CFF)
 ![Python](https://img.shields.io/badge/python-%3E%3D3.10-blue)
 ![Node](https://img.shields.io/badge/node-%3E%3D18-green)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
-VidSnap 是一个面向本地视频文件的 AI-native 知识工作区：上传视频，输入自然语言目标，系统把视频转成可搜索、可引用、可复用的文本资产。
+> **看着 AI 展示它的工作。** 上传本地视频、写下自然语言目标，VidSnap 把它变成可搜索、可引用、可复用的文本资产——而且全程透明：planner 的计划、每个技能的执行 trace、带时间戳引用的产物、以及一份公开的规划质量成绩单。
+>
+> **Watch the AI show its work.** Turn a local video into searchable, citable, reusable text assets — with the plan, the per-skill execution trace, citation-backed artifacts, and a public planner report card, all visible.
+
+## 为什么是 glass-box / Why glass-box
+
+| 支柱 | 你能看到什么 |
+| --- | --- |
+| **透明 Transparent** | 工具调用链路实时可视化：planner 选了哪些技能、每步状态与耗时——没有黑盒 |
+| **可审计 Auditable** | 摘要 / 笔记 / 问答全部锚定转录时间戳引用（transcript 是唯一事实源），不凭空捏造 |
+| **可复现 Reproducible** | 顶部徽章 = **120 条 planner golden set 的实时跑分**，每次 push 由 CI 重跑并公开更新 |
+
+> 🛠️ 本项目由一个自主 AI 工程循环持续迭代——开发过程同样 glass-box：见 [构建日志 / Build Log](docs/build-log.md)。
 
 ## 核心特性
 

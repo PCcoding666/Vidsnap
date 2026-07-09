@@ -31,6 +31,44 @@ jobs:
         cd backend
         python -m pytest -v
 
+  # 公开成绩单：每次 push 主分支后重跑 120 条 planner golden set，
+  # 把通过率徽章发布到 badges 分支（README 通过 shields endpoint 引用）
+  planner-evals-badge:
+    runs-on: ubuntu-latest
+    needs: test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/vidsnap_slim'
+    permissions:
+      contents: write
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python 3.10
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.10"
+        cache: 'pip'
+
+    - name: Install backend dependencies
+      run: |
+        cd backend
+        python -m pip install --upgrade pip
+        python -m pip install -r requirements.txt
+
+    - name: Compute planner golden-set score
+      run: |
+        cd backend
+        python scripts/compute_planner_score.py ../planner-evals.json
+
+    - name: Publish badge to badges branch
+      run: |
+        git config user.name "github-actions[bot]"
+        git config user.email "github-actions[bot]@users.noreply.github.com"
+        git checkout --orphan badges
+        git rm -rf --cached . >/dev/null
+        git add planner-evals.json
+        git commit -m "chore: update planner evals badge [skip ci]"
+        git push -f origin badges
+
   frontend:
     runs-on: ubuntu-latest
     steps:

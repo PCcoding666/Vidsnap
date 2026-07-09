@@ -17,3 +17,14 @@
 - EN: Charter live. P0 hardening merged (#5). Real-video test caught a nonexistent ASR model id — claims only count after a real-sample run.
 
 **下一 cycle(R1 开工)**:透镜 = 第一印象。README 重定位 + trace GIF + golden-set 成绩单徽章。
+
+---
+
+## Cycle 1 — 2026-07-10 · 第一印象 / First impressions
+
+- **透镜**:陌生人打开 repo 的前 10 秒能否看懂"这个项目为什么不同"。
+- **发版**:README 重定位为 glass-box 定位(双语 hero + 三支柱表);新增 **planner golden-set 公开成绩单徽章**——CI 每次 push 主分支自动重跑 120 条 eval(严格口径:required/forbidden/artifact_type/校验四条同时满足),发布到 `badges` 分支。
+- **数据**:本地实测严格全条件通过 **120/120 (100%)**。敢公开成绩单,是因为成绩单是 CI 算的,不是自己说的。
+- EN: Repositioned the README around the glass-box thesis and added a live planner-evals badge — CI re-scores all 120 golden cases (strict: required + forbidden + artifact type + validation) on every push. Current: 120/120.
+
+**下一 cycle**:内容 #1 双语稿《AI 给我的项目做尽调,发现我的文档在撒谎》。
