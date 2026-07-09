@@ -65,7 +65,8 @@ jobs:
         git config user.email "github-actions[bot]@users.noreply.github.com"
         git checkout --orphan badges
         git rm -rf --cached . >/dev/null
-        git add planner-evals.json
+        # -f: 根目录 .gitignore 的 *.json 防密钥规则会误挡徽章文件
+        git add -f planner-evals.json
         git commit -m "chore: update planner evals badge [skip ci]"
         git push -f origin badges
 
