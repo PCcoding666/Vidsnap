@@ -38,3 +38,15 @@
 - EN: Drafted content #1 in both languages from the real audit-and-repair records; publishing stays human-gated.
 
 **下一 cycle**:trace 演示截图/GIF(用真实浏览器抓 Workspace 的工具链执行画面,补进 README 首屏)。
+
+---
+
+## Cycle 3 — 2026-07-10 · 一镜实拍 / One real take
+
+- **交付**:README 新增「一镜实拍」——真实运行截图(上传→规划→转录→索引→成稿,5 步 trace 全绿+产物面板);采集脚本落库 `scripts/capture_demo.mjs`(Playwright,发版即可复现)。
+- **递归彩蛋**:demo 视频旁白介绍的就是 VidSnap,工具转录后在产物里亲手写下"Vid Snap 是一个'玻璃盒'(Glass Box) AI 视频工作台"——**工具处理了一条介绍自己的视频,并写出了自己的定位**。
+- **过程曲折(glass-box 如实记录)**:两条浏览器遥控通道均被 macOS 权限挡下(扩展未连接、AppleScript -1743),遂改用 Playwright 无头采集——反而沉淀成可复现的 demo 采集基建。服务重启还暴露了 in-memory job 全丢(P1-1 持久化缺口再次被现实验证)。
+- **新发现(自我挑战)**:执行中进度 85% 时 trace 各步仍显示"待执行"——**中途状态不实时**,已入队列。
+- EN: Added a real, unstaged run screenshot to the README (captured via Playwright, script committed). The demo video narrates VidSnap itself — the tool wrote down its own positioning. Also caught a real UX gap: per-step trace states don't update mid-run.
+
+**下一 cycle**:influence-metrics 采集器(GitHub stars/traffic 快照,为影响力周会供数)→ 之后:分享运行页、trace 中途状态实时化。

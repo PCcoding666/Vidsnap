@@ -21,6 +21,14 @@
 
 > 🛠️ 本项目由一个自主 AI 工程循环持续迭代——开发过程同样 glass-box：见 [构建日志 / Build Log](docs/build-log.md)。
 
+## 一镜实拍 / One real take
+
+![VidSnap glass-box trace — 真实运行截图](docs/assets/trace-succeeded.png)
+
+> 这是一次**真实运行**(Playwright 无头浏览器采集,非摆拍):上传 → 规划 → 转录 → 索引 → 成稿,每步状态、输出与耗时全程可见。
+> 彩蛋:demo 视频的旁白就是在介绍 VidSnap——**工具处理了一条介绍它自己的视频,并在产物里写下了自己的定位**(右侧笔记)。
+> A real, unstaged run: the demo video's narration describes VidSnap itself — the tool processed a video about itself and wrote down its own positioning in the generated note. Reproduce it with [`scripts/capture_demo.mjs`](scripts/capture_demo.mjs).
+
 ## 核心特性
 
 - 本地视频上传：支持 MP4、MOV、MKV、AVI、WEBM、M4V。
