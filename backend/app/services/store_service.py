@@ -63,8 +63,8 @@ class StoreServiceProxy:
     """
     本地存储代理类
     
-    将所有调用转发到本地 PostgreSQL
-    保持与原 StoreService 相同的接口
+    将所有调用转发到本地 PostgreSQL。
+    方法签名沿用历史云托管 BaaS 客户端的形状（链式 .table() 等），便于旧调用点平滑迁移。
     """
     
     def __init__(self):

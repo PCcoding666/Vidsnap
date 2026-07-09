@@ -47,8 +47,8 @@ git clone --mirror . ../vidsnap-backup.git
 # 1) 从所有历史中彻底移除三个 .env 文件
 git filter-repo --path .env --path backend/.env --path frontend/.env --invert-paths
 
-# 2) filter-repo 会移除 origin，重新指向远端
-git remote add origin https://github.com/PCcoding666/my_youtube_summarizer.git
+# 2) filter-repo 会移除 origin，重新指向你自己的远端（换成实际仓库 URL）
+git remote add origin <your-remote-url>   # 例如 git@github.com:<you>/<repo>.git
 
 # 3) 校验：下面两条应当【无任何输出】
 git log --all --full-history -- .env backend/.env frontend/.env
