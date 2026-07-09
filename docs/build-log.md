@@ -28,3 +28,13 @@
 - EN: Repositioned the README around the glass-box thesis and added a live planner-evals badge — CI re-scores all 120 golden cases (strict: required + forbidden + artifact type + validation) on every push. Current: 120/120.
 
 **下一 cycle**:内容 #1 双语稿《AI 给我的项目做尽调,发现我的文档在撒谎》。
+
+---
+
+## Cycle 2 — 2026-07-10 · 内容 #1 双语稿 / First content piece
+
+- **交付**:[中文稿](content/2026-07-ai-due-diligence.zh.md) + [英文稿](content/2026-07-ai-due-diligence.en.md)——《我让 AI 给自己的项目做尽调,它发现我的文档在撒谎》。素材 100% 来自真实尽调与修复记录(五条"声称 vs 实际"、根因诊断、fun-asr-flash 翻车实录),含可复用的尽调 prompt 骨架。
+- **状态**:草稿,待作者审阅后发布(Ring 1:对外发布永远由作者执行)。
+- EN: Drafted content #1 in both languages from the real audit-and-repair records; publishing stays human-gated.
+
+**下一 cycle**:trace 演示截图/GIF(用真实浏览器抓 Workspace 的工具链执行画面,补进 README 首屏)。
