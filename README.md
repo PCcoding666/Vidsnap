@@ -13,8 +13,8 @@ VidSnap 是一个面向本地视频文件的 AI-native 知识工作区：上传�
 - 本地视频上传：支持 MP4、MOV、MKV、AVI、WEBM、M4V。
 - Query-first 工作区：先写目标，再生成结构化技能计划，不让用户手动选择处理菜单。
 - 可恢复异步任务：`/workspace/jobs` 返回 job 状态、阶段进度、重试信息和 artifact 版本。
-- 转录优先事实源：Fun-ASR-Flash 生成带时间戳的 transcript，摘要、笔记、定位和问答都基于 transcript。
-- 云端音频中转：通过阿里云 OSS 提供 Fun-ASR-Flash 可访问的音频 URL，默认使用签名 URL 支持私有 bucket。
+- 转录优先事实源：Fun-ASR 生成带时间戳的 transcript，摘要、笔记、定位和问答都基于 transcript。
+- 云端音频中转：通过阿里云 OSS 提供 Fun-ASR 可访问的音频 URL，默认使用签名 URL 支持私有 bucket。
 - 本地开发闭环：FastAPI + React/Vite + PostgreSQL + Redis，一条脚本启动完整环境。
 
 ## 快速上手
@@ -168,7 +168,7 @@ flowchart LR
     VR --> Pipeline
     Pipeline --> FFmpeg[FFmpeg audio/video processing]
     Pipeline --> OSS[Aliyun OSS signed audio URL]
-    OSS --> ASR[DashScope Fun-ASR-Flash]
+    OSS --> ASR[DashScope Fun-ASR]
     Pipeline --> LLM[DashScope Qwen summary/QA]
     Pipeline --> PG[(local PostgreSQL)]
     API --> Redis[(Redis for async infra)]

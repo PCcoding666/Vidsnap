@@ -23,7 +23,7 @@ const features = [
   {
     icon: Mic,
     title: "High-Accuracy Transcription",
-    description: "Powered by Fun-ASR-Flash for high-accuracy timestamped transcription.",
+    description: "Powered by Fun-ASR for high-accuracy timestamped transcription.",
     gradient: "from-green-500 to-emerald-500"
   },
   {

@@ -54,7 +54,7 @@ class Settings:
     # 注意：必须是 DashScope 支持的有效模型 ID，否则对应环节会失败
     LLM_SUMMARY_MODEL: str = os.getenv("LLM_SUMMARY_MODEL", "qwen3.7-max")         # 摘要生成
     LLM_FRAME_SELECT_MODEL: str = os.getenv("LLM_FRAME_SELECT_MODEL", "qwen3.7-max")  # 模型选帧
-    ASR_MODEL: str = os.getenv("ASR_MODEL", "fun-asr-flash")                       # 语音转录：DashScope Fun-ASR-Flash（可用 ASR_MODEL 覆盖）
+    ASR_MODEL: str = os.getenv("ASR_MODEL", "fun-asr")                       # 语音转录：DashScope Fun-ASR（可用 ASR_MODEL 覆盖）
 
     # 多模态模型（关键帧分析、视频总结等）
     VISION_MODEL: str = os.getenv("VISION_MODEL", "qwen3.7-plus")                  # 关键帧分析

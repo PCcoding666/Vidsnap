@@ -28,7 +28,7 @@ from ..models.analysis import (
     VideoSummary
 )
 from .video_service import video_service
-from .paraformer_service import paraformer_service  # DashScope 录音文件转录（模型 Fun-ASR-Flash，见 settings.ASR_MODEL）
+from .paraformer_service import paraformer_service  # DashScope 录音文件转录（模型 Fun-ASR，见 settings.ASR_MODEL）
 from .oss_service import oss_service
 from .llm_service import llm_service
 from .store_service import store_service
@@ -40,11 +40,11 @@ class AliyunVideoProcessingPipeline:
     def __init__(self):
         """初始化处理管道"""
         self.video_service = video_service
-        self.speech_service = paraformer_service  # ASR：Fun-ASR-Flash（DashScope 录音文件转录）
+        self.speech_service = paraformer_service  # ASR：Fun-ASR（DashScope 录音文件转录）
         self.oss_service = oss_service
         self.llm_service = llm_service
         
-        logger.info("阿里云视频处理管道初始化完成（上传视频 + Fun-ASR-Flash 语音服务）")
+        logger.info("阿里云视频处理管道初始化完成（上传视频 + Fun-ASR 语音服务）")
     
     async def process_video(self, 
                           video_file: Optional[str] = None,
