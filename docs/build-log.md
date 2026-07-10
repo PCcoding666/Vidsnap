@@ -50,3 +50,14 @@
 - EN: Added a real, unstaged run screenshot to the README (captured via Playwright, script committed). The demo video narrates VidSnap itself — the tool wrote down its own positioning. Also caught a real UX gap: per-step trace states don't update mid-run.
 
 **下一 cycle**:influence-metrics 采集器(GitHub stars/traffic 快照,为影响力周会供数)→ 之后:分享运行页、trace 中途状态实时化。
+
+---
+
+## Cycle 4 — 2026-07-10 · 影响力仪表盘起点 / Metrics baseline
+
+- **交付**:`scripts/influence_metrics.py`——stars/forks/watchers + 14 天 views/clones + 热门来源,快照追加到公开的 `docs/metrics/influence.jsonl`(指标也 glass-box)。
+- **首个基线**:⭐1 · views(14d) 10/7u · clones(14d) 115/50u。**诚实注解**:clones 大头是 CI 机器人拉库,看趋势请以 views/stars/星标外链为准。
+- **用途**:每周影响力周会以此供数——看斜率,不看绝对值。
+- EN: Shipped the influence metrics collector; first public baseline recorded (clones are mostly CI bots — trend on views/stars instead).
+
+**下一 cycle**:分享运行页(把一次运行的 plan+trace+产物导出成可分享的静态页,传播钩子)→ 之后:trace 中途状态实时化。
