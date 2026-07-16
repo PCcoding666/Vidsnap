@@ -22,7 +22,7 @@ VidSnap 的后端配置集中在 [backend/app/core/config.py](../backend/app/cor
 | `JWT_SECRET` | `your-super-secret-jwt-key-change-in-production` | 生产是 | JWT 签名密钥。生产必须使用强随机值。 |
 | `JWT_LIFETIME_SECONDS` | `604800` | 否 | JWT 有效期，默认 7 天。 |
 | `TEMP_DIR` | `/tmp/video_analysis` | 否 | 上传、音频抽取、workspace job 输入缓存目录。 |
-| `APP_URL` | `https://vidsnap.space` | 否 | 邮件链接和对外应用 URL。 |
+| `APP_URL` | `https://vidsnap.pccoding666.com` | 否 | 邮件链接和对外应用 URL。 |
 
 ## DashScope 和 LLM
 

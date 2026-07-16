@@ -112,10 +112,10 @@ class Settings:
     GMAIL_SMTP_PASSWORD: str = os.getenv("GMAIL_SMTP_PASSWORD", "")  # 使用 App Password
     GMAIL_SMTP_HOST: str = os.getenv("GMAIL_SMTP_HOST", "smtp.gmail.com")
     GMAIL_SMTP_PORT: int = int(os.getenv("GMAIL_SMTP_PORT", "587"))
-    GMAIL_SMTP_FROM: str = os.getenv("GMAIL_SMTP_FROM", "")  # 发送者名称，如 "VidSnap <noreply@vidsnap.space>"
+    GMAIL_SMTP_FROM: str = os.getenv("GMAIL_SMTP_FROM", "")  # 发送者名称，如 "VidSnap <noreply@vidsnap.pccoding666.com>"
     
     # 应用 URL（用于邮件中的链接）
-    APP_URL: str = os.getenv("APP_URL", "https://vidsnap.space")
+    APP_URL: str = os.getenv("APP_URL", "https://vidsnap.pccoding666.com")
 
     # CORS 允许来源（逗号分隔）。默认仅本地开发来源；生产通过环境变量收紧，
     # 不再在代码里写死 allow_origins=["*"]。设为 "*" 时会自动关闭凭证携带以符合规范。

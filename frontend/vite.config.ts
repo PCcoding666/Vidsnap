@@ -9,10 +9,8 @@ export default defineConfig(({ mode }) => ({
     host: "::",
     port: 8080,
     allowedHosts: [
-      'vidsnap.space',
-      'www.vidsnap.space',
-      'vidsnap-test.space',
-      'www.vidsnap-test.space',
+      'vidsnap.pccoding666.com',
+      'www.vidsnap.pccoding666.com',
       'localhost',
       '127.0.0.1'
     ],
@@ -34,10 +32,8 @@ export default defineConfig(({ mode }) => ({
     host: true,
     port: 3000,
     allowedHosts: [
-      'vidsnap.space',
-      'www.vidsnap.space',
-      'vidsnap-test.space',
-      'www.vidsnap-test.space',
+      'vidsnap.pccoding666.com',
+      'www.vidsnap.pccoding666.com',
       'localhost',
       '127.0.0.1'
     ],

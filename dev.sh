@@ -1,7 +1,7 @@
 #!/bin/bash
 # ============================================================
 # 开发模式启动脚本 (热重载) - 与生产模式端口隔离
-# - 前端: https://vidsnap-test.space:8081 (热重载)
+# - 前端: https://vidsnap.pccoding666.com:8081 (热重载)
 # - 后端: 8001 端口 (热重载)
 # - 生产模式: 8000 端口 (不冲突)
 # ============================================================
@@ -18,7 +18,7 @@ PROJECT_DIR="$(cd "$(dirname "$0")" && pwd)"
 LOG_DIR="$PROJECT_DIR/logs"
 mkdir -p "$LOG_DIR"
 
-DOMAIN="vidsnap-test.space"
+DOMAIN="vidsnap.pccoding666.com"
 
 # 开发模式专用端口
 DEV_BACKEND_PORT=8001
@@ -121,7 +121,7 @@ setup_nginx_dev() {
     if [ ! -f "/etc/letsencrypt/live/${DOMAIN}/fullchain.pem" ]; then
         echo -e "${RED}❌ SSL 证书不存在，使用 HTTP 模式${NC}"
         cat > /www/server/panel/vhost/nginx/vidsnap-dev-${DEV_NGINX_PORT}.conf << EOF
-# 开发模式 HTTP - vidsnap-test.space:${DEV_NGINX_PORT} -> 内部 ${DEV_FRONTEND_PORT}
+# 开发模式 HTTP - vidsnap.pccoding666.com:${DEV_NGINX_PORT} -> 内部 ${DEV_FRONTEND_PORT}
 server {
     listen ${DEV_NGINX_PORT};
     server_name ${DOMAIN} www.${DOMAIN} _;
@@ -153,7 +153,7 @@ EOF
     else
         echo -e "${GREEN}✅ 发现 SSL 证书，配置 HTTPS 开发模式${NC}"
         cat > /www/server/panel/vhost/nginx/vidsnap-dev-${DEV_NGINX_PORT}.conf << EOF
-# 开发模式 HTTPS - vidsnap-test.space:${DEV_NGINX_PORT} -> 内部 ${DEV_FRONTEND_PORT}
+# 开发模式 HTTPS - vidsnap.pccoding666.com:${DEV_NGINX_PORT} -> 内部 ${DEV_FRONTEND_PORT}
 # 后端 API 代理到 ${DEV_BACKEND_PORT} (与生产 8000 隔离)
 server {
     listen ${DEV_NGINX_PORT} ssl;

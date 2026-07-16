@@ -1,7 +1,7 @@
 #!/bin/bash
 # ============================================================
 # 生产模式部署脚本 (nohup 后台运行)
-# - 前端: 8080 端口 + vidsnap-test.space 域名
+# - 前端: 8080 端口 + vidsnap.pccoding666.com 域名
 # - 后端: 8000 端口
 # - Celery Worker & Beat: 后台任务处理
 # ============================================================
@@ -18,7 +18,7 @@ PROJECT_DIR="$(cd "$(dirname "$0")" && pwd)"
 LOG_DIR="$PROJECT_DIR/logs"
 mkdir -p "$LOG_DIR"
 
-DOMAIN="vidsnap-test.space"
+DOMAIN="vidsnap.pccoding666.com"
 SSL_CERT="/etc/letsencrypt/live/$DOMAIN/fullchain.pem"
 SSL_KEY="/etc/letsencrypt/live/$DOMAIN/privkey.pem"
 
@@ -170,9 +170,9 @@ setup_nginx() {
         HAS_SSL=false
     fi
     
-    # 域名配置 (vidsnap-test.space)
+    # 域名配置 (vidsnap.pccoding666.com)
     if [ "$HAS_SSL" = true ]; then
-        cat > /www/server/panel/vhost/nginx/vidsnap-test.space.conf << EOF
+        cat > /www/server/panel/vhost/nginx/vidsnap.pccoding666.com.conf << EOF
 # HTTP 重定向到 HTTPS
 server {
     listen 80;
@@ -245,12 +245,12 @@ server {
     gzip_types text/plain text/css application/json application/javascript text/xml application/xml text/javascript;
     gzip_min_length 1000;
     
-    access_log /www/wwwlogs/vidsnap-test.space.log;
-    error_log /www/wwwlogs/vidsnap-test.space.error.log;
+    access_log /www/wwwlogs/vidsnap.pccoding666.com.log;
+    error_log /www/wwwlogs/vidsnap.pccoding666.com.error.log;
 }
 EOF
     else
-        cat > /www/server/panel/vhost/nginx/vidsnap-test.space.conf << EOF
+        cat > /www/server/panel/vhost/nginx/vidsnap.pccoding666.com.conf << EOF
 server {
     listen 80;
     server_name $DOMAIN www.$DOMAIN;
@@ -279,8 +279,8 @@ server {
         proxy_pass http://127.0.0.1:8000/openapi.json;
     }
     
-    access_log /www/wwwlogs/vidsnap-test.space.log;
-    error_log /www/wwwlogs/vidsnap-test.space.error.log;
+    access_log /www/wwwlogs/vidsnap.pccoding666.com.log;
+    error_log /www/wwwlogs/vidsnap.pccoding666.com.error.log;
 }
 EOF
     fi
@@ -540,7 +540,7 @@ echo -e "${BLUE}日志文件:${NC}"
 echo "  后端日志:       tail -f $LOG_DIR/backend-prod.log"
 echo "  Celery Worker:  tail -f $LOG_DIR/celery-worker.log"
 echo "  Celery Beat:    tail -f $LOG_DIR/celery-beat.log"
-echo "  Nginx 日志:     tail -f /www/wwwlogs/vidsnap-test.space.log"
+echo "  Nginx 日志:     tail -f /www/wwwlogs/vidsnap.pccoding666.com.log"
 echo ""
 echo -e "${BLUE}停止服务:${NC}"
 echo "  pkill -f 'uvicorn.*8000'         # 停止后端"
