@@ -80,7 +80,7 @@ That produced the most important rule of this whole exercise:
 Two things became permanent and public:
 
 1. The README now carries a **live badge**: on every push, CI re-runs all 120 planner golden cases and publishes the pass rate. I can afford to show it because CI computes the number — not me.
-2. The entire repair process — including the AI's own faceplant — is in a public [build log](../build-log.md).
+2. The entire repair process — including the AI's own faceplant — is in a public [build log](https://github.com/PCcoding666/Vidsnap/blob/vidsnap_slim/docs/build-log.md).
 
 That's the project's identity now: **glass-box AI** — transparent (execution traces you can watch), auditable (artifacts anchored to timestamped citations), reproducible (a public report card). For the tool, and for the process that builds it.
 

@@ -80,7 +80,7 @@ HTTP 400 - Model not exist.
 修复完成后,我把两件事做成了公开的:
 
 1. README 顶部挂了一枚**实时徽章**:每次 push,CI 自动重跑 120 条 planner golden case 并公布通过率。敢挂,是因为数字是 CI 算的,不是我说的。
-2. 整个修复过程写进了公开的 [构建日志](../build-log.md)——包括 AI 翻车的那一次。
+2. 整个修复过程写进了公开的 [构建日志](https://github.com/PCcoding666/Vidsnap/blob/vidsnap_slim/docs/build-log.md)——包括 AI 翻车的那一次。
 
 这就是我现在给这个项目的定位:**glass-box AI**——透明(执行 trace 可视化)、可审计(产物带时间戳引用)、可复现(成绩单公开)。工具如此,开发过程也如此。
 
