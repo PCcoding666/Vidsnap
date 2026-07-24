@@ -278,7 +278,11 @@ class WorkspaceService:
         query: str,
     ) -> Optional[str]:
         """调 LLM 编排图文笔记，并把 [[FRAME:Fn]] 占位符替换成真实图块。"""
-        transcript_text = " ".join(seg.text for seg in transcript_index).strip()
+        # 每段带上 [mm:ss] 起点时间戳，让模型能把主题锚回视频原点。
+        # 时间戳与帧解耦：即便没有关键帧，纯文字笔记也能标注时间戳（修复"没帧=全篇无时间戳"）。
+        transcript_text = "\n".join(
+            f"[{self._format_time(seg.start_time)}] {seg.text}" for seg in transcript_index
+        ).strip()
         if not transcript_text:
             return None
 

@@ -1,4 +1,6 @@
 """图文交织渲染测试：截图插到对应转录段落下方。"""
+import asyncio
+
 from app.models.workspace import TranscriptIndexEntry
 from app.services.workspace_service import workspace_service
 
@@ -69,3 +71,30 @@ def test_embed_drops_out_of_range_placeholder():
     out = workspace_service._embed_frame_placeholders("text [[FRAME:F9]] end", frames)
     assert "[[FRAME" not in out  # 越界编号被移除，不报错
     assert "a.jpg" not in out
+
+
+def test_compose_note_body_feeds_timestamped_transcript(monkeypatch):
+    """缺陷修复：喂给 LLM 的转录必须逐段带 [mm:ss] 时间戳。
+
+    历史 bug：转录被 " ".join(seg.text) 拍平、丢掉 start_time，导致没有关键帧时
+    整篇笔记零时间戳——即便用户明确要求"标注时间戳"。时间戳应与帧解耦。
+    """
+    from app.services import workspace_service as ws_mod
+
+    captured = {}
+
+    async def fake_compose(transcript_text, frames_manifest, query):
+        captured["transcript_text"] = transcript_text
+        return "## 开场 [00:00]\n正文内容"
+
+    monkeypatch.setattr(ws_mod.llm_service, "compose_illustrated_note", fake_compose)
+
+    body = asyncio.run(
+        workspace_service._compose_note_body(_segs(), frames=[], query="按时间线整理并标注时间戳")
+    )
+
+    # 每段真实起点都作为 [mm:ss] 锚点进入了转录（不依赖任何关键帧）
+    assert "[00:00] 开场介绍" in captured["transcript_text"]
+    assert "[00:10] 讲解图表" in captured["transcript_text"]
+    assert "[00:20] 总结" in captured["transcript_text"]
+    assert body  # 管线正常返回笔记正文
