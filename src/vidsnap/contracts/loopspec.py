@@ -45,10 +45,10 @@ class LoopSpec(StrictModel):
     budgets: LoopBudgets = Field(default_factory=LoopBudgets)
     verification_gates: tuple[str, ...] = (
         "schema_valid",
-        "referenced_evidence_exists",
         "timestamps_in_bounds",
-        "claims_supported",
-        "required_sections_non_empty",
+        "referenced_evidence_exists",
+        "claims_are_supported",
+        "required_sections_covered",
     )
     terminal_states: tuple[TerminalState, ...] = (
         TerminalState.SUCCEEDED,
@@ -57,7 +57,6 @@ class LoopSpec(StrictModel):
         TerminalState.BLOCKED,
         TerminalState.EXHAUSTED,
         TerminalState.FAILED,
-        TerminalState.CANCELLED,
     )
     max_repair_rounds: int = Field(default=2, ge=0, le=2)
 

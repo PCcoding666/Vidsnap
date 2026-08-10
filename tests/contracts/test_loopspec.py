@@ -24,6 +24,20 @@ def test_default_loop_spec_is_versioned_bounded_and_stable() -> None:
     assert spec.budgets.max_model_calls == 12
     assert spec.budgets.max_evidence_frames == 96
     assert spec.budgets.max_wall_seconds == 900
-    assert TerminalState.SUCCEEDED in spec.terminal_states
+    assert spec.verification_gates == (
+        "schema_valid",
+        "timestamps_in_bounds",
+        "referenced_evidence_exists",
+        "claims_are_supported",
+        "required_sections_covered",
+    )
+    assert spec.terminal_states == (
+        TerminalState.SUCCEEDED,
+        TerminalState.PARTIAL,
+        TerminalState.NO_OP,
+        TerminalState.BLOCKED,
+        TerminalState.EXHAUSTED,
+        TerminalState.FAILED,
+    )
     assert len(spec.digest()) == 64
     assert spec.digest() == default_loop_spec().digest()

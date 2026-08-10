@@ -59,7 +59,7 @@ def verify_claims(
         for claim in claims
     )
     if not has_supported_claims:
-        failed_gates.append("claims_supported")
+        failed_gates.append("claims_are_supported")
 
     if result is not None:
         if not result.summary.strip():
@@ -68,7 +68,7 @@ def verify_claims(
     else:
         section_values = {}
     if any(not section_values.get(section, "").strip() for section in required_sections):
-        failed_gates.append("required_sections_non_empty")
+        failed_gates.append("required_sections_covered")
 
     deduplicated_gates = tuple(dict.fromkeys(failed_gates))
     return VerificationReport(

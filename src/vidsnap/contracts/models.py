@@ -25,7 +25,6 @@ class TerminalState(str, Enum):
     BLOCKED = "BLOCKED"
     EXHAUSTED = "EXHAUSTED"
     FAILED = "FAILED"
-    CANCELLED = "CANCELLED"
 
 
 class VideoSource(StrictModel):

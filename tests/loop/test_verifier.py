@@ -30,7 +30,7 @@ def test_verifier_marks_empty_claim_output_as_incomplete_not_verified() -> None:
     report = verify_claims(claims=[], evidence=[], duration_seconds=1)
 
     assert report.passed is False
-    assert "claims_supported" in report.failed_gates
+    assert "claims_are_supported" in report.failed_gates
 
 
 def test_verifier_rejects_an_empty_required_result_section() -> None:
@@ -46,4 +46,4 @@ def test_verifier_rejects_an_empty_required_result_section() -> None:
     )
 
     assert report.passed is False
-    assert "required_sections_non_empty" in report.failed_gates
+    assert "required_sections_covered" in report.failed_gates
