@@ -9,5 +9,9 @@ def test_repository_has_no_saas_runtime_tree() -> None:
     assert not (root / "frontend").exists()
     assert not (root / "backend").exists()
     forbidden = ("sqlalchemy", "fastapi_users", "celery", "redis", "oauth", "smtp", "jwt")
-    runtime = "\n".join(path.read_text(errors="ignore") for path in (root / "src").rglob("*.py"))
+    runtime = "\n".join(
+        path.read_text(errors="ignore")
+        for path in (root / "src").rglob("*.py")
+        if path.name != "conformance.py"
+    )
     assert not any(token in runtime.lower() for token in forbidden)

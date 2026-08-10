@@ -40,7 +40,7 @@ async def test_qwen_client_uses_the_fixed_model_and_typed_evidence_payload() -> 
         )
 
     client = QwenCompatibleClient(
-        api_key="local-only-test-key",
+        api_key="test",
         transport=httpx.MockTransport(handler),
     )
     response = await client.analyze_evidence(
@@ -86,7 +86,7 @@ async def test_qwen_client_sends_captured_frame_as_a_local_data_uri(tmp_path) ->
         )
 
     response = await QwenCompatibleClient(
-        api_key="local-only-test-key",
+        api_key="test",
         transport=httpx.MockTransport(handler),
     ).analyze_evidence(
         [

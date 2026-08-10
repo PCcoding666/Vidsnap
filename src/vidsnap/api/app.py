@@ -6,7 +6,7 @@ import asyncio
 import json
 import shutil
 import tempfile
-from collections.abc import Callable
+from collections.abc import AsyncIterator, Callable
 from pathlib import Path
 
 from fastapi import FastAPI
@@ -87,7 +87,7 @@ def create_app(
 
     @app.post("/v1/analyze/stream")
     async def analyze_stream(request: AnalyzeRequest) -> StreamingResponse:
-        async def events():
+        async def events() -> AsyncIterator[str]:
             result = await _run_request(request, harness_factory)
             yield f"event: result\ndata: {json.dumps(_result_payload(result))}\n\n"
 

@@ -15,7 +15,7 @@ class HarnessConfig:
     """Fixed-model provider configuration with a non-printable local credential."""
 
     api_key: str | None = field(default=None, repr=False)
-    model: Literal["qwen3.8-max"] = QWEN_MODEL
+    model: Literal["qwen3.8-max"] = "qwen3.8-max"
     base_url: str = TOKEN_PLAN_BASE_URL
     model_concurrency: int = 1
     request_timeout_seconds: float = 120.0

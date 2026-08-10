@@ -645,7 +645,7 @@ git commit -m "refactor: remove legacy saas application"
 - `vidsnap conformance` returns nonzero on a contract/LoopSpec/banned-dependency violation.
 - CI runs lint, format check, mypy, offline pytest, build, wheel smoke, CLI/API smoke, conformance, `git diff --check`, and secret scan.
 
-- [ ] **Step 1: Write failing conformance test**
+- [x] **Step 1: Write failing conformance test**
 
 ```python
 from vidsnap.conformance import run_conformance
@@ -657,17 +657,17 @@ def test_conformance_passes_for_default_package() -> None:
     assert report.checks["loop_spec"] == "passed"
 ```
 
-- [ ] **Step 2: Verify RED**
+- [x] **Step 2: Verify RED**
 
 Run: `python -m pytest tests/test_conformance.py -q`
 
 Expected: FAIL because conformance implementation is missing.
 
-- [ ] **Step 3: Implement offline release gates**
+- [x] **Step 3: Implement offline release gates**
 
 Conformance validates LoopSpec digest, prompt metadata, output schema, state machine, and forbidden dependencies. The secret scanner uses high-signal patterns and allow-listed false positives; it scans tracked source/config/docs but not fixture hashes. CI must never make live requests and must pin Python versions compatible with project metadata.
 
-- [ ] **Step 4: Run the full verification gate**
+- [x] **Step 4: Run the full verification gate**
 
 Run:
 
@@ -686,7 +686,7 @@ git diff --check
 
 Expected: every command succeeds without secrets, network model calls, or legacy runtime references.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add .github src tests scripts README.md CONTRIBUTING.md

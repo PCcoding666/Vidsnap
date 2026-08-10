@@ -8,6 +8,7 @@ from pathlib import Path
 
 from vidsnap.config import TOKEN_PLAN_BASE_URL, HarnessConfig
 from vidsnap.contracts import (
+    Claim,
     Evidence,
     HarnessPolicy,
     TerminalState,
@@ -40,7 +41,7 @@ class HarnessRunResult:
     verification: VerificationReport | None = None
 
     @property
-    def claims(self) -> list:
+    def claims(self) -> list[Claim]:
         """Expose result claims without pretending an absent result has evidence."""
         return self.result.claims if self.result is not None else []
 
@@ -136,16 +137,18 @@ class VideoHarness:
         if context.controller.terminal_state is None:
             context.controller.terminate(TerminalState.FAILED)
             failure_reason = failure_reason or "loop exited without a terminal state"
+        terminal_state = context.controller.terminal_state
+        assert terminal_state is not None
         bundle.append_event(
             "terminal",
             {
-                "terminal_state": context.controller.terminal_state.value,
+                "terminal_state": terminal_state.value,
                 "reason": failure_reason or "completed",
             },
         )
-        bundle.finalize(context.controller.terminal_state)
+        bundle.finalize(terminal_state)
         return HarnessRunResult(
-            terminal_state=context.controller.terminal_state,
+            terminal_state=terminal_state,
             run_path=run_path,
             result=context.model_response.result if context.model_response is not None else None,
             failure_reason=failure_reason,
@@ -170,15 +173,15 @@ class VideoHarness:
                     context.repair_pending = False
                 await self.skills.run("transcribe_audio", context)
                 await self.skills.run("sample_evidence", context)
-                if context.controller.state is not LoopState.TERMINAL:
+                if context.controller.terminal_state is None:
                     context.controller.transition(LoopState.UNDERSTAND)
             elif state is LoopState.UNDERSTAND:
                 await self.skills.run("inspect_evidence", context)
-                if context.controller.state is not LoopState.TERMINAL:
+                if context.controller.terminal_state is None:
                     context.controller.transition(LoopState.SYNTHESIZE)
             elif state is LoopState.SYNTHESIZE:
                 await self.skills.run("synthesize_result", context)
-                if context.controller.state is not LoopState.TERMINAL:
+                if context.controller.terminal_state is None:
                     context.controller.transition(LoopState.VERIFY)
             elif state is LoopState.VERIFY:
                 await self.skills.run("verify_claims", context)

@@ -9,7 +9,7 @@
 
 ## Active slice
 
-Implement offline conformance, secret scanning, CI, and release verification.
+Perform final offline review, retain BLOCKED_LIVE_BENCHMARK status, then request PR review and CI.
 
 ## Verification evidence
 
@@ -30,7 +30,8 @@ Implement offline conformance, secret scanning, CI, and release verification.
 - 2026-08-11: CLI/API tests RED on missing adapter modules, then GREEN: CLI exposes analyze/serve/benchmark/conformance/manifest; FastAPI serves only health, manifest, analyze, and stream endpoints. HTTP requests reject request-body keys, models, prompts, and provider URLs through strict schemas, create a temporary RunBundle, and remove it after completion. CLI/API tests: 3 passed.
 - 2026-08-11: benchmark tests RED on missing modules, then GREEN: Direct creates full-video requests with explicit fps=2; Direct+ASR and Harness-Full retain identity of the caller-supplied transcript object. Local-only profiles and deterministic temporal/grounding metrics: 3 tests passed. Live comparison remains BLOCKED_LIVE_BENCHMARK.
 - 2026-08-11: SaaS boundary test RED while frontend/backend existed, then GREEN after Git-aware removal of frontend, backend, Compose, old startup/deploy/analytics scripts, old environment templates, and product docs/screenshots. The last untracked backend cache/log residue was moved recoverably to the system Trash. No legacy runtime dependency remains outside migration/design documentation.
+- 2026-08-11: conformance test RED on missing module, then GREEN. CI now runs Harness-only extras, Ruff, Mypy, offline pytest, build, wheel smoke, CLI, conformance, secret scan, and diff check. Local release gate: 51 tests passed, Mypy clean for 32 source files, wheel CLI smoke passed. One Starlette third-party deprecation warning remains in tests.
 
 ## Next step
 
-Write conformance/secret-scan tests, observe missing release tooling RED state, then make CI enforce the offline quality gate.
+Review complete diff and recorded release status; do not invoke live providers without a rotated local key, then publish a ready PR and await CI.

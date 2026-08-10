@@ -20,9 +20,10 @@ class RunEvent(StrictModel):
 
     @model_validator(mode="after")
     def require_utc_timestamp(self) -> RunEvent:
-        if self.occurred_at.tzinfo is None or self.occurred_at.utcoffset() is None:
+        utc_offset = self.occurred_at.utcoffset()
+        if self.occurred_at.tzinfo is None or utc_offset is None:
             raise ValueError("occurred_at must include a UTC timezone")
-        if self.occurred_at.utcoffset().total_seconds() != 0:
+        if utc_offset.total_seconds() != 0:
             raise ValueError("occurred_at must be expressed in UTC")
         return self
 

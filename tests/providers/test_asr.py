@@ -28,7 +28,7 @@ async def test_qwen_asr_uses_an_in_memory_base64_data_uri() -> None:
         return httpx.Response(200, json={"choices": [{"message": {"content": "heard"}}]})
 
     recognizer = QwenAsrRecognizer(
-        api_key="local-only-test-key",
+        api_key="test",
         chunker=Base64AudioChunker(chunk_bytes=4),
         transport=httpx.MockTransport(handler),
     )
@@ -64,7 +64,7 @@ async def test_qwen_asr_uses_the_explicit_local_fallback_after_transport_failure
         raise httpx.ConnectError("offline", request=request)
 
     recognizer = QwenAsrRecognizer(
-        api_key="local-only-test-key",
+        api_key="test",
         local_fallback=LocalFallback(),
         transport=httpx.MockTransport(handler),
     )

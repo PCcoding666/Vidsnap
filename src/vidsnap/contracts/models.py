@@ -75,9 +75,10 @@ class Evidence(StrictModel):
     def validate_time_range_and_timezone(self) -> Evidence:
         if self.end_seconds < self.start_seconds:
             raise ValueError("end_seconds must be greater than or equal to start_seconds")
-        if self.captured_at.tzinfo is None or self.captured_at.utcoffset() is None:
+        utc_offset = self.captured_at.utcoffset()
+        if self.captured_at.tzinfo is None or utc_offset is None:
             raise ValueError("captured_at must include a UTC timezone")
-        if self.captured_at.utcoffset().total_seconds() != 0:
+        if utc_offset.total_seconds() != 0:
             raise ValueError("captured_at must be expressed in UTC")
         return self
 

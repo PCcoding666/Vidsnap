@@ -14,9 +14,11 @@ from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import urlsplit, urlunsplit
 
+from pydantic import JsonValue
+
 from vidsnap import __version__
 from vidsnap.contracts import Evidence, LoopSpec, TerminalState, VideoAnalysisResult
-from vidsnap.loop.events import JsonValue, RunEvent
+from vidsnap.loop.events import RunEvent
 
 _SENSITIVE_KEY_PARTS = ("api_key", "authorization", "credential", "password", "secret", "token")
 
@@ -126,10 +128,12 @@ class RunBundle:
         """Append a redacted JSONL event and return its typed representation."""
         self._ensure_open()
         self._event_sequence += 1
+        redacted_payload = _redact_payload(payload or {})
+        assert isinstance(redacted_payload, dict)
         event = RunEvent(
             sequence=self._event_sequence,
             phase=phase,
-            payload=_redact_payload(payload or {}),
+            payload=redacted_payload,
         )
         with (self.path / "events.jsonl").open("a", encoding="utf-8") as handle:
             handle.write(event.to_json())
