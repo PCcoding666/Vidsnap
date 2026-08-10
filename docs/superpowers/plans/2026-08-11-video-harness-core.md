@@ -227,7 +227,7 @@ git commit -m "feat: add auditable run bundles"
 - Produces `LoopState`, `LoopController`, `BudgetExceeded`, and `VerificationReport`.
 - `LoopController.transition(target)` rejects invalid transitions and `record_model_call()` terminates with `EXHAUSTED` at budget.
 
-- [ ] **Step 1: Write failing loop tests**
+- [x] **Step 1: Write failing loop tests**
 
 ```python
 import pytest
@@ -259,23 +259,23 @@ def test_verifier_rejects_missing_evidence_and_out_of_bounds_timestamp() -> None
     assert "referenced_evidence_exists" in report.failed_gates
 ```
 
-- [ ] **Step 2: Verify RED**
+- [x] **Step 2: Verify RED**
 
 Run: `python -m pytest tests/loop/test_state_machine.py tests/loop/test_verifier.py -q`
 
 Expected: FAIL because the state machine and verifier do not exist.
 
-- [ ] **Step 3: Implement deterministic transitions and gates**
+- [x] **Step 3: Implement deterministic transitions and gates**
 
 Allow only `probe -> plan -> gather -> understand -> synthesize -> verify`, `verify -> repair -> gather`, and terminal transitions. Enforce iteration, model-call, frame, and wall-clock limits. The verifier checks schema validity, in-bounds timestamps, evidence existence, claim support, and non-empty required sections. Empty output is `NO_OP` or `PARTIAL`, never success.
 
-- [ ] **Step 4: Verify GREEN and error cases**
+- [x] **Step 4: Verify GREEN and error cases**
 
 Run: `python -m pytest tests/loop -q`
 
 Expected: PASS; add assertions for invalid transition, empty output, and exhausted iteration budget.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/vidsnap/loop tests/loop

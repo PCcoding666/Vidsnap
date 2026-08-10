@@ -9,7 +9,7 @@
 
 ## Active slice
 
-Create the bounded loop state machine and verifier gates with offline TDD tests.
+Create deterministic media probing and adaptive evidence sampling with offline TDD tests.
 
 ## Verification evidence
 
@@ -22,7 +22,8 @@ Create the bounded loop state machine and verifier gates with offline TDD tests.
 - 2026-08-11: a real wheel-build test caught a missing Schema asset; Hatch `force-include` now ships `video_analysis.v1.json`. Package/contract/distribution tests: 7 passed.
 - 2026-08-11: RunBundle tests RED on missing loop modules, then GREEN: atomic manifest/result writes, redacted JSONL events, evidence/result file hashes, valid terminal-state finalization, and automatic temporary-directory cleanup (3 passed).
 - 2026-08-11: Pydantic 2.10 rejects a handwritten recursive JSON union while generating a Schema. The event ledger uses Pydantic's native `JsonValue`, confirmed by a minimal reproduction before the focused fix.
+- 2026-08-11: controller/verifier tests RED on missing modules, then GREEN: strict `probe → plan → gather → understand → synthesize → verify → repair → gather` transitions; all four hard budgets end in `EXHAUSTED`; missing/out-of-bounds evidence, empty claims, and empty required sections cannot pass verification (10 loop tests).
 
 ## Next step
 
-Write the loop controller and verifier tests, observe the missing-module RED state, then implement valid transitions, hard budgets, and evidence gates.
+Write sampler/probe tests, observe the missing-module RED state, then implement pure adaptive selection before the FFmpeg adapter.
