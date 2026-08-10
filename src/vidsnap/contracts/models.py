@@ -68,6 +68,7 @@ class Evidence(StrictModel):
     end_seconds: float = Field(ge=0)
     modality: EvidenceModality
     content: str | None = Field(default=None, max_length=100_000)
+    artifact_path: Path | None = None
     captured_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
     @model_validator(mode="after")

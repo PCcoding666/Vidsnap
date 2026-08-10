@@ -415,7 +415,7 @@ git commit -m "feat: add bounded qwen and asr providers"
 - Produces `VideoHarness(config, ffmpeg, model, recognizer)` and `await run(source, goal, policy)`.
 - Produces executable built-in skills matching the LoopSpec allow-list.
 
-- [ ] **Step 1: Write failing end-to-end fake-provider test**
+- [x] **Step 1: Write failing end-to-end fake-provider test**
 
 ```python
 import pytest
@@ -435,23 +435,23 @@ async def test_harness_returns_supported_claims_and_trace(tmp_path, fake_media_p
     assert (tmp_path / "run" / "manifest.json").exists()
 ```
 
-- [ ] **Step 2: Verify RED**
+- [x] **Step 2: Verify RED**
 
 Run: `python -m pytest tests/test_harness.py tests/skills -q`
 
 Expected: FAIL because `VideoHarness` and skills do not exist.
 
-- [ ] **Step 3: Implement the smallest bounded orchestrator**
+- [x] **Step 3: Implement the smallest bounded orchestrator**
 
 Create a `RunContext` with controller, bundle, source, goal, policy, evidence, and only structured decisions. Invoke each approved skill through the registry, record events, invoke the model only through typed provider methods, run verifier gates, and allow at most two targeted repair gathers. Return `PARTIAL`, `NO_OP`, `BLOCKED`, `EXHAUSTED`, or `FAILED` truthfully.
 
-- [ ] **Step 4: Verify GREEN and terminal behavior**
+- [x] **Step 4: Verify GREEN and terminal behavior**
 
 Run: `python -m pytest tests/test_harness.py tests/skills tests/loop -q`
 
 Expected: PASS; add fake-provider tests for empty response, missing evidence, provider failure, and budget exhaustion.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/vidsnap/harness.py src/vidsnap/skills tests/test_harness.py tests/skills

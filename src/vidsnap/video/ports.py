@@ -26,3 +26,6 @@ class FFmpegPort(Protocol):
         output_dir: Path,
     ) -> list[ExtractedFrame]:
         """Extract only selected local evidence frames."""
+
+    async def extract_audio(self, source: Path, output_path: Path) -> Path:
+        """Extract local mono WAV audio for an in-memory ASR port."""

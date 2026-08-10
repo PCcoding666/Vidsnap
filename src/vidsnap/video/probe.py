@@ -210,6 +210,25 @@ class FFmpegMediaPort:
             )
         return extracted
 
+    async def extract_audio(self, source: Path, output_path: Path) -> Path:
+        """Extract 16 kHz mono WAV audio locally for a SpeechRecognizer port."""
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        await self._run(
+            "ffmpeg",
+            "-y",
+            "-i",
+            str(source),
+            "-vn",
+            "-ar",
+            "16000",
+            "-ac",
+            "1",
+            str(output_path),
+        )
+        if not output_path.exists():
+            raise FFmpegError("ffmpeg reported success without writing audio")
+        return output_path
+
     async def _motion_candidates(
         self,
         source: Path,

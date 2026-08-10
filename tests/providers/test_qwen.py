@@ -5,7 +5,7 @@ import json
 import httpx
 import pytest
 
-from vidsnap.contracts import VideoGoal
+from vidsnap.contracts import Evidence, VideoGoal
 from vidsnap.providers.qwen import ProviderUnavailable, QwenCompatibleClient
 
 
@@ -70,3 +70,39 @@ async def test_qwen_client_uses_the_fixed_model_and_typed_evidence_payload() -> 
     assert response.result.summary == "A grounded result."
     assert response.input_tokens == 7
     assert response.output_tokens == 3
+
+
+@pytest.mark.asyncio
+async def test_qwen_client_sends_captured_frame_as_a_local_data_uri(tmp_path) -> None:
+    frame_path = tmp_path / "frame.jpg"
+    frame_path.write_bytes(b"jpeg-bytes")
+    captured: dict[str, object] = {}
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        captured["payload"] = json.loads(request.content)
+        return httpx.Response(
+            200,
+            json={"choices": [{"message": {"content": '{"summary":"ok","claims":[]}'}}]},
+        )
+
+    response = await QwenCompatibleClient(
+        api_key="local-only-test-key",
+        transport=httpx.MockTransport(handler),
+    ).analyze_evidence(
+        [
+            Evidence(
+                id="frame-1",
+                start_seconds=0,
+                end_seconds=0,
+                modality="frame",
+                artifact_path=frame_path,
+            )
+        ],
+        VideoGoal(objective="Inspect the frame"),
+    )
+
+    content = captured["payload"]["messages"][1]["content"]
+    assert content[0]["type"] == "text"
+    assert json.loads(content[0]["text"])["evidence"][0]["id"] == "frame-1"
+    assert content[1]["image_url"]["url"] == "data:image/jpeg;base64,anBlZy1ieXRlcw=="
+    assert response.result.summary == "ok"
