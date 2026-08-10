@@ -12,6 +12,9 @@
 *-key.json
 *-service-account.json
 
+# Public, versioned package schemas are source assets rather than credentials.
+!src/vidsnap/contracts/schemas/video_analysis.v1.json
+
 # Virtual environments
 venv/
 .venv/
