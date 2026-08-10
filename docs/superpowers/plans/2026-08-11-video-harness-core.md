@@ -535,7 +535,7 @@ git commit -m "feat: add cli and stateless api adapter"
 - Produces `DirectRunner`, `HarnessRunner`, `BenchmarkCase`, `BenchmarkResult`, `compare_results()`.
 - Direct runner uses exactly `fps=2`; Direct+ASR and Harness-Full share a supplied transcript object.
 
-- [ ] **Step 1: Write failing fairness and metrics tests**
+- [x] **Step 1: Write failing fairness and metrics tests**
 
 ```python
 from vidsnap.benchmark.runners import DirectRunner
@@ -556,23 +556,23 @@ def test_deterministic_metrics_cover_temporal_and_grounding_quality() -> None:
     assert unsupported_claim_rate([True, False, False]) == 2 / 3
 ```
 
-- [ ] **Step 2: Verify RED**
+- [x] **Step 2: Verify RED**
 
 Run: `python -m pytest tests/benchmark -q`
 
 Expected: FAIL because benchmark runners and metrics are missing.
 
-- [ ] **Step 3: Implement local-only runners and metrics**
+- [x] **Step 3: Implement local-only runners and metrics**
 
 Implement four ablations and shared `BenchmarkSettings` so model/output/task/randomization settings cannot diverge. Record every sample, bootstrap confidence intervals, and terminal states. Profile adapters only resolve local user paths and dataset metadata/licenses/SHA-256; they never download or include data in Git. Emit `NOT_YET_SUPERIOR` when thresholds are unmet.
 
-- [ ] **Step 4: Verify GREEN**
+- [x] **Step 4: Verify GREEN**
 
 Run: `python -m pytest tests/benchmark -q && vidsnap benchmark --help`
 
 Expected: PASS; fake models prove transcript sharing and fixed fps.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/vidsnap/benchmark benchmarks tests/benchmark

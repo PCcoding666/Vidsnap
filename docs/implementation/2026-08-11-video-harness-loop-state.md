@@ -9,7 +9,7 @@
 
 ## Active slice
 
-Create fair Direct/Harness benchmark runners, local profiles, and offline metrics with TDD tests.
+Remove the legacy SaaS tree and protect the Harness-only boundary with an offline test.
 
 ## Verification evidence
 
@@ -28,7 +28,8 @@ Create fair Direct/Harness benchmark runners, local profiles, and offline metric
 - 2026-08-11: provider/prompt tests RED on missing modules, then GREEN: only `VIDSNAP_QWEN_API_KEY → QWEN_API_KEY` is read; `qwen3.8-max`, Token Plan URL, and concurrency cap two are fixed; missing key blocks calls; Qwen receives typed JSON evidence only. `qwen3-asr-flash` uses in-memory Base64 data URIs and falls back only to an explicit local plugin. Five prompt layers have metadata and golden rendering tests. Provider/prompt/package-asset tests: 14 passed; wheel build passed.
 - 2026-08-11: harness tests RED on missing `vidsnap.harness`/skills, then GREEN: the registry admits exactly the six LoopSpec skills; extracted local JPEG evidence is sent to Qwen as a bounded data URI; every run emits a RunBundle. Success requires verifier support; missing local key is `BLOCKED`, empty or unsupported output is `PARTIAL`, provider error is `FAILED`, and zero model-call budget is `EXHAUSTED` (20 relevant tests).
 - 2026-08-11: CLI/API tests RED on missing adapter modules, then GREEN: CLI exposes analyze/serve/benchmark/conformance/manifest; FastAPI serves only health, manifest, analyze, and stream endpoints. HTTP requests reject request-body keys, models, prompts, and provider URLs through strict schemas, create a temporary RunBundle, and remove it after completion. CLI/API tests: 3 passed.
+- 2026-08-11: benchmark tests RED on missing modules, then GREEN: Direct creates full-video requests with explicit fps=2; Direct+ASR and Harness-Full retain identity of the caller-supplied transcript object. Local-only profiles and deterministic temporal/grounding metrics: 3 tests passed. Live comparison remains BLOCKED_LIVE_BENCHMARK.
 
 ## Next step
 
-Write Direct/Harness runner and metrics tests, observe missing-module RED states, then implement fixed 2 fps baseline and shared transcript fairness rules.
+Run the SaaS-tree boundary test RED, delete only approved legacy paths, replace active documentation, and verify no forbidden runtime dependency remains.
