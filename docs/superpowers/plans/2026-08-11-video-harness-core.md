@@ -110,7 +110,7 @@ git commit -m "feat: scaffold vidsnap harness package"
 - Produces `TerminalState`, `VideoSource`, `VideoGoal`, `HarnessPolicy`, `Evidence`, `Claim`, `VideoAnalysisResult`, `LoopSpec`, and `default_loop_spec()`.
 - `LoopSpec.digest()` returns a stable SHA-256 over canonical JSON.
 
-- [ ] **Step 1: Write failing conformance tests**
+- [x] **Step 1: Write failing conformance tests**
 
 ```python
 from vidsnap.contracts import TerminalState, default_loop_spec
@@ -139,23 +139,23 @@ def test_claim_requires_evidence_reference() -> None:
     assert claim.evidence[0].evidence_id == "ev-1"
 ```
 
-- [ ] **Step 2: Verify RED**
+- [x] **Step 2: Verify RED**
 
 Run: `python -m pytest tests/contracts -q`
 
 Expected: FAIL because contracts do not exist.
 
-- [ ] **Step 3: Implement strict Pydantic contracts**
+- [x] **Step 3: Implement strict Pydantic contracts**
 
 Use `extra="forbid"`, explicit UTC timestamps, bounded policy fields, and terminal-state enums. `Claim` validation rejects an empty evidence list. `LoopSpec` embeds the approved allow-list, gates, budget values, and terminal states. Store the analysis output JSON Schema as a package asset and validate `VideoAnalysisResult` against it through Pydantic serialization.
 
-- [ ] **Step 4: Verify GREEN and schema determinism**
+- [x] **Step 4: Verify GREEN and schema determinism**
 
 Run: `python -m pytest tests/contracts -q && python -c 'from vidsnap.contracts import default_loop_spec; print(default_loop_spec().digest())'`
 
 Expected: all tests pass; repeated digest output is identical.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/vidsnap/contracts tests/contracts
