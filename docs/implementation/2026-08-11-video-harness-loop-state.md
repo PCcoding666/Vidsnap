@@ -9,7 +9,7 @@
 
 ## Active slice
 
-Create the SDK/CLI and stateless FastAPI adapter with TDD tests.
+Create fair Direct/Harness benchmark runners, local profiles, and offline metrics with TDD tests.
 
 ## Verification evidence
 
@@ -27,7 +27,8 @@ Create the SDK/CLI and stateless FastAPI adapter with TDD tests.
 - 2026-08-11: media tests RED on missing `vidsnap.video`, then GREEN: local `ffprobe`, scene timestamp parsing, 8×8 grayscale motion/visual-difference scores, perceptual-hash de-duplication, coverage points, ASR/OCR-anchor merging, and 4 fps local-only high-motion resampling. FFmpeg synthetic two-scene probe/extract benchmark: 5 tests.
 - 2026-08-11: provider/prompt tests RED on missing modules, then GREEN: only `VIDSNAP_QWEN_API_KEY → QWEN_API_KEY` is read; `qwen3.8-max`, Token Plan URL, and concurrency cap two are fixed; missing key blocks calls; Qwen receives typed JSON evidence only. `qwen3-asr-flash` uses in-memory Base64 data URIs and falls back only to an explicit local plugin. Five prompt layers have metadata and golden rendering tests. Provider/prompt/package-asset tests: 14 passed; wheel build passed.
 - 2026-08-11: harness tests RED on missing `vidsnap.harness`/skills, then GREEN: the registry admits exactly the six LoopSpec skills; extracted local JPEG evidence is sent to Qwen as a bounded data URI; every run emits a RunBundle. Success requires verifier support; missing local key is `BLOCKED`, empty or unsupported output is `PARTIAL`, provider error is `FAILED`, and zero model-call budget is `EXHAUSTED` (20 relevant tests).
+- 2026-08-11: CLI/API tests RED on missing adapter modules, then GREEN: CLI exposes analyze/serve/benchmark/conformance/manifest; FastAPI serves only health, manifest, analyze, and stream endpoints. HTTP requests reject request-body keys, models, prompts, and provider URLs through strict schemas, create a temporary RunBundle, and remove it after completion. CLI/API tests: 3 passed.
 
 ## Next step
 
-Write CLI/API boundary tests, observe missing-command and adapter RED states, then implement local-only stateless request lifecycle and cancellation cleanup.
+Write Direct/Harness runner and metrics tests, observe missing-module RED states, then implement fixed 2 fps baseline and shared transcript fairness rules.

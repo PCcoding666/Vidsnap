@@ -471,7 +471,7 @@ git commit -m "feat: implement grounded video harness loop"
 - `vidsnap analyze VIDEO`, `vidsnap serve`, `vidsnap manifest RUN_DIR`, `vidsnap conformance`.
 - `create_app(harness_factory)` exposes `/health`, `/v1/analyze`, `/v1/analyze/stream`, `/v1/manifest`.
 
-- [ ] **Step 1: Write failing CLI/API boundary tests**
+- [x] **Step 1: Write failing CLI/API boundary tests**
 
 ```python
 from typer.testing import CliRunner
@@ -497,23 +497,23 @@ def test_api_is_local_stateless_health_surface(fake_harness_factory) -> None:
     assert response.json()["stateful_jobs"] is False
 ```
 
-- [ ] **Step 2: Verify RED**
+- [x] **Step 2: Verify RED**
 
 Run: `python -m pytest tests/test_cli.py tests/api/test_app.py -q`
 
 Expected: FAIL because commands and API factory are incomplete.
 
-- [ ] **Step 3: Implement adapters without SaaS state**
+- [x] **Step 3: Implement adapters without SaaS state**
 
 CLI calls the SDK and renders a terminal summary. `serve` binds host `127.0.0.1` unless an explicit safe local override is set. API rejects fields named `api_key`, `model`, `prompt`, `provider_url`, and job/history routes do not exist. Each API call makes a temporary RunBundle; stream cancellation cancels the task and removes it.
 
-- [ ] **Step 4: Verify GREEN and packaging smoke**
+- [x] **Step 4: Verify GREEN and packaging smoke**
 
 Run: `python -m pytest tests/test_cli.py tests/api -q && vidsnap --help && python -m build`
 
 Expected: PASS; built wheel installs in a clean temporary venv and `vidsnap --help` succeeds.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/vidsnap/cli.py src/vidsnap/api tests/test_cli.py tests/api
