@@ -27,7 +27,7 @@ jobs:
 
       - name: Lint and type check
         run: |
-          ruff format --check .
+          ruff format --check src tests scripts
           ruff check .
           mypy src
 
@@ -41,6 +41,7 @@ jobs:
           python -m venv .wheel-smoke
           .wheel-smoke/bin/python -m pip install dist/*.whl
           .wheel-smoke/bin/vidsnap --help
+          .wheel-smoke/bin/vidsnap conformance
 
       - name: Harness release gates
         run: |
