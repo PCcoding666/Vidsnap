@@ -9,7 +9,7 @@
 
 ## Active slice
 
-Create the RunBundle event ledger, then the bounded loop state machine and verifier gates with offline TDD tests.
+Create the bounded loop state machine and verifier gates with offline TDD tests.
 
 ## Verification evidence
 
@@ -20,7 +20,9 @@ Create the RunBundle event ledger, then the bounded loop state machine and verif
 - 2026-08-11: the source tree is deliberately tracked; only local virtualenv/cache/run output paths were added to `.gitignore`.
 - 2026-08-11: contract tests RED on missing `vidsnap.contracts`, then GREEN: strict Pydantic models, an immutable `vidsnap.loop/v1` LoopSpec, and stable SHA-256 digest `6886456389279548eba761e9514af6a5fd874a534ec1ab04a06825dab83d57eb`.
 - 2026-08-11: a real wheel-build test caught a missing Schema asset; Hatch `force-include` now ships `video_analysis.v1.json`. Package/contract/distribution tests: 7 passed.
+- 2026-08-11: RunBundle tests RED on missing loop modules, then GREEN: atomic manifest/result writes, redacted JSONL events, evidence/result file hashes, valid terminal-state finalization, and automatic temporary-directory cleanup (3 passed).
+- 2026-08-11: Pydantic 2.10 rejects a handwritten recursive JSON union while generating a Schema. The event ledger uses Pydantic's native `JsonValue`, confirmed by a minimal reproduction before the focused fix.
 
 ## Next step
 
-Write the RunBundle tests, observe the missing-module RED state, then implement atomic manifest/result writes and redacted JSONL events.
+Write the loop controller and verifier tests, observe the missing-module RED state, then implement valid transitions, hard budgets, and evidence gates.

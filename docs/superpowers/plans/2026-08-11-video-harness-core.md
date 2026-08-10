@@ -174,7 +174,7 @@ git commit -m "feat: add versioned harness contracts"
 - Produces `RunBundle.create(path, manifest)`, `append_event(event)`, `write_evidence(evidence)`, `write_result(result)`, `finalize(reason)` and `temporary_run_bundle()`.
 - Produces `redact_provider_url()` and `RunEvent` typed event records.
 
-- [ ] **Step 1: Write failing RunBundle tests**
+- [x] **Step 1: Write failing RunBundle tests**
 
 ```python
 import json
@@ -192,23 +192,23 @@ def test_run_bundle_writes_required_files_without_secrets(tmp_path) -> None:
     assert "key" not in (tmp_path / "run" / "manifest.json").read_text()
 ```
 
-- [ ] **Step 2: Verify RED**
+- [x] **Step 2: Verify RED**
 
 Run: `python -m pytest tests/loop/test_run_bundle.py -q`
 
 Expected: FAIL with missing `vidsnap.loop.run_bundle`.
 
-- [ ] **Step 3: Implement atomic JSON writes and JSONL events**
+- [x] **Step 3: Implement atomic JSON writes and JSONL events**
 
 Create the five required paths, use a temporary file plus rename for JSON writes, include the LoopSpec hash and package code version in the manifest, and redact URLs/user-info/query values. `temporary_run_bundle()` must remove its directory when its context exits.
 
-- [ ] **Step 4: Verify GREEN plus cleanup behavior**
+- [x] **Step 4: Verify GREEN plus cleanup behavior**
 
 Run: `python -m pytest tests/loop/test_run_bundle.py tests/loop/test_events.py -q`
 
 Expected: PASS; tests assert final terminal reason and temporary directory cleanup.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/vidsnap/loop tests/loop
