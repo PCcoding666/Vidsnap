@@ -9,7 +9,7 @@
 
 ## Active slice
 
-Remove the legacy SaaS tree and protect the Harness-only boundary with an offline test.
+Implement offline conformance, secret scanning, CI, and release verification.
 
 ## Verification evidence
 
@@ -29,7 +29,8 @@ Remove the legacy SaaS tree and protect the Harness-only boundary with an offlin
 - 2026-08-11: harness tests RED on missing `vidsnap.harness`/skills, then GREEN: the registry admits exactly the six LoopSpec skills; extracted local JPEG evidence is sent to Qwen as a bounded data URI; every run emits a RunBundle. Success requires verifier support; missing local key is `BLOCKED`, empty or unsupported output is `PARTIAL`, provider error is `FAILED`, and zero model-call budget is `EXHAUSTED` (20 relevant tests).
 - 2026-08-11: CLI/API tests RED on missing adapter modules, then GREEN: CLI exposes analyze/serve/benchmark/conformance/manifest; FastAPI serves only health, manifest, analyze, and stream endpoints. HTTP requests reject request-body keys, models, prompts, and provider URLs through strict schemas, create a temporary RunBundle, and remove it after completion. CLI/API tests: 3 passed.
 - 2026-08-11: benchmark tests RED on missing modules, then GREEN: Direct creates full-video requests with explicit fps=2; Direct+ASR and Harness-Full retain identity of the caller-supplied transcript object. Local-only profiles and deterministic temporal/grounding metrics: 3 tests passed. Live comparison remains BLOCKED_LIVE_BENCHMARK.
+- 2026-08-11: SaaS boundary test RED while frontend/backend existed, then GREEN after Git-aware removal of frontend, backend, Compose, old startup/deploy/analytics scripts, old environment templates, and product docs/screenshots. The last untracked backend cache/log residue was moved recoverably to the system Trash. No legacy runtime dependency remains outside migration/design documentation.
 
 ## Next step
 
-Run the SaaS-tree boundary test RED, delete only approved legacy paths, replace active documentation, and verify no forbidden runtime dependency remains.
+Write conformance/secret-scan tests, observe missing release tooling RED state, then make CI enforce the offline quality gate.

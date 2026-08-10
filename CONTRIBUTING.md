@@ -1,22 +1,16 @@
 # Contributing
 
-VidSnap 的贡献指南维护在 [docs/contributing.md](docs/contributing.md)。
+Use Python 3.10+ and install the development extras:
 
-本地最短路径：
+    python -m pip install -e '.[server,dev]'
 
-```bash
-cp backend/.env.example backend/.env
-cd backend && python -m pip install -r requirements.txt
-cd ../frontend && npm ci
-cd ..
-./start_local.sh
-```
+Before submitting a change, add offline TDD coverage and run:
 
-提交前至少运行与改动相关的验证：
+    ruff format --check .
+    ruff check .
+    mypy src
+    python -m pytest -q
+    python -m build
+    vidsnap conformance
 
-```bash
-cd backend && pytest
-cd frontend && npm run lint && npm run build
-```
-
-不要提交 `.env`、API Key、AccessKey、cookie、签名 URL、日志或大视频文件。
+Do not commit credentials, local media, datasets, generated RunBundles, benchmark outputs, cookies, or .env files. Changes may not introduce SaaS state, databases, queues, accounts, arbitrary model routing, or a frontend.

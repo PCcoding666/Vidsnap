@@ -594,7 +594,7 @@ git commit -m "feat: add fair video harness benchmarks"
 **Interfaces:**
 - Produces a repository with only package-oriented instructions and no legacy runtime imports.
 
-- [ ] **Step 1: Write failing banned-surface test**
+- [x] **Step 1: Write failing banned-surface test**
 
 ```python
 from pathlib import Path
@@ -609,23 +609,23 @@ def test_repository_has_no_saas_runtime_tree() -> None:
     assert not any(token in runtime.lower() for token in forbidden)
 ```
 
-- [ ] **Step 2: Verify RED**
+- [x] **Step 2: Verify RED**
 
 Run: `python -m pytest tests/test_no_saas_dependencies.py -q`
 
 Expected: FAIL because the legacy tree still exists.
 
-- [ ] **Step 3: Remove only after migrated replacements are green**
+- [x] **Step 3: Remove only after migrated replacements are green**
 
 Delete exact legacy targets listed above with Git-aware deletion. Replace README with SDK/CLI/API/benchmark quickstarts, describe optional extras, document the breaking migration, and update repository instructions. Remove all product deployment docs and screenshots from active documentation; keep only an explicitly labelled historical archive if it contains no runtime instruction or secret.
 
-- [ ] **Step 4: Verify GREEN and scan**
+- [x] **Step 4: Verify GREEN and scan**
 
 Run: `python -m pytest tests/test_no_saas_dependencies.py -q && rg -n -i 'sqlalchemy|fastapi-users|oauth|smtp|celery|redis|react|vite' --glob '!docs/project-archive/**' .`
 
 Expected: test PASS; search returns only migration/archive mentions, never runtime/config/CI references.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add -A
