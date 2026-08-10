@@ -9,7 +9,7 @@
 
 ## Active slice
 
-Create deterministic media probing and adaptive evidence sampling with offline TDD tests.
+Create the bounded Qwen/ASR provider ports, versioned prompt assets, and offline missing-key behavior with TDD tests.
 
 ## Verification evidence
 
@@ -24,7 +24,8 @@ Create deterministic media probing and adaptive evidence sampling with offline T
 - 2026-08-11: Pydantic 2.10 rejects a handwritten recursive JSON union while generating a Schema. The event ledger uses Pydantic's native `JsonValue`, confirmed by a minimal reproduction before the focused fix.
 - 2026-08-11: controller/verifier tests RED on missing modules, then GREEN: strict `probe → plan → gather → understand → synthesize → verify → repair → gather` transitions; all four hard budgets end in `EXHAUSTED`; missing/out-of-bounds evidence, empty claims, and empty required sections cannot pass verification (10 loop tests).
 - 2026-08-11: canonical review against the approved contract renamed verifier gates to `claims_are_supported` / `required_sections_covered`, put verification gates in canonical order, and removed unapproved `CANCELLED` from LoopSpec terminal states (16 tests).
+- 2026-08-11: media tests RED on missing `vidsnap.video`, then GREEN: local `ffprobe`, scene timestamp parsing, 8×8 grayscale motion/visual-difference scores, perceptual-hash de-duplication, coverage points, ASR/OCR-anchor merging, and 4 fps local-only high-motion resampling. FFmpeg synthetic two-scene probe/extract benchmark: 5 tests.
 
 ## Next step
 
-Write sampler/probe tests, observe the missing-module RED state, then implement pure adaptive selection before the FFmpeg adapter.
+Write configuration/provider/prompt tests, observe missing-module RED states, then implement the fixed-model compatible client without making a network request.

@@ -296,7 +296,7 @@ git commit -m "feat: enforce bounded evidence loop"
 - Produces `MediaProbe`, `FrameCandidate`, `EvidenceSamplingPolicy`, `FFmpegPort`, and `AdaptiveSampler`.
 - `AdaptiveSampler.select(candidates, max_frames)` returns unique ordered candidates at or below budget.
 
-- [ ] **Step 1: Write failing sampler tests**
+- [x] **Step 1: Write failing sampler tests**
 
 ```python
 from vidsnap.video.sampling import AdaptiveSampler, FrameCandidate
@@ -314,23 +314,23 @@ def test_sampler_preserves_coverage_and_deduplicates_near_identical_frames() -> 
     assert len(selected) <= 3
 ```
 
-- [ ] **Step 2: Verify RED**
+- [x] **Step 2: Verify RED**
 
 Run: `python -m pytest tests/video/test_sampling.py -q`
 
 Expected: FAIL with missing sampler module.
 
-- [ ] **Step 3: Implement ports and pure selection first**
+- [x] **Step 3: Implement ports and pure selection first**
 
 Define FFmpeg as a protocol. Implement candidate merging from uniform coverage, scene changes, visual/motion scores, ASR anchors, and OCR anchors. Select by type-aware score while retaining start/end coverage and perceptual-hash uniqueness. Add an FFmpeg implementation that probes media and extracts only selected frames. The synthetic fixture must be generated locally in test setup, never committed as media.
 
-- [ ] **Step 4: Verify GREEN with FFmpeg microbenchmark**
+- [x] **Step 4: Verify GREEN with FFmpeg microbenchmark**
 
 Run: `python -m pytest tests/video -q`
 
 Expected: PASS; if FFmpeg is installed, the synthetic test verifies duration, extracted timestamp bounds, and fewer selected frames than a 2-fps baseline.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/vidsnap/video tests/video tests/fixtures
