@@ -38,7 +38,7 @@
 - Produces `vidsnap.__version__` and a console entry point `vidsnap`.
 - Produces optional dependency groups `server`, `providers`, `dev`.
 
-- [ ] **Step 1: Write the failing package contract test**
+- [x] **Step 1: Write the failing package contract test**
 
 ```python
 from vidsnap import __version__
@@ -50,13 +50,13 @@ def test_package_exposes_version_and_cli_app() -> None:
     assert app.info.name == "vidsnap"
 ```
 
-- [ ] **Step 2: Run it to verify RED**
+- [x] **Step 2: Run it to verify RED**
 
 Run: `python -m pytest tests/test_package_smoke.py -q`
 
 Expected: FAIL with `ModuleNotFoundError: No module named 'vidsnap'`.
 
-- [ ] **Step 3: Add the smallest installable package**
+- [x] **Step 3: Add the smallest installable package**
 
 ```toml
 [project]
@@ -81,15 +81,15 @@ def main() -> None:
     app()
 ```
 
-Add `src/`, `.venv/`, `.mypy_cache/`, `.ruff_cache/`, `run/`, and `benchmark-results/` to `.gitignore` without modifying user-owned content in the original worktree.
+Add `.venv/`, `.mypy_cache/`, `.ruff_cache/`, `run/`, and `benchmark-results/` to `.gitignore` without modifying user-owned content in the original worktree. `src/` remains tracked source code and must never be ignored.
 
-- [ ] **Step 4: Verify GREEN and build metadata**
+- [x] **Step 4: Verify GREEN and build metadata**
 
 Run: `python -m pytest tests/test_package_smoke.py -q && python -m pip install -e '.[dev]'`
 
 Expected: PASS and editable install succeeds.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add pyproject.toml src tests .gitignore

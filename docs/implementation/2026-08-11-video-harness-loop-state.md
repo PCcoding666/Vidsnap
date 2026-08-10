@@ -9,13 +9,16 @@
 
 ## Active slice
 
-Create the installable package skeleton, versioned core contracts, and LoopSpec conformance foundation with offline TDD tests.
+Create versioned core contracts and the LoopSpec conformance foundation with offline TDD tests.
 
 ## Verification evidence
 
 - 2026-08-11: isolated worktree created at `/Users/chengpeng/MyProject/Vidsnap-video-harness-core` on `codex/video-harness-core`.
 - 2026-08-11: legacy baseline backend tests: 49 passed.
+- 2026-08-11: package smoke test RED (`ModuleNotFoundError: vidsnap`), then GREEN: `2 passed`.
+- 2026-08-11: editable package install, installed `vidsnap --help`, Ruff format/check for package files, and sdist/wheel build succeeded.
+- 2026-08-11: the source tree is deliberately tracked; only local virtualenv/cache/run output paths were added to `.gitignore`.
 
 ## Next step
 
-Write the approved implementation plan, then execute the contracts and LoopSpec task with a failing test first.
+Write the LoopSpec and result-contract tests, observe the missing-contract RED state, then implement the strict versioned schemas.
