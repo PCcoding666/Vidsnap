@@ -353,7 +353,7 @@ git commit -m "feat: add adaptive video evidence sampling"
 - Produces `HarnessConfig.from_env()`, `QwenCompatibleClient`, `SpeechRecognizer`, `ModelResponse`, and `PromptAsset`.
 - `HarnessConfig.from_env()` caps requested concurrency at two and does not expose key values in `repr`.
 
-- [ ] **Step 1: Write failing provider/security tests**
+- [x] **Step 1: Write failing provider/security tests**
 
 ```python
 from vidsnap.config import HarnessConfig
@@ -379,23 +379,23 @@ async def test_qwen_client_blocks_without_local_key() -> None:
         await QwenCompatibleClient(api_key=None).analyze_evidence([], "goal")
 ```
 
-- [ ] **Step 2: Verify RED**
+- [x] **Step 2: Verify RED**
 
 Run: `python -m pytest tests/providers tests/prompts -q`
 
 Expected: FAIL because configuration/provider/prompt assets are missing.
 
-- [ ] **Step 3: Implement typed ports and versioned prompts**
+- [x] **Step 3: Implement typed ports and versioned prompts**
 
 Use httpx only inside the compatible client. Fix the model to `qwen3.8-max`, do not offer arbitrary model forwarding, and accept only typed evidence/goal payloads. Implement Base64 ASR chunk request construction without OSS. Store prompt JSON metadata with `prompt_id`, semver, input/output schema IDs, LoopSpec hash, and fixed model config. Treat all transcript/OCR strings as quoted data in prompts.
 
-- [ ] **Step 4: Verify GREEN without network**
+- [x] **Step 4: Verify GREEN without network**
 
 Run: `python -m pytest tests/providers tests/prompts -q`
 
 Expected: PASS; mock `httpx.AsyncClient` only at the transport boundary and assert no secret reaches RunBundle/event serialization.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/vidsnap/config.py src/vidsnap/providers src/vidsnap/prompts tests/providers tests/prompts

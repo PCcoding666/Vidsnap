@@ -36,6 +36,11 @@ packages = ["src/vidsnap"]
 
 [tool.hatch.build.targets.wheel.force-include]
 "src/vidsnap/contracts/schemas/video_analysis.v1.json" = "vidsnap/contracts/schemas/video_analysis.v1.json"
+"src/vidsnap/prompts/planner.json" = "vidsnap/prompts/planner.json"
+"src/vidsnap/prompts/evidence.json" = "vidsnap/prompts/evidence.json"
+"src/vidsnap/prompts/synthesizer.json" = "vidsnap/prompts/synthesizer.json"
+"src/vidsnap/prompts/verifier.json" = "vidsnap/prompts/verifier.json"
+"src/vidsnap/prompts/repair.json" = "vidsnap/prompts/repair.json"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

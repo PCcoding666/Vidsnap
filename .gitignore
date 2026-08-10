@@ -14,6 +14,7 @@
 
 # Public, versioned package schemas are source assets rather than credentials.
 !src/vidsnap/contracts/schemas/video_analysis.v1.json
+!src/vidsnap/prompts/*.json
 
 # Virtual environments
 venv/

@@ -17,3 +17,4 @@ def test_wheel_includes_the_versioned_result_schema(tmp_path: Path) -> None:
     wheel_path = next(tmp_path.glob("vidsnap_harness-*.whl"))
     with ZipFile(wheel_path) as wheel:
         assert "vidsnap/contracts/schemas/video_analysis.v1.json" in wheel.namelist()
+        assert "vidsnap/prompts/evidence.json" in wheel.namelist()

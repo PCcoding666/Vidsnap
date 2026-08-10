@@ -9,7 +9,7 @@
 
 ## Active slice
 
-Create the bounded Qwen/ASR provider ports, versioned prompt assets, and offline missing-key behavior with TDD tests.
+Create the executable skill registry and the bounded evidence-grounded harness orchestration with TDD tests.
 
 ## Verification evidence
 
@@ -25,7 +25,8 @@ Create the bounded Qwen/ASR provider ports, versioned prompt assets, and offline
 - 2026-08-11: controller/verifier tests RED on missing modules, then GREEN: strict `probe → plan → gather → understand → synthesize → verify → repair → gather` transitions; all four hard budgets end in `EXHAUSTED`; missing/out-of-bounds evidence, empty claims, and empty required sections cannot pass verification (10 loop tests).
 - 2026-08-11: canonical review against the approved contract renamed verifier gates to `claims_are_supported` / `required_sections_covered`, put verification gates in canonical order, and removed unapproved `CANCELLED` from LoopSpec terminal states (16 tests).
 - 2026-08-11: media tests RED on missing `vidsnap.video`, then GREEN: local `ffprobe`, scene timestamp parsing, 8×8 grayscale motion/visual-difference scores, perceptual-hash de-duplication, coverage points, ASR/OCR-anchor merging, and 4 fps local-only high-motion resampling. FFmpeg synthetic two-scene probe/extract benchmark: 5 tests.
+- 2026-08-11: provider/prompt tests RED on missing modules, then GREEN: only `VIDSNAP_QWEN_API_KEY → QWEN_API_KEY` is read; `qwen3.8-max`, Token Plan URL, and concurrency cap two are fixed; missing key blocks calls; Qwen receives typed JSON evidence only. `qwen3-asr-flash` uses in-memory Base64 data URIs and falls back only to an explicit local plugin. Five prompt layers have metadata and golden rendering tests. Provider/prompt/package-asset tests: 14 passed; wheel build passed.
 
 ## Next step
 
-Write configuration/provider/prompt tests, observe missing-module RED states, then implement the fixed-model compatible client without making a network request.
+Write end-to-end fake-media/fake-model tests, observe missing-harness RED state, then implement only LoopSpec-approved skills and truthful terminal handling.
