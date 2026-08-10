@@ -6,6 +6,7 @@ from pathlib import Path
 
 import typer
 
+from vidsnap.config import HarnessConfig
 from vidsnap.contracts import HarnessPolicy, VideoGoal, VideoSource
 from vidsnap.harness import VideoHarness
 
@@ -84,16 +85,36 @@ def conformance() -> None:
         raise typer.Exit(code=1)
 
 
+def _benchmark_availability(operation: str) -> dict[str, str | bool]:
+    """Expose an honest offline-safe benchmark availability result."""
+    config = HarnessConfig.from_env()
+    if not config.api_key:
+        return {
+            "status": "BLOCKED_LIVE_BENCHMARK",
+            "operation": operation,
+            "reason": "No local provider credential is configured; no live benchmark was run.",
+            "provider_configured": False,
+        }
+    return {
+        "status": "NOT_YET_SUPERIOR",
+        "operation": operation,
+        "reason": (
+            "A local dataset manifest and evaluator are required before a live comparison can run."
+        ),
+        "provider_configured": True,
+    }
+
+
 @benchmark_app.command("run")
 def benchmark_run() -> None:
-    """Run a configured local benchmark profile."""
-    typer.echo("Benchmark runners are installed with the harness benchmark module.")
+    """Report whether a safe live benchmark invocation is currently possible."""
+    typer.echo(json.dumps(_benchmark_availability("run"), ensure_ascii=True))
 
 
 @benchmark_app.command("compare")
 def benchmark_compare() -> None:
-    """Compare Direct and Harness results from a local benchmark run."""
-    typer.echo("Benchmark comparison is installed with the harness benchmark module.")
+    """Report whether a measured local Direct-vs-Harness comparison is available."""
+    typer.echo(json.dumps(_benchmark_availability("compare"), ensure_ascii=True))
 
 
 def main() -> None:
