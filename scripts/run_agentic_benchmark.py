@@ -168,6 +168,18 @@ def _load_smoke_gate(path: Path | None) -> dict[str, object]:
         raise ValueError("smoke report cannot be validated") from error
     if not isinstance(payload, dict) or payload.get("status") != "SMOKE_SUCCEEDED":
         raise ValueError("smoke report is not successful")
+    if {"conclusion", "formal_conclusions"} & set(payload):
+        raise ValueError("smoke report must not contain a benchmark conclusion")
+    formal_only_metrics = {
+        "accuracy",
+        "paired_accuracy_delta",
+        "pre_registered_tool_selection_alignment",
+        "verifier_gate_pass_rate",
+        "decision_thresholds",
+        "provider_input_efficiency",
+    }
+    if formal_only_metrics & set(payload):
+        raise ValueError("smoke report must not contain formal-only research metrics")
     if payload.get("phase") != "smoke" or payload.get("case_count") != 6:
         raise ValueError("smoke report has invalid phase or case count")
     if payload.get("model") != QWEN_MODEL:
@@ -227,6 +239,15 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--seed", type=int, default=20260812)
     parser.add_argument("--validate-only", action="store_true")
     return parser
+
+
+def _terminal_summary(report: dict[str, object], report_path: Path) -> dict[str, object]:
+    """Return only execution status and location, never a research conclusion."""
+    return {
+        "status": report["status"],
+        "case_count": report["case_count"],
+        "report_path": str(report_path),
+    }
 
 
 def _unsupported_outcome(
@@ -455,12 +476,7 @@ def main() -> None:
         parser.error("benchmark runtime configuration or output directory is invalid")
     print(
         json.dumps(
-            {
-                "status": report["status"],
-                "case_count": report["case_count"],
-                "conclusion": report["conclusion"],
-                "report_path": str(output_dir / "report.json"),
-            },
+            _terminal_summary(report, output_dir / "report.json"),
             ensure_ascii=True,
             sort_keys=True,
         )

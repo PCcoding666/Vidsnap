@@ -136,7 +136,19 @@ authorization provenance:
 tools, and measured usage, but no raw response. `report.json` contains paired
 accuracy intervals, `pre_registered_tool_selection_alignment`, cost fields,
 case provenance, task-family coverage, and the pre-registration manifest hash.
-The only positive label is `HARNESS_SUPERIOR`, and it is emitted only when the
-Agentic-minus-Fixed paired 95% bootstrap CI lower bound is strictly above zero.
-Every other result, including a run with any failed path, is
-`NOT_YET_SUPERIOR`.
+Smoke reports contain no research comparison: only gate/provenance metadata,
+per-variant measured usage, and the measured 54-case usage projection. Accuracy,
+paired intervals, tool-selection alignment, aggregate verifier rates,
+efficiency decisions, superiority, and noninferiority remain formal-only.
+Smoke `outcomes.jsonl` retains terminal and verifier states so the execution gate
+can still be audited without turning the six cases into a research conclusion.
+
+Formal reports apply the registered evidence-closure rules. Fixed is
+`FIXED_HARNESS_EFFICIENT_NONINFERIOR` only when its paired accuracy-delta 95% CI
+lower bound versus Direct is at least `-0.056` and its per-case median provider
+input bytes or input tokens are at least 25% lower. Agentic uses the same rule
+against Fixed and is marked `AGENTIC_HARNESS_EFFICIENT_NONINFERIOR` only when
+both gates pass. A failed comparison is `NOT_YET_PROVEN`. The optional
+`HARNESS_SUPERIOR` marker is allowed only when the Agentic-minus-Fixed CI lower
+bound is strictly positive. Any incomplete or verifier-failed formal path
+disables every positive marker.

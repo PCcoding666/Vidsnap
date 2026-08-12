@@ -68,20 +68,42 @@ secret scans pass.
 
 ## Metrics and conclusion rule
 
-The primary metric is MCQ exact-match. No LLM judge is used. The report includes:
+The first-order validation question is whether Fixed Harness reduces provider
+evidence-input cost relative to Direct without a meaningful MCQ accuracy loss.
+MCQ exact-match remains the quality metric; no LLM judge is used. The report
+includes:
 
+- paired Fixed-minus-Direct accuracy delta and deterministic 95% bootstrap CI;
 - paired Agentic-minus-Fixed accuracy delta and deterministic 95% bootstrap CI;
 - Direct, Fixed, and Agentic accuracy;
+- per-variant and per-case provider input bytes and input tokens, including the
+  median for each comparison;
 - tool-selection precision, recall, and F1;
 - missed-tool and invalid-tool rates;
 - model calls, evidence frames, input bytes, input/output tokens, and latency;
 - deterministic verifier-gate pass rate;
 - per-stratum counts and outcomes.
 
-`HARNESS_SUPERIOR` is allowed only when the Agentic-minus-Fixed 95% CI lower
-bound is greater than zero. Every other measured outcome is
-`NOT_YET_SUPERIOR`. Provider or dataset blockers are reported separately and do
-not become a superiority claim.
+Formal conclusions use two pre-registered gates:
+
+- Fixed versus Direct is `FIXED_HARNESS_EFFICIENT_NONINFERIOR` only when the
+  Fixed-minus-Direct 95% CI lower bound is at least `-0.056` and Fixed reduces
+  the per-case median provider input bytes or input tokens by at least 25%.
+- Agentic versus Fixed is `AGENTIC_HARNESS_EFFICIENT_NONINFERIOR` only when the
+  Agentic-minus-Fixed 95% CI lower bound is at least `-0.056` and Agentic reduces
+  the per-case median provider input bytes or input tokens by at least 25%.
+- A comparison failing either gate is `NOT_YET_PROVEN`. `HARNESS_SUPERIOR` may
+  appear only as an additional Agentic marker when its paired 95% CI lower bound
+  versus Fixed is strictly greater than zero.
+
+Any incomplete or verifier-failed formal path disables all positive markers.
+The six-case smoke phase emits only `SMOKE_SUCCEEDED` or `SMOKE_FAILED`, measured
+per-variant usage, and its 54-case usage projection. Its report does not emit
+accuracy, paired intervals, tool-selection alignment, aggregate verifier rates,
+efficiency decisions, superiority, or noninferiority conclusions. Per-outcome
+terminal and verifier states remain available for smoke execution auditing.
+Provider or dataset blockers remain execution failures and do not become
+research claims.
 
 ## Failure handling
 

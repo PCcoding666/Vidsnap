@@ -279,7 +279,7 @@ git commit -m "feat: add formal benchmark statistics"
 - Smoke command: `python scripts/run_agentic_benchmark.py --phase smoke --manifest /absolute/path/smoke.jsonl --output-dir /absolute/path/smoke-results --seed 20260812`.
 - Formal command: `python scripts/run_agentic_benchmark.py --phase formal --manifest /absolute/path/formal.jsonl --output-dir /absolute/path/formal-results --smoke-report /absolute/path/smoke-results/report.json --seed 20260812`.
 - Manifest validation requires exactly six distinct cases for smoke or exactly 54 distinct cases for formal. The formal split is 36 `Video-MME` and 18 `MVBench`; every video exists locally, SHA-256 matches, license text is non-empty, and expected tools are a subset of the two acquisition skills.
-- Output report includes per-variant accuracy, paired Direct→Fixed and Fixed→Agentic bootstrap deltas, tool-selection precision/recall/F1, false-call/missed-call rates, per-case latency/calls/frames, environment metadata excluding secrets, and `NOT_YET_SUPERIOR` unless Agentic's 95% CI lower bound versus Fixed is greater than zero.
+- Output report includes per-variant accuracy, paired Direct→Fixed and Fixed→Agentic bootstrap deltas, per-case median provider input bytes/tokens, tool-selection alignment, false-call/missed-call rates, latency/calls/frames, and environment metadata excluding secrets. Formal conclusions require the registered `-0.056` noninferiority margin plus at least 25% median bytes-or-tokens reduction; smoke emits no research conclusion.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -350,7 +350,7 @@ Expected: exactly 18 variant outcomes, a local report with all required usage fi
 
 Run: verify the six-case composition, same model identifier for every outcome, per-case source hash, Direct fps exactly 2 when frame fallback is active, and absence of credential-like strings with `scripts/secret_scan.py` adapted to the external report directory. Compute the 54-case projection from summed provider-reported usage; do not substitute a guessed unit price.
 
-Expected: report either labels Agentic `HARNESS_SUPERIOR` only when the pre-registered CI criterion is met, or `NOT_YET_SUPERIOR`; no other conclusion is allowed.
+Expected: smoke emits gate/provenance metadata, per-variant measured usage, and its measured projection. Accuracy/CI/tool-alignment/verifier-rate comparisons and all research labels remain formal-only; typed outcome states remain auditable.
 
 - [ ] **Step 5: Commit implementation, not research data**
 
@@ -384,4 +384,4 @@ Expected: 162 typed variant outcomes or explicit blocked/failed statuses; no imp
 
 Run: inspect the machine-readable audit summary and run the external artifact secret scan.
 
-Expected: paired accuracy delta and 95% bootstrap CI, tool metrics, usage and verifier pass rate. The conclusion is `HARNESS_SUPERIOR` only when the Agentic-minus-Fixed CI lower bound is greater than zero; otherwise it is `NOT_YET_SUPERIOR`.
+Expected: paired accuracy deltas and 95% bootstrap CIs, per-case median provider-input reductions, tool metrics, usage, and verifier pass rate. Formal Fixed/Direct and Agentic/Fixed conclusions use the registered noninferiority-plus-efficiency gates; `HARNESS_SUPERIOR` is only an extra Agentic marker when its CI lower bound is strictly positive.

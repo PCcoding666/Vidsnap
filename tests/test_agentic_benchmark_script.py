@@ -262,6 +262,26 @@ def test_smoke_gate_rejects_forged_success_report(tmp_path) -> None:
         namespace["_load_smoke_gate"](report)
 
 
+def test_smoke_cli_summary_has_no_benchmark_conclusion() -> None:
+    """Smoke command output must remain a gate status, never a research conclusion."""
+    namespace = runpy.run_path("scripts/run_agentic_benchmark.py")
+
+    summary = namespace["_terminal_summary"](
+        {
+            "status": "SMOKE_SUCCEEDED",
+            "case_count": 6,
+            "formal_conclusions": {"fixed_vs_direct": "FIXED_HARNESS_EFFICIENT_NONINFERIOR"},
+        },
+        Path("/external/report.json"),
+    )
+
+    assert summary == {
+        "status": "SMOKE_SUCCEEDED",
+        "case_count": 6,
+        "report_path": "/external/report.json",
+    }
+
+
 def test_smoke_gate_preserves_hashed_projection_provenance(tmp_path) -> None:
     """A structurally complete gate retains its report digest and measured projection."""
     from vidsnap.benchmark.manifest import REGISTERED_MANIFEST_SHA256
@@ -309,6 +329,98 @@ def test_smoke_gate_preserves_hashed_projection_provenance(tmp_path) -> None:
         "direct_input_mode": "frames_2fps",
         "formal_54_case_projection": projection,
     }
+
+
+def test_smoke_gate_rejects_any_research_conclusion(tmp_path) -> None:
+    """A successful smoke artifact containing a conclusion must not authorize formal calls."""
+    from vidsnap.benchmark.manifest import REGISTERED_MANIFEST_SHA256
+    from vidsnap.config import QWEN_MODEL
+
+    usage = {
+        variant: {
+            "model_calls": 6,
+            "evidence_frames": 12,
+            "input_bytes": 1200,
+            "input_tokens": 120,
+            "output_tokens": 12,
+            "latency_seconds": 1.2,
+        }
+        for variant in ("direct", "fixed", "agentic")
+    }
+    report = tmp_path / "report-with-conclusion.json"
+    report.write_text(
+        json.dumps(
+            {
+                "phase": "smoke",
+                "status": "SMOKE_SUCCEEDED",
+                "model": QWEN_MODEL,
+                "case_count": 6,
+                "pre_registration_manifest_sha256": REGISTERED_MANIFEST_SHA256["smoke"],
+                "direct_input_mode": "frames_2fps",
+                "usage": usage,
+                "formal_54_case_projection": {
+                    "basis": "provider-reported six-case smoke usage",
+                    "scale_factor": 9,
+                    "usage": {
+                        variant: {field: value * 9 for field, value in totals.items()}
+                        for variant, totals in usage.items()
+                    },
+                },
+                "formal_conclusions": {"fixed_vs_direct": "FIXED_HARNESS_EFFICIENT_NONINFERIOR"},
+            }
+        ),
+        encoding="utf-8",
+    )
+    namespace = runpy.run_path("scripts/run_agentic_benchmark.py")
+
+    with __import__("pytest").raises(ValueError, match="must not contain.*conclusion"):
+        namespace["_load_smoke_gate"](report)
+
+
+def test_smoke_gate_rejects_formal_only_research_metrics(tmp_path) -> None:
+    """A smoke report carrying accuracy comparisons must not authorize formal calls."""
+    from vidsnap.benchmark.manifest import REGISTERED_MANIFEST_SHA256
+    from vidsnap.config import QWEN_MODEL
+
+    usage = {
+        variant: {
+            "model_calls": 6,
+            "evidence_frames": 12,
+            "input_bytes": 1200,
+            "input_tokens": 120,
+            "output_tokens": 12,
+            "latency_seconds": 1.2,
+        }
+        for variant in ("direct", "fixed", "agentic")
+    }
+    report = tmp_path / "report-with-accuracy.json"
+    report.write_text(
+        json.dumps(
+            {
+                "phase": "smoke",
+                "status": "SMOKE_SUCCEEDED",
+                "model": QWEN_MODEL,
+                "case_count": 6,
+                "pre_registration_manifest_sha256": REGISTERED_MANIFEST_SHA256["smoke"],
+                "direct_input_mode": "frames_2fps",
+                "usage": usage,
+                "formal_54_case_projection": {
+                    "basis": "provider-reported six-case smoke usage",
+                    "scale_factor": 9,
+                    "usage": {
+                        variant: {field: value * 9 for field, value in totals.items()}
+                        for variant, totals in usage.items()
+                    },
+                },
+                "accuracy": {"direct": 1.0, "fixed": 1.0, "agentic": 1.0},
+            }
+        ),
+        encoding="utf-8",
+    )
+    namespace = runpy.run_path("scripts/run_agentic_benchmark.py")
+
+    with __import__("pytest").raises(ValueError, match="formal-only research metrics"):
+        namespace["_load_smoke_gate"](report)
 
 
 def test_smoke_gate_rejects_projection_not_derived_from_measured_usage(tmp_path) -> None:
