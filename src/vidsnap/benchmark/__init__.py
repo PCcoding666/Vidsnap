@@ -2,6 +2,7 @@
 
 from vidsnap.benchmark.formal import (
     BootstrapInterval,
+    FormalCase,
     ToolSelectionScore,
     paired_bootstrap_delta,
     parse_mcq_answer,
@@ -13,6 +14,7 @@ from vidsnap.benchmark.runners import DirectRunner, HarnessRunner
 __all__ = [
     "BootstrapInterval",
     "DirectRunner",
+    "FormalCase",
     "HarnessRunner",
     "ToolSelectionScore",
     "paired_bootstrap_delta",

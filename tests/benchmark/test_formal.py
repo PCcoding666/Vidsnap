@@ -3,6 +3,7 @@
 import pytest
 
 from vidsnap.benchmark.formal import (
+    FormalCase,
     paired_bootstrap_delta,
     parse_mcq_answer,
     superiority_status,
@@ -72,3 +73,28 @@ def test_bootstrap_rejects_unpaired_or_non_binary_outcomes() -> None:
         paired_bootstrap_delta([1], [], seed=7)
     with pytest.raises(ValueError, match="binary"):
         paired_bootstrap_delta([2], [1], seed=7)
+
+
+def test_formal_case_rejects_answer_outside_declared_options(tmp_path) -> None:
+    """A typo in ground truth must be rejected before any provider call."""
+    common = {
+        "case_id": "video-mme-001",
+        "dataset": "Video-MME",
+        "dataset_version": "official-main-revision",
+        "dataset_license": "Academic research only; commercial use prohibited.",
+        "source_url": "https://github.com/MME-Benchmarks/Video-MME",
+        "source": tmp_path / "video.mp4",
+        "source_sha256": "a" * 64,
+        "question": "What happens first?",
+        "options": {"A": "The door opens", "B": "The person sits"},
+        "has_audio": True,
+        "duration_stratum": "short",
+        "requirements": ["temporal"],
+        "expected_tools": ["sample_evidence"],
+    }
+
+    case = FormalCase(answer="A", **common)
+    assert case.option_labels == ("A", "B")
+
+    with pytest.raises(ValueError, match="declared option"):
+        FormalCase(answer="C", **common)

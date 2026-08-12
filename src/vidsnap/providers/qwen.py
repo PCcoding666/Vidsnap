@@ -134,7 +134,10 @@ class QwenCompatibleClient:
                     response.raise_for_status()
                 except httpx.HTTPError as error:
                     raise ProviderError("Qwen tool-planning request failed") from error
-        return self._parse_tool_plan_response(response.json())
+        input_bytes = len(
+            json.dumps(request_payload, ensure_ascii=True, separators=(",", ":")).encode("utf-8")
+        )
+        return self._parse_tool_plan_response(response.json(), input_bytes=input_bytes)
 
     @staticmethod
     def _evidence_content(
@@ -196,7 +199,7 @@ class QwenCompatibleClient:
         )
 
     @staticmethod
-    def _parse_tool_plan_response(payload: object) -> ToolPlanResponse:
+    def _parse_tool_plan_response(payload: object, *, input_bytes: int) -> ToolPlanResponse:
         if not isinstance(payload, dict):
             raise ProviderError("provider tool-plan response must be an object")
         try:
@@ -213,4 +216,5 @@ class QwenCompatibleClient:
             plan=plan,
             input_tokens=int(usage.get("prompt_tokens") or 0),
             output_tokens=int(usage.get("completion_tokens") or 0),
+            input_bytes=input_bytes,
         )

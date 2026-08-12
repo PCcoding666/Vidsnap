@@ -7,11 +7,57 @@ import random
 import re
 from collections.abc import Sequence, Set
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Literal
 
-from vidsnap.contracts import AcquisitionTool
+from pydantic import Field, model_validator
+
+from vidsnap.contracts import AcquisitionTool, ToolPlan
+from vidsnap.contracts.models import StrictModel
 
 BenchmarkConclusion = Literal["HARNESS_SUPERIOR", "NOT_YET_SUPERIOR"]
+DatasetName = Literal["Video-MME", "MVBench"]
+DurationStratum = Literal["short", "medium", "long"]
+EvidenceRequirement = Literal["visual", "speech", "temporal"]
+
+
+class FormalCase(StrictModel):
+    """One fully registered local MCQ case with dataset provenance."""
+
+    case_id: str = Field(min_length=1, max_length=256)
+    dataset: DatasetName
+    dataset_version: str = Field(min_length=1, max_length=256)
+    dataset_license: str = Field(min_length=1, max_length=4_000)
+    source_url: str = Field(min_length=1, max_length=2_000)
+    source: Path
+    source_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    question: str = Field(min_length=1, max_length=8_000)
+    options: dict[str, str] = Field(min_length=2, max_length=8)
+    answer: str = Field(min_length=1, max_length=1)
+    subtitle_path: Path | None = None
+    has_audio: bool
+    duration_stratum: DurationStratum
+    requirements: tuple[EvidenceRequirement, ...] = Field(min_length=1, max_length=3)
+    expected_tools: tuple[AcquisitionTool, ...] = Field(max_length=2)
+
+    @model_validator(mode="after")
+    def validate_mcq_and_tools(self) -> FormalCase:
+        labels = tuple(sorted(self.options))
+        if any(label not in tuple("ABCDEFGH") for label in labels):
+            raise ValueError("option labels must be uppercase letters A through H")
+        if any(not text.strip() for text in self.options.values()):
+            raise ValueError("option text must not be empty")
+        if self.answer not in self.options:
+            raise ValueError("answer must identify one declared option")
+        if len(set(self.requirements)) != len(self.requirements):
+            raise ValueError("evidence requirements must be unique")
+        ToolPlan(tools=self.expected_tools)
+        return self
+
+    @property
+    def option_labels(self) -> tuple[str, ...]:
+        """Return deterministic labels for exact-answer parsing."""
+        return tuple(sorted(self.options))
 
 
 @dataclass(frozen=True, slots=True)
@@ -70,8 +116,7 @@ def paired_bootstrap_delta(
         raise ValueError("resamples must be positive")
 
     differences = [
-        agentic_value - fixed_value
-        for fixed_value, agentic_value in zip(fixed, agentic)
+        agentic_value - fixed_value for fixed_value, agentic_value in zip(fixed, agentic)
     ]
     point_estimate = sum(differences) / len(differences)
     generator = random.Random(seed)

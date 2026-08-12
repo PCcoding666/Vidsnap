@@ -34,6 +34,7 @@ class ToolPlanResponse:
     plan: ToolPlan
     input_tokens: int = 0
     output_tokens: int = 0
+    input_bytes: int = 0
 
 
 class ToolPlanningPort(Protocol):

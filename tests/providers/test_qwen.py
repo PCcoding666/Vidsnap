@@ -156,3 +156,4 @@ async def test_qwen_tool_planner_uses_fixed_model_and_strict_plan() -> None:
     assert response.plan.tools == ("transcribe_audio",)
     assert response.input_tokens == 19
     assert response.output_tokens == 4
+    assert response.input_bytes > 0
