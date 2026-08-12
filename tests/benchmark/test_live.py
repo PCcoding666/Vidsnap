@@ -273,6 +273,7 @@ async def test_direct_fallback_uses_registered_video_frame_list_wire_shape(tmp_p
     assert len(content) == 2
     assert content[1]["type"] == "video"
     assert content[1]["fps"] == 2
+    assert content[1]["min_pixels"] == 4096
     assert len(content[1]["video"]) == 4
 
 

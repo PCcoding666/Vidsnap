@@ -31,12 +31,14 @@ from vidsnap.video.sampling import AdaptiveSampler, FrameCandidate
 
 BenchmarkVariant = Literal["direct", "fixed", "agentic"]
 DirectInputMode = Literal["video", "frames_2fps"]
+DIRECT_PROVIDER_MIN_PIXELS = 4096
 DIRECT_FRAME_TRANSPORT_PROFILE: dict[str, int | str] = {
     "timeline": "complete",
     "fps": 2,
     "height_pixels": 96,
     "codec": "jpeg",
     "ffmpeg_qscale": 20,
+    "provider_min_pixels": DIRECT_PROVIDER_MIN_PIXELS,
 }
 
 
@@ -387,6 +389,7 @@ class QwenFormalClient:
             "type": "video",
             "video": [QwenFormalClient._image_data_url(frame.path) for frame in frames],
             "fps": fps,
+            "min_pixels": DIRECT_PROVIDER_MIN_PIXELS,
         }
 
     @staticmethod

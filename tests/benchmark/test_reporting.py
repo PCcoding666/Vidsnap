@@ -116,6 +116,7 @@ def test_smoke_report_uses_paired_metrics_and_measured_54_case_projection() -> N
         "height_pixels": 96,
         "codec": "jpeg",
         "ffmpeg_qscale": 20,
+        "provider_min_pixels": 4096,
     }
     assert report["usage"]["agentic"]["model_calls"] == 18
     projection = report["formal_54_case_projection"]
