@@ -21,6 +21,13 @@ from vidsnap.contracts import Evidence, LoopSpec, TerminalState, VideoAnalysisRe
 from vidsnap.loop.events import RunEvent
 
 _SENSITIVE_KEY_PARTS = ("api_key", "authorization", "credential", "password", "secret", "token")
+_SAFE_USAGE_COUNTERS = {
+    "completion_tokens",
+    "input_tokens",
+    "output_tokens",
+    "prompt_tokens",
+    "total_tokens",
+}
 
 
 def redact_provider_url(provider_url: str) -> str:
@@ -40,7 +47,14 @@ def redact_provider_url(provider_url: str) -> str:
 def _redact_payload(value: JsonValue) -> JsonValue:
     if isinstance(value, dict):
         return {
-            key: "***REDACTED***"
+            key: (
+                item
+                if key.lower() in _SAFE_USAGE_COUNTERS
+                and isinstance(item, int)
+                and not isinstance(item, bool)
+                and item >= 0
+                else "***REDACTED***"
+            )
             if any(part in key.lower() for part in _SENSITIVE_KEY_PARTS)
             else _redact_payload(item)
             for key, item in value.items()

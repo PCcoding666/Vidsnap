@@ -49,6 +49,7 @@ class HarnessPolicy(StrictModel):
     max_evidence_frames: int = Field(default=96, ge=1, le=96)
     max_wall_seconds: int = Field(default=900, ge=1, le=900)
     output_dir: Path | None = None
+    tool_mode: Literal["fixed", "agentic"] = "fixed"
 
 
 class EvidenceReference(StrictModel):
