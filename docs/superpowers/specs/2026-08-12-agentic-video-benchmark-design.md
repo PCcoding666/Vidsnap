@@ -90,4 +90,3 @@ mismatches, invalid answers, budget exhaustion, and verifier failures produce
 typed per-case outcomes. A failed case is never silently retried with another
 model or broader tool surface. The formal command requires a successful smoke
 report and records its cost projection before any formal request is made.
-
