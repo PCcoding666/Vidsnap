@@ -5,7 +5,6 @@ from __future__ import annotations
 import asyncio
 import base64
 import json
-import math
 import mimetypes
 import os
 import time
@@ -341,6 +340,15 @@ class FormalMediaPort(Protocol):
     ) -> list[ExtractedFrame]:
         """Extract local frame files."""
 
+    async def extract_timeline_frames(
+        self,
+        source: Path,
+        *,
+        fps: int,
+        output_dir: Path,
+    ) -> list[ExtractedFrame]:
+        """Extract a complete fixed-rate timeline in one local operation."""
+
     async def extract_audio(self, source: Path, output_path: Path) -> Path:
         """Extract local audio bytes."""
 
@@ -540,17 +548,13 @@ class FormalBenchmarkEngine:
         probe: MediaProbe,
         work_dir: Path,
     ) -> tuple[ExtractedFrame, ...]:
-        candidates = [
-            FrameCandidate(
-                timestamp=index / 2,
-                score=1,
-                source="uniform",
-                perceptual_hash=f"direct-{index}",
-            )
-            for index in range(math.ceil(probe.duration_seconds * 2))
-        ]
+        del probe
         return tuple(
-            await self.media.extract_frames(case.source, candidates, work_dir / "direct-frames")
+            await self.media.extract_timeline_frames(
+                case.source,
+                fps=2,
+                output_dir=work_dir / "direct-frames",
+            )
         )
 
     @staticmethod

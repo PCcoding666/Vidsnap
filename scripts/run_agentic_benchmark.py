@@ -151,6 +151,13 @@ def _unsupported_outcome(
     )
 
 
+def _compatibility_probe_case(cases: list[FormalCase]) -> FormalCase:
+    """Use the largest registered payload to decide complete-video support."""
+    if not cases:
+        raise ValueError("compatibility probe requires at least one case")
+    return max(cases, key=lambda case: case.source.stat().st_size)
+
+
 async def _run_experiment(
     cases: list[FormalCase],
     *,
@@ -167,7 +174,36 @@ async def _run_experiment(
     )
     direct_mode: DirectInputMode = formal_direct_mode or "video"
     direct_mode_decided = formal_direct_mode is not None
-    compatibility_probe: dict[str, int | str] | None = None
+    compatibility_probe: dict[str, float | int | str] | None = None
+    cached_direct: dict[str, VariantOutcome] = {}
+    if phase == "smoke" and not direct_mode_decided:
+        probe_case = _compatibility_probe_case(cases)
+        try:
+            probe_outcome = await engine.run_case(
+                probe_case,
+                variant="direct",
+                work_dir=output_dir / "artifacts" / "compatibility" / "direct-video",
+                direct_input_mode="video",
+            )
+        except UnsupportedVideoInput as error:
+            compatibility_probe = {
+                "status": "complete_video_unsupported",
+                "case_id": probe_case.case_id,
+                "model_calls": 1,
+                "input_bytes": error.input_bytes,
+            }
+            direct_mode = "frames_2fps"
+        else:
+            compatibility_probe = {
+                "status": "complete_video_supported",
+                "case_id": probe_case.case_id,
+                "model_calls": probe_outcome.usage.model_calls,
+                "input_bytes": probe_outcome.usage.input_bytes,
+                "latency_seconds": probe_outcome.usage.latency_seconds,
+            }
+            cached_direct[probe_case.case_id] = probe_outcome
+            direct_mode = "video"
+        direct_mode_decided = True
     indexed_cases = list(enumerate(cases))
     random.Random(seed).shuffle(indexed_cases)
     variant_orders: tuple[tuple[BenchmarkVariant, ...], ...] = (
@@ -179,6 +215,9 @@ async def _run_experiment(
     for order_index, (_, case) in enumerate(indexed_cases):
         for variant in variant_orders[order_index % len(variant_orders)]:
             work_dir = output_dir / "artifacts" / f"{order_index:03d}" / variant
+            if variant == "direct" and case.case_id in cached_direct:
+                outcomes.append(cached_direct.pop(case.case_id))
+                continue
             try:
                 outcome = await engine.run_case(
                     case,
@@ -186,25 +225,8 @@ async def _run_experiment(
                     work_dir=work_dir,
                     direct_input_mode=direct_mode,
                 )
-                if variant == "direct":
-                    direct_mode_decided = True
             except UnsupportedVideoInput as error:
-                if phase == "smoke" and not direct_mode_decided:
-                    compatibility_probe = {
-                        "status": "complete_video_unsupported",
-                        "model_calls": 1,
-                        "input_bytes": error.input_bytes,
-                    }
-                    direct_mode = "frames_2fps"
-                    direct_mode_decided = True
-                    outcome = await engine.run_case(
-                        case,
-                        variant="direct",
-                        work_dir=output_dir / "artifacts" / f"{order_index:03d}" / "direct-frames",
-                        direct_input_mode=direct_mode,
-                    )
-                else:
-                    outcome = _unsupported_outcome(case, input_bytes=error.input_bytes)
+                outcome = _unsupported_outcome(case, input_bytes=error.input_bytes)
             outcomes.append(outcome)
 
     report = build_benchmark_report(

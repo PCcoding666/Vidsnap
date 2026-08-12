@@ -26,6 +26,7 @@ class FakeFormalMedia:
     def __init__(self) -> None:
         self.visual_candidate_calls = 0
         self.extracted_timestamps: list[float] = []
+        self.timeline_calls = 0
 
     async def probe(self, source: Path) -> MediaProbe:
         assert source.is_file()
@@ -54,6 +55,25 @@ class FakeFormalMedia:
             path.write_bytes(b"frame")
             frames.append(ExtractedFrame(path, candidate.timestamp, candidate.perceptual_hash))
         return frames
+
+    async def extract_timeline_frames(
+        self,
+        source: Path,
+        *,
+        fps: int,
+        output_dir: Path,
+    ) -> list[ExtractedFrame]:
+        self.timeline_calls += 1
+        probe = await self.probe(source)
+        candidates = [
+            FrameCandidate(
+                timestamp=index / fps,
+                score=1,
+                perceptual_hash=f"direct-{index}",
+            )
+            for index in range(__import__("math").ceil(probe.duration_seconds * fps))
+        ]
+        return await self.extract_frames(source, candidates, output_dir)
 
     async def extract_audio(self, source: Path, output_path: Path) -> Path:
         del source
@@ -189,6 +209,7 @@ async def test_direct_frame_fallback_covers_complete_timeline_at_two_fps(tmp_pat
     )
 
     assert media.extracted_timestamps == [0.0, 0.5, 1.0, 1.5]
+    assert media.timeline_calls == 1
     assert outcome.usage.evidence_frames == 4
     assert outcome.direct_input_mode == "frames_2fps"
 

@@ -210,6 +210,41 @@ class FFmpegMediaPort:
             )
         return extracted
 
+    async def extract_timeline_frames(
+        self,
+        source: Path,
+        *,
+        fps: int,
+        output_dir: Path,
+    ) -> list[ExtractedFrame]:
+        """Extract a complete fixed-rate timeline with one FFmpeg process."""
+        if fps <= 0:
+            raise ValueError("timeline fps must be positive")
+        output_dir.mkdir(parents=True, exist_ok=True)
+        output_pattern = output_dir / "frame-%06d.jpg"
+        await self._run(
+            "ffmpeg",
+            "-y",
+            "-i",
+            str(source),
+            "-vf",
+            f"fps={fps}",
+            "-q:v",
+            "2",
+            str(output_pattern),
+        )
+        frame_paths = sorted(output_dir.glob("frame-*.jpg"))
+        if not frame_paths:
+            raise FFmpegError("ffmpeg reported success without writing timeline frames")
+        return [
+            ExtractedFrame(
+                path=path,
+                timestamp=index / fps,
+                perceptual_hash=f"timeline-{index}",
+            )
+            for index, path in enumerate(frame_paths)
+        ]
+
     async def extract_audio(self, source: Path, output_path: Path) -> Path:
         """Extract 16 kHz mono WAV audio locally for a SpeechRecognizer port."""
         output_path.parent.mkdir(parents=True, exist_ok=True)

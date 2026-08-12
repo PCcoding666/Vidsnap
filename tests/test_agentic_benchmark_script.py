@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import runpy
 import subprocess
 import sys
 from pathlib import Path
@@ -116,3 +117,20 @@ def test_formal_validation_requires_successful_smoke_report(tmp_path) -> None:
 
     assert result.returncode == 2
     assert "smoke report" in result.stderr
+
+
+def test_smoke_compatibility_probe_uses_largest_registered_payload(tmp_path) -> None:
+    """A small random first video must not decide complete-video compatibility."""
+    manifest = _write_smoke_manifest(tmp_path)
+    rows = manifest.read_text(encoding="utf-8").splitlines()
+    largest = json.loads(rows[-1])
+    largest_path = Path(largest["source"])
+    largest_path.write_bytes(b"largest-video-payload")
+    largest["source_sha256"] = hashlib.sha256(largest_path.read_bytes()).hexdigest()
+    rows[-1] = json.dumps(largest)
+    manifest.write_text("\n".join(rows) + "\n", encoding="utf-8")
+
+    namespace = runpy.run_path("scripts/run_agentic_benchmark.py")
+    cases = namespace["_load_manifest"](manifest)
+
+    assert namespace["_compatibility_probe_case"](cases).case_id == "case-5"
