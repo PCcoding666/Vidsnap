@@ -2,15 +2,15 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Add a bounded Qwen-selected acquisition plan to VidSnap Harness and run a reproducible 72-case internal comparison against Direct and fixed-order Harness baselines.
+**Goal:** Add a bounded Qwen-selected acquisition plan to VidSnap Harness and run a reproducible 54-case internal comparison against Direct and fixed-order Harness baselines after a six-case smoke gate.
 
 **Architecture:** `probe_media` remains mandatory and deterministic. In `agentic` mode, Qwen 3.8 Max receives only typed probe metadata and the user goal, returns a schema-validated plan choosing zero or more acquisition skills from `transcribe_audio` and `sample_evidence`, and the existing deterministic inspect/synthesize/verify stages execute only when their required evidence exists. A benchmark adapter consumes locally cached Video-MME and MVBench files, keeps all case manifests, downloaded media, transcripts, RunBundles, raw responses, and reports outside the repository, then reports paired accuracy, tool-choice quality, and resource usage across the three variants.
 
-**Tech Stack:** Python 3.10, Pydantic v2, httpx, FFmpeg/ffprobe, Typer, pytest/pytest-asyncio, Qwen 3.8 Max through the existing fixed Token Plan compatible endpoint.
+**Tech Stack:** Python 3.10, Pydantic v2, httpx, FFmpeg/ffprobe, Typer, pytest/pytest-asyncio, Qwen 3.8 Max through the Token Plan compatible endpoint read from local Hermes configuration.
 
 ## Global Constraints
 
-- Use only `qwen3.8-max` and `TOKEN_PLAN_BASE_URL`; never accept a request-provided model, URL, or API key.
+- Use only `qwen3.8-max`; the live launcher reads the endpoint and key from Hermes and never accepts them in a benchmark manifest or HTTP request.
 - Read the Hermes credential only in the launcher process, inject it through `VIDSNAP_QWEN_API_KEY`, and never print, write, commit, hash, or include it in a RunBundle.
 - Retain the LoopSpec allow-list, `max_iterations <= 3`, `max_model_calls <= 12`, `max_evidence_frames <= 96`, and the six existing terminal states.
 - `probe_media`, result synthesis, and verification remain harness-controlled; Qwen may select only acquisition skills `transcribe_audio` and `sample_evidence`.
@@ -18,7 +18,9 @@
 - Do not commit benchmark media, source annotations, generated manifests, RunBundles, raw model responses, credentials, or result reports.
 - Write experiment files under a caller-provided directory outside the repository; record source URLs, dataset versions, local SHA-256s, selected case IDs, and a UTC timestamp in its local manifest.
 - Use Video-MME and MVBench only for private, non-commercial internal research; cite their official repositories in the local report.
-- Every baseline uses the same Qwen model, question text, answer options, source video, transcript availability, and randomized case order. Direct samples the complete video at exactly 2 fps.
+- Every baseline uses the same Qwen model, question text, answer options, source video, transcript availability, and randomized case order. Direct uses complete-video input when supported, otherwise the complete timeline at exactly 2 fps.
+- Run six smoke cases before the formal experiment and derive the formal cost projection only from provider-reported smoke usage.
+- Run exactly 54 formal cases: 36 `Video-MME` and 18 `MVBench`.
 
 ---
 
@@ -31,13 +33,17 @@
 - `src/vidsnap/harness.py`: policy-gated planning event and conditional acquisition execution.
 - `src/vidsnap/benchmark/formal.py`: local-case models, exact MCQ parsing, paired accuracy, bootstrap interval, and tool-selection metrics.
 - `src/vidsnap/benchmark/__init__.py`: exports formal benchmark public types.
-- `scripts/run_agentic_benchmark.py`: local-only CLI that validates a pre-downloaded 72-case manifest, runs Direct/Fixed/Agentic in counterbalanced order, and emits a report outside the repository.
+- `src/vidsnap/benchmark/live.py`: fixed-model MCQ client and Direct/Fixed/Agentic execution engine with complete usage accounting.
+- `scripts/run_agentic_benchmark.py`: local-only CLI that validates a pre-downloaded six- or 54-case manifest, runs Direct/Fixed/Agentic in counterbalanced order, and emits a report outside the repository.
+- `scripts/run_with_hermes_qwen.py`: non-printing process launcher that injects Hermes endpoint and credential only into its child.
 - `benchmarks/agentic/README.md`: dataset acquisition, license, manifest, and reproduction instructions without distributing dataset material.
 - `tests/contracts/test_tool_plan.py`: public contract validation.
 - `tests/providers/test_qwen.py`: Qwen request/parse contract for the planner call.
 - `tests/test_harness.py`: fixed compatibility and agentic conditional-acquisition behavior.
 - `tests/benchmark/test_formal.py`: exact answer parsing, bootstrap determinism, and tool-decision metric tests.
+- `tests/benchmark/test_live.py`: three-path execution, fixed-model request, usage, fallback, and verifier behavior.
 - `tests/test_agentic_benchmark_script.py`: launcher rejects in-repository output and accepts an external manifest path.
+- `tests/test_hermes_launcher.py`: child-only environment injection without value disclosure.
 
 ### Task 1: Define the safe model-selected acquisition contract
 
@@ -260,16 +266,19 @@ git add src/vidsnap/benchmark/formal.py src/vidsnap/benchmark/__init__.py tests/
 git commit -m "feat: add formal benchmark statistics"
 ```
 
-### Task 5: Provide a local-only 72-case runner and reproduction guide
+### Task 5: Provide a local-only phased runner and reproduction guide
 
 **Files:**
 - Create: `scripts/run_agentic_benchmark.py`
+- Create: `scripts/run_with_hermes_qwen.py`
+- Create: `src/vidsnap/benchmark/live.py`
 - Create: `benchmarks/agentic/README.md`
 - Test: `tests/test_agentic_benchmark_script.py`
 
 **Interfaces:**
-- Command: `python scripts/run_agentic_benchmark.py --manifest /absolute/path/cases.jsonl --output-dir /absolute/path/results --seed 20260812`.
-- Manifest validation requires exactly 72 distinct cases: 54 `Video-MME` and 18 `MVBench`; each video exists locally, SHA-256 matches, license text is non-empty, and expected tools are a subset of the two acquisition skills.
+- Smoke command: `python scripts/run_agentic_benchmark.py --phase smoke --manifest /absolute/path/smoke.jsonl --output-dir /absolute/path/smoke-results --seed 20260812`.
+- Formal command: `python scripts/run_agentic_benchmark.py --phase formal --manifest /absolute/path/formal.jsonl --output-dir /absolute/path/formal-results --smoke-report /absolute/path/smoke-results/report.json --seed 20260812`.
+- Manifest validation requires exactly six distinct cases for smoke or exactly 54 distinct cases for formal. The formal split is 36 `Video-MME` and 18 `MVBench`; every video exists locally, SHA-256 matches, license text is non-empty, and expected tools are a subset of the two acquisition skills.
 - Output report includes per-variant accuracy, paired Direct→Fixed and Fixed→Agentic bootstrap deltas, tool-selection precision/recall/F1, false-call/missed-call rates, per-case latency/calls/frames, environment metadata excluding secrets, and `NOT_YET_SUPERIOR` unless Agentic's 95% CI lower bound versus Fixed is greater than zero.
 
 - [ ] **Step 1: Write the failing test**
@@ -295,7 +304,7 @@ Expected: FAIL because the runner script does not exist.
 
 - [ ] **Step 3: Write minimal implementation**
 
-Use `argparse`; resolve paths before reading them; reject any output path under the repository root; validate the JSONL before making a provider call; run variants in a deterministic Latin-square rotation derived from the seed; catch individual provider failures as explicit per-case terminal outcomes; and write only external JSON/JSONL reports. The guide must state the two non-commercial licenses, the exact 54/18 mix, the Direct fps=2 requirement, Hermes environment injection, and that no benchmark result may be committed.
+Use `argparse`; resolve paths before reading them; reject any output path under the repository root; validate the JSONL before making a provider call; run variants in a deterministic Latin-square rotation derived from the seed; catch individual provider failures as explicit per-case terminal outcomes; and write only external JSON/JSONL reports. A formal run must reject a missing or unsuccessful smoke report. The guide must state the dataset-specific research/license notices, the exact 36/18 mix, the Direct fps=2 fallback, Hermes environment injection, and that no benchmark result may be committed.
 
 - [ ] **Step 4: Run script tests**
 
@@ -310,13 +319,13 @@ git add scripts/run_agentic_benchmark.py benchmarks/agentic/README.md tests/test
 git commit -m "feat: add local agentic benchmark runner"
 ```
 
-### Task 6: Validate package and conduct the private live evaluation
+### Task 6: Validate package and conduct the six-case smoke evaluation
 
 **Files:**
 - Modify: `docs/superpowers/plans/2026-08-12-agentic-video-benchmark.md` (check completed tasks and record only commands/status, not data or metrics)
 
 **Interfaces:**
-- Uses an externally generated, 72-case JSONL manifest and external result directory.
+- Uses an externally generated, six-case JSONL manifest and external result directory.
 - Does not modify source code after the final verification gate without restarting verification.
 
 - [ ] **Step 1: Run full offline verification**
@@ -331,15 +340,15 @@ Run: use a launcher that reads the Qwen credential into `VIDSNAP_QWEN_API_KEY` w
 
 Expected: no credential appears in shell output, source files, manifests, RunBundles, or reports.
 
-- [ ] **Step 3: Run the 72-case evaluation**
+- [ ] **Step 3: Run the six-case smoke evaluation**
 
-Run: `python scripts/run_agentic_benchmark.py --manifest /absolute/path/cases.jsonl --output-dir /absolute/path/results --seed 20260812`
+Run: `python scripts/run_agentic_benchmark.py --phase smoke --manifest /absolute/path/smoke.jsonl --output-dir /absolute/path/smoke-results --seed 20260812`
 
-Expected: exactly 216 variant outcomes, a local report with all required metrics, and explicit terminal statuses for failures or unsupported provider requests.
+Expected: exactly 18 variant outcomes, a local report with all required usage fields, the chosen Direct input mode, and explicit terminal statuses for failures or unsupported provider requests.
 
 - [ ] **Step 4: Audit the local report**
 
-Run: verify the case counts, dataset split (54/18), same model identifier for every outcome, per-case source hash, Direct fps exactly 2, and absence of credential-like strings with `scripts/secret_scan.py` adapted to the external report directory.
+Run: verify the six-case composition, same model identifier for every outcome, per-case source hash, Direct fps exactly 2 when frame fallback is active, and absence of credential-like strings with `scripts/secret_scan.py` adapted to the external report directory. Compute the 54-case projection from summed provider-reported usage; do not substitute a guessed unit price.
 
 Expected: report either labels Agentic `HARNESS_SUPERIOR` only when the pre-registered CI criterion is met, or `NOT_YET_SUPERIOR`; no other conclusion is allowed.
 
@@ -349,3 +358,30 @@ Expected: report either labels Agentic `HARNESS_SUPERIOR` only when the pre-regi
 git add docs/superpowers/plans/2026-08-12-agentic-video-benchmark.md src tests scripts benchmarks/agentic
 git commit -m "feat: add agentic video benchmark"
 ```
+
+### Task 7: Conduct and audit the 54-case formal evaluation
+
+**Files:**
+- External only: formal manifest, media, raw outcomes, and report.
+
+**Interfaces:**
+- Consumes the successful six-case smoke report and its measured usage projection.
+- Produces exactly 162 variant outcomes for 36 Video-MME and 18 MVBench cases.
+
+- [ ] **Step 1: Validate the formal manifest without provider calls**
+
+Run: `.venv/bin/python scripts/run_agentic_benchmark.py --phase formal --validate-only --manifest /absolute/path/formal.jsonl --output-dir /absolute/path/formal-results --smoke-report /absolute/path/smoke-results/report.json --seed 20260812`
+
+Expected: 54 unique cases, a 36/18 dataset split, valid local SHA-256s, and all required strata represented.
+
+- [ ] **Step 2: Run the formal experiment**
+
+Run: use `scripts/run_with_hermes_qwen.py` to execute the same command without `--validate-only`.
+
+Expected: 162 typed variant outcomes or explicit blocked/failed statuses; no implicit model or modality fallback.
+
+- [ ] **Step 3: Audit the report and conclusion rule**
+
+Run: inspect the machine-readable audit summary and run the external artifact secret scan.
+
+Expected: paired accuracy delta and 95% bootstrap CI, tool metrics, usage and verifier pass rate. The conclusion is `HARNESS_SUPERIOR` only when the Agentic-minus-Fixed CI lower bound is greater than zero; otherwise it is `NOT_YET_SUPERIOR`.
