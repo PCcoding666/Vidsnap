@@ -125,6 +125,14 @@ class FakeFormalModel:
         )
 
 
+class FailingPlanModel(FakeFormalModel):
+    async def plan_tools(self, probe: MediaProbe, goal) -> ToolPlanResponse:
+        del probe, goal
+        from vidsnap.providers.base import ProviderError
+
+        raise ProviderError("safe planner failure")
+
+
 def make_case(tmp_path: Path, *, subtitle: bool = True) -> FormalCase:
     video = tmp_path / "video.mp4"
     video.write_bytes(b"video")
@@ -173,6 +181,23 @@ async def test_agentic_path_runs_only_selected_audio_tool_and_accounts_usage(tmp
     assert outcome.usage.evidence_frames == 0
     assert outcome.verifier_passed is True
     assert media.visual_candidate_calls == 0
+
+
+@pytest.mark.asyncio
+async def test_agentic_failed_planner_attempt_is_counted(tmp_path) -> None:
+    """A failed provider attempt must not disappear from model-call accounting."""
+    outcome = await FormalBenchmarkEngine(
+        media=FakeFormalMedia(),
+        model=FailingPlanModel(ToolPlan(tools=())),
+    ).run_case(
+        make_case(tmp_path),
+        variant="agentic",
+        work_dir=tmp_path / "failed-plan",
+        direct_input_mode="frames_2fps",
+    )
+
+    assert outcome.terminal_state.value == "FAILED"
+    assert outcome.usage.model_calls == 1
 
 
 @pytest.mark.asyncio
@@ -321,6 +346,39 @@ async def test_formal_qwen_client_planner_rejects_broader_tool_surface() -> None
     payload = captured["payload"]
     assert payload["model"] == "qwen3.8-max"
     assert response.plan.tools == ("sample_evidence",)
+
+
+@pytest.mark.asyncio
+async def test_formal_qwen_client_normalizes_exact_named_tool_objects() -> None:
+    """Qwen's bounded named-tool wire shape must map to the strict internal plan."""
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        del request
+        return httpx.Response(
+            200,
+            json={
+                "choices": [
+                    {
+                        "message": {
+                            "content": (
+                                '{"tools":[{"name":"transcribe_audio"},{"name":"sample_evidence"}]}'
+                            )
+                        }
+                    }
+                ]
+            },
+        )
+
+    client = QwenFormalClient(
+        BenchmarkProviderConfig(api_key="test", base_url=TOKEN_PLAN_BASE_URL),
+        transport=httpx.MockTransport(handler),
+    )
+    response = await client.plan_tools(
+        MediaProbe(2, 24, 640, 360, True),
+        VideoGoal(objective="What happens?"),
+    )
+
+    assert response.plan.tools == ("transcribe_audio", "sample_evidence")
 
 
 @pytest.mark.asyncio

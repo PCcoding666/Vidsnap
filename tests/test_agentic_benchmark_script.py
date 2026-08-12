@@ -134,3 +134,24 @@ def test_smoke_compatibility_probe_uses_largest_registered_payload(tmp_path) -> 
     cases = namespace["_load_manifest"](manifest)
 
     assert namespace["_compatibility_probe_case"](cases).case_id == "case-5"
+
+
+def test_failed_complete_video_probe_is_not_registered_as_supported() -> None:
+    """A typed failed outcome must force the registered Direct fallback."""
+    from vidsnap.benchmark.live import BenchmarkUsage, VariantOutcome
+    from vidsnap.contracts import TerminalState
+
+    outcome = VariantOutcome(
+        case_id="case",
+        variant="direct",
+        terminal_state=TerminalState.FAILED,
+        correct=False,
+        direct_input_mode="video",
+        usage=BenchmarkUsage(model_calls=1, input_bytes=123),
+        verifier_gates={},
+        verifier_passed=False,
+        failure_reason="benchmark case failed",
+    )
+    namespace = runpy.run_path("scripts/run_agentic_benchmark.py")
+
+    assert namespace["_complete_video_probe_succeeded"](outcome) is False

@@ -117,8 +117,9 @@ class QwenFormalClient:
                 {
                     "role": "system",
                     "content": (
-                        "Return strict JSON with only a tools array. The only allowed tools "
-                        "are transcribe_audio and sample_evidence. Never choose a model, "
+                        "Return strict JSON with only a tools array of names, for example "
+                        '{"tools":["transcribe_audio","sample_evidence"]}. The only allowed '
+                        "names are transcribe_audio and sample_evidence. Never choose a model, "
                         "endpoint, URL, prompt, budget, verifier, or another tool."
                     ),
                 },
@@ -129,7 +130,7 @@ class QwenFormalClient:
         response_payload = await self._post(payload)
         content, input_tokens, output_tokens = self._response_text(response_payload)
         try:
-            plan = ToolPlan.model_validate(json.loads(content))
+            plan = ToolPlan.model_validate(self._normalized_tool_plan(content))
         except (ValueError, json.JSONDecodeError) as error:
             raise ProviderError("Qwen returned an invalid benchmark tool plan") from error
         return ToolPlanResponse(
@@ -138,6 +139,25 @@ class QwenFormalClient:
             output_tokens=output_tokens,
             input_bytes=self._payload_size(payload),
         )
+
+    @staticmethod
+    def _normalized_tool_plan(content: str) -> object:
+        """Normalize only Qwen's exact bounded named-tool wire representation."""
+        payload: object = json.loads(content)
+        if not isinstance(payload, dict) or set(payload) != {"tools"}:
+            return payload
+        tools = payload.get("tools")
+        if not isinstance(tools, list):
+            return payload
+        normalized: list[object] = []
+        for tool in tools:
+            if isinstance(tool, str):
+                normalized.append(tool)
+            elif isinstance(tool, dict) and set(tool) == {"name"}:
+                normalized.append(tool["name"])
+            else:
+                return payload
+        return {"tools": normalized}
 
     async def transcribe_audio(self, audio_bytes: bytes) -> MCQModelResponse:
         encoded = base64.b64encode(audio_bytes).decode("ascii")
@@ -388,14 +408,15 @@ class _UsageAccumulator:
     input_tokens: int = 0
     output_tokens: int = 0
 
-    def record_response(self, response: MCQModelResponse) -> None:
+    def start_call(self) -> None:
         self.model_calls += 1
+
+    def record_response(self, response: MCQModelResponse) -> None:
         self.input_tokens += response.input_tokens
         self.output_tokens += response.output_tokens
         self.input_bytes += response.input_bytes
 
     def record_plan(self, response: ToolPlanResponse) -> None:
-        self.model_calls += 1
         self.input_tokens += response.input_tokens
         self.output_tokens += response.output_tokens
         self.input_bytes += response.input_bytes
@@ -452,6 +473,7 @@ class FormalBenchmarkEngine:
                     frames = await self._adaptive_frames(case, probe, work_dir)
 
             usage.evidence_frames = len(frames)
+            usage.start_call()
             response = await self.model.answer_mcq(
                 case,
                 frames=frames,
@@ -508,6 +530,7 @@ class FormalBenchmarkEngine:
         if variant == "fixed":
             return ("transcribe_audio", "sample_evidence")
         goal = VideoGoal(objective=self._goal_text(case))
+        usage.start_call()
         response = await self.model.plan_tools(probe, goal)
         usage.record_plan(response)
         return response.plan.tools
@@ -526,6 +549,7 @@ class FormalBenchmarkEngine:
             return None
         audio_path = await self.media.extract_audio(case.source, work_dir / "audio.wav")
         audio_bytes = audio_path.read_bytes()
+        usage.start_call()
         response = await self.model.transcribe_audio(audio_bytes)
         usage.record_response(response)
         return response.text.strip() or None
