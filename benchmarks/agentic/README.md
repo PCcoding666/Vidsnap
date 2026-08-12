@@ -46,7 +46,10 @@ Direct first attempts complete-video input. If the endpoint rejects that media
 type during smoke, the runner records the compatibility limitation and uses the
 complete timeline sampled at exactly 2 fps. The fallback is sent through the
 provider's official `video` frame-list content shape, not as unrelated image
-parts or sparse adaptive evidence. The formal run reuses the smoke
+parts or sparse adaptive evidence. To stay below the provider's request-body
+limit, every Direct fallback frame uses the fixed transport profile: 96 pixels
+high, JPEG, FFmpeg qscale 20. This transport resolution is reported as a
+limitation; no timeline frame is omitted. The formal run reuses the smoke
 mode. Fixed always invokes `transcribe_audio` then `sample_evidence`, skipping
 only unavailable physical evidence. Agentic receives a strict JSON tool plan
 and can select only those two acquisition tools. A supplied dataset subtitle is

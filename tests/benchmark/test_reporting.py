@@ -108,6 +108,13 @@ def test_smoke_report_uses_paired_metrics_and_measured_54_case_projection() -> N
     assert report["scope_limitations"] == [
         "MVBench slice covers only Action Sequence; it is not a full MVBench estimate."
     ]
+    assert report["direct_frame_transport_profile"] == {
+        "timeline": "complete",
+        "fps": 2,
+        "height_pixels": 96,
+        "codec": "jpeg",
+        "ffmpeg_qscale": 20,
+    }
     assert report["usage"]["agentic"]["model_calls"] == 18
     projection = report["formal_54_case_projection"]
     assert projection["scale_factor"] == 9.0

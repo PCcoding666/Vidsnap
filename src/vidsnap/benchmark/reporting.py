@@ -13,7 +13,12 @@ from vidsnap.benchmark.formal import (
     superiority_status,
     tool_selection_score,
 )
-from vidsnap.benchmark.live import BenchmarkVariant, DirectInputMode, VariantOutcome
+from vidsnap.benchmark.live import (
+    DIRECT_FRAME_TRANSPORT_PROFILE,
+    BenchmarkVariant,
+    DirectInputMode,
+    VariantOutcome,
+)
 from vidsnap.config import QWEN_MODEL
 from vidsnap.contracts import TerminalState
 
@@ -126,6 +131,9 @@ def build_benchmark_report(
         ),
         "scope_limitations": scope_limitations,
         "direct_input_mode": direct_input_mode,
+        "direct_frame_transport_profile": (
+            DIRECT_FRAME_TRANSPORT_PROFILE if direct_input_mode == "frames_2fps" else None
+        ),
         "accuracy": {
             variant: sum(item.correct for item in items) / len(items)
             for variant, items in grouped.items()

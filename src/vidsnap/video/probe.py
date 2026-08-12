@@ -228,9 +228,9 @@ class FFmpegMediaPort:
             "-i",
             str(source),
             "-vf",
-            f"fps={fps}",
+            f"fps={fps},scale=-2:96",
             "-q:v",
-            "2",
+            "20",
             str(output_pattern),
         )
         frame_paths = sorted(output_dir.glob("frame-*.jpg"))

@@ -31,6 +31,13 @@ from vidsnap.video.sampling import AdaptiveSampler, FrameCandidate
 
 BenchmarkVariant = Literal["direct", "fixed", "agentic"]
 DirectInputMode = Literal["video", "frames_2fps"]
+DIRECT_FRAME_TRANSPORT_PROFILE: dict[str, int | str] = {
+    "timeline": "complete",
+    "fps": 2,
+    "height_pixels": 96,
+    "codec": "jpeg",
+    "ffmpeg_qscale": 20,
+}
 
 
 class UnsupportedVideoInput(ProviderError):

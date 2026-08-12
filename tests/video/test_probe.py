@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import json
 import shutil
+import subprocess
 
 import pytest
 
@@ -50,6 +52,24 @@ async def test_ffmpeg_port_extracts_complete_timeline_in_one_batch(tmp_path) -> 
     assert len(extracted) == 4
     assert [frame.timestamp for frame in extracted] == [0.0, 0.5, 1.0, 1.5]
     assert all(frame.path.exists() for frame in extracted)
+    metadata = json.loads(
+        subprocess.run(
+            [
+                "ffprobe",
+                "-v",
+                "error",
+                "-show_entries",
+                "stream=height",
+                "-of",
+                "json",
+                str(extracted[0].path),
+            ],
+            capture_output=True,
+            check=True,
+            text=True,
+        ).stdout
+    )
+    assert metadata["streams"][0]["height"] == 96
 
 
 def test_high_motion_windows_are_local_and_merged() -> None:
