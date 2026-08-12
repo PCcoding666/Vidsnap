@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
 import runpy
@@ -90,8 +91,8 @@ def test_runner_rejects_output_inside_repository(tmp_path) -> None:
     assert "outside the repository" in result.stderr
 
 
-def test_smoke_validate_only_accepts_six_stratified_external_cases(tmp_path) -> None:
-    """Changing smoke count or skipping hash checks must fail this test."""
+def test_smoke_validate_only_rejects_manifest_outside_committed_preregistration(tmp_path) -> None:
+    """A composition-valid but unregistered manifest must fail before execution."""
     manifest = _write_smoke_manifest(tmp_path)
 
     result = subprocess.run(
@@ -113,15 +114,8 @@ def test_smoke_validate_only_accepts_six_stratified_external_cases(tmp_path) -> 
         check=False,
     )
 
-    assert result.returncode == 0, result.stderr
-    assert json.loads(result.stdout) == {
-        "case_count": 6,
-        "dataset_counts": {"MVBench": 2, "Video-MME": 4},
-        "manifest_sha256": hashlib.sha256(manifest.read_bytes()).hexdigest(),
-        "mvbench_task_family_counts": {"Action Antonym": 2},
-        "phase": "smoke",
-        "status": "VALIDATED",
-    }
+    assert result.returncode == 2
+    assert "committed pre-registration" in result.stderr
 
 
 def test_formal_validation_requires_successful_smoke_report(tmp_path) -> None:
@@ -146,8 +140,8 @@ def test_formal_validation_requires_successful_smoke_report(tmp_path) -> None:
     assert "smoke report" in result.stderr
 
 
-def test_formal_validate_only_checks_multi_task_manifest_before_smoke(tmp_path) -> None:
-    """Offline pre-registration validation must not require a live smoke artifact."""
+def test_formal_validate_only_rejects_unregistered_multi_task_manifest(tmp_path) -> None:
+    """Aggregate task coverage cannot substitute for the committed preregistration."""
     manifest = _write_formal_manifest(tmp_path)
 
     result = subprocess.run(
@@ -167,14 +161,8 @@ def test_formal_validate_only_checks_multi_task_manifest_before_smoke(tmp_path) 
         check=False,
     )
 
-    assert result.returncode == 0, result.stderr
-    payload = json.loads(result.stdout)
-    assert payload["case_count"] == 54
-    assert payload["mvbench_task_family_counts"] == {
-        "Action Antonym": 6,
-        "Action Prediction": 6,
-        "Action Sequence": 6,
-    }
+    assert result.returncode == 2
+    assert "committed pre-registration" in result.stderr
 
 
 def test_smoke_compatibility_probe_uses_largest_registered_payload(tmp_path) -> None:
@@ -222,15 +210,183 @@ def test_formal_composition_rejects_single_mvbench_task_family(tmp_path) -> None
     formal_cases = []
     for index in range(54):
         original = smoke_cases[index % len(smoke_cases)]
+        dataset = "Video-MME" if index < 36 else "MVBench"
         formal_cases.append(
             original.model_copy(
                 update={
                     "case_id": f"formal-{index}",
-                    "dataset": "Video-MME" if index < 36 else "MVBench",
+                    "dataset": dataset,
                     "task_family": ("Information Synopsis" if index < 36 else "Action Antonym"),
+                    "requirements": (
+                        original.requirements if dataset == "Video-MME" else ("visual", "temporal")
+                    ),
                 }
             )
         )
 
-    with __import__("pytest").raises(ValueError, match="three task families"):
+    with __import__("pytest").raises(ValueError, match="three temporal task families"):
         namespace["_validate_composition"](formal_cases, "formal")
+
+
+def test_formal_composition_rejects_non_temporal_mvbench_family(tmp_path) -> None:
+    """A family name alone must not satisfy temporal-task coverage."""
+    namespace = runpy.run_path("scripts/run_agentic_benchmark.py")
+    smoke_cases = namespace["_load_manifest"](_write_smoke_manifest(tmp_path))
+    formal_cases = []
+    families = ("Action Antonym", "Action Sequence", "Action Prediction")
+    for index in range(54):
+        original = smoke_cases[index % len(smoke_cases)]
+        dataset = "Video-MME" if index < 36 else "MVBench"
+        updates = {
+            "case_id": f"formal-{index}",
+            "dataset": dataset,
+            "task_family": (
+                "Information Synopsis" if dataset == "Video-MME" else families[(index - 36) // 6]
+            ),
+        }
+        if dataset == "MVBench" and index == 36:
+            updates["requirements"] = ("visual",)
+        formal_cases.append(original.model_copy(update=updates))
+
+    with __import__("pytest").raises(ValueError, match="temporal task families"):
+        namespace["_validate_composition"](formal_cases, "formal")
+
+
+def test_smoke_gate_rejects_forged_success_report(tmp_path) -> None:
+    """A status string alone must never unlock the formal provider calls."""
+    report = tmp_path / "forged-report.json"
+    report.write_text(json.dumps({"status": "SMOKE_SUCCEEDED", "direct_input_mode": "frames_2fps"}))
+    namespace = runpy.run_path("scripts/run_agentic_benchmark.py")
+
+    with __import__("pytest").raises(ValueError, match="smoke report"):
+        namespace["_load_smoke_gate"](report)
+
+
+def test_smoke_gate_preserves_hashed_projection_provenance(tmp_path) -> None:
+    """A structurally complete gate retains its report digest and measured projection."""
+    from vidsnap.benchmark.manifest import REGISTERED_MANIFEST_SHA256
+    from vidsnap.config import QWEN_MODEL
+
+    usage = {
+        variant: {
+            "model_calls": 6,
+            "evidence_frames": 12,
+            "input_bytes": 1200,
+            "input_tokens": 120,
+            "output_tokens": 12,
+            "latency_seconds": 1.2,
+        }
+        for variant in ("direct", "fixed", "agentic")
+    }
+    projection = {
+        "basis": "provider-reported six-case smoke usage",
+        "scale_factor": 9.0,
+        "usage": {
+            variant: {field: value * 9 for field, value in totals.items()}
+            for variant, totals in usage.items()
+        },
+    }
+    payload = {
+        "phase": "smoke",
+        "status": "SMOKE_SUCCEEDED",
+        "model": QWEN_MODEL,
+        "case_count": 6,
+        "pre_registration_manifest_sha256": REGISTERED_MANIFEST_SHA256["smoke"],
+        "direct_input_mode": "frames_2fps",
+        "usage": usage,
+        "formal_54_case_projection": projection,
+    }
+    report = tmp_path / "report.json"
+    report.write_text(json.dumps(payload, sort_keys=True), encoding="utf-8")
+    namespace = runpy.run_path("scripts/run_agentic_benchmark.py")
+
+    loaded = namespace["_load_smoke_gate"](report)
+    provenance = namespace["_smoke_gate_provenance"](report, loaded)
+
+    assert provenance == {
+        "report_sha256": hashlib.sha256(report.read_bytes()).hexdigest(),
+        "pre_registration_manifest_sha256": REGISTERED_MANIFEST_SHA256["smoke"],
+        "direct_input_mode": "frames_2fps",
+        "formal_54_case_projection": projection,
+    }
+
+
+def test_smoke_gate_rejects_projection_not_derived_from_measured_usage(tmp_path) -> None:
+    """Structurally valid arbitrary projections must not unlock formal calls."""
+    from vidsnap.benchmark.manifest import REGISTERED_MANIFEST_SHA256
+    from vidsnap.config import QWEN_MODEL
+
+    measured = {
+        variant: {
+            "model_calls": 6,
+            "evidence_frames": 12,
+            "input_bytes": 1200,
+            "input_tokens": 120,
+            "output_tokens": 12,
+            "latency_seconds": 1.2,
+        }
+        for variant in ("direct", "fixed", "agentic")
+    }
+    projected = {
+        variant: {field: value * 9 for field, value in totals.items()}
+        for variant, totals in measured.items()
+    }
+    projected["agentic"]["model_calls"] += 1
+    report = tmp_path / "report.json"
+    report.write_text(
+        json.dumps(
+            {
+                "phase": "smoke",
+                "status": "SMOKE_SUCCEEDED",
+                "model": QWEN_MODEL,
+                "case_count": 6,
+                "pre_registration_manifest_sha256": REGISTERED_MANIFEST_SHA256["smoke"],
+                "direct_input_mode": "frames_2fps",
+                "usage": measured,
+                "formal_54_case_projection": {
+                    "basis": "provider-reported six-case smoke usage",
+                    "scale_factor": 9,
+                    "usage": projected,
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    namespace = runpy.run_path("scripts/run_agentic_benchmark.py")
+
+    with __import__("pytest").raises(ValueError, match="derived from measured usage"):
+        namespace["_load_smoke_gate"](report)
+
+
+def test_formal_preflight_persists_smoke_gate_before_provider_init(tmp_path) -> None:
+    """An interrupted formal run must retain which smoke gate authorized it."""
+    namespace = runpy.run_path("scripts/run_agentic_benchmark.py")
+    provenance = {
+        "report_sha256": "a" * 64,
+        "pre_registration_manifest_sha256": "b" * 64,
+        "direct_input_mode": "frames_2fps",
+        "formal_54_case_projection": {"scale_factor": 9},
+    }
+
+    class FailingConfig:
+        @classmethod
+        def from_env(cls):
+            raise RuntimeError("provider init stopped for test")
+
+    namespace["_run_experiment"].__globals__["BenchmarkProviderConfig"] = FailingConfig
+    output_dir = tmp_path / "formal-output"
+
+    with __import__("pytest").raises(RuntimeError, match="provider init stopped"):
+        asyncio.run(
+            namespace["_run_experiment"](
+                [],
+                phase="formal",
+                output_dir=output_dir,
+                seed=20260812,
+                formal_direct_mode="frames_2fps",
+                pre_registration_manifest_sha256="c" * 64,
+                smoke_gate_provenance=provenance,
+            )
+        )
+
+    assert json.loads((output_dir / "smoke-gate.json").read_text(encoding="utf-8")) == provenance

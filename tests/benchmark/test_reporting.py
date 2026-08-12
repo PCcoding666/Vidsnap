@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from vidsnap.benchmark.formal import FormalCase
 from vidsnap.benchmark.live import BenchmarkUsage, VariantOutcome
 from vidsnap.benchmark.reporting import build_benchmark_report
@@ -119,3 +121,45 @@ def test_smoke_report_uses_paired_metrics_and_measured_54_case_projection() -> N
     projection = report["formal_54_case_projection"]
     assert projection["scale_factor"] == 9.0
     assert projection["usage"]["agentic"]["model_calls"] == 162
+    assert isinstance(projection["usage"]["agentic"]["model_calls"], int)
+
+
+@pytest.mark.parametrize(
+    "ineligible_state",
+    (TerminalState.PARTIAL, TerminalState.NO_OP, TerminalState.FAILED),
+)
+def test_ineligible_run_can_never_claim_harness_superior(
+    ineligible_state: TerminalState,
+) -> None:
+    """A positive CI cannot override an incomplete or unverified path."""
+    cases = _cases()
+    outcomes = []
+    for index, case in enumerate(cases):
+        direct = _outcome(case, "direct", correct=True, calls=1)
+        if index == 0:
+            direct = direct.model_copy(
+                update={
+                    "terminal_state": ineligible_state,
+                    "verifier_passed": False,
+                }
+            )
+        outcomes.extend(
+            [
+                direct,
+                _outcome(case, "fixed", correct=False, calls=1),
+                _outcome(case, "agentic", correct=True, calls=2),
+            ]
+        )
+
+    report = build_benchmark_report(
+        cases,
+        outcomes,
+        phase="formal",
+        seed=20260812,
+        direct_input_mode="frames_2fps",
+        pre_registration_manifest_sha256="f" * 64,
+    )
+
+    assert report["paired_accuracy_delta"]["fixed_to_agentic"]["lower"] == 1.0
+    assert report["status"] == "PARTIAL"
+    assert report["conclusion"] == "NOT_YET_SUPERIOR"

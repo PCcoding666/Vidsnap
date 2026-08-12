@@ -7,6 +7,7 @@ import argparse
 import asyncio
 import hashlib
 import json
+import math
 import platform
 import random
 from collections import Counter
@@ -27,12 +28,23 @@ from vidsnap.benchmark.live import (
     UnsupportedVideoInput,
     VariantOutcome,
 )
+from vidsnap.benchmark.manifest import MVBENCH_TASK_SLUGS, REGISTERED_MANIFEST_SHA256
 from vidsnap.benchmark.reporting import build_benchmark_report
+from vidsnap.config import QWEN_MODEL
 from vidsnap.contracts import TerminalState
 from vidsnap.video.probe import FFmpegMediaPort
 
 Phase = Literal["smoke", "formal"]
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
+USAGE_FIELDS = (
+    "model_calls",
+    "evidence_frames",
+    "input_bytes",
+    "input_tokens",
+    "output_tokens",
+    "latency_seconds",
+)
+COUNT_USAGE_FIELDS = USAGE_FIELDS[:-1]
 
 
 def _is_within(path: Path, parent: Path) -> bool:
@@ -49,6 +61,15 @@ def _sha256(path: Path) -> str:
         for chunk in iter(lambda: handle.read(1024 * 1024), b""):
             digest.update(chunk)
     return digest.hexdigest()
+
+
+def _atomic_json_write(path: Path, payload: dict[str, object]) -> None:
+    temporary = path.with_name(f".{path.name}.tmp")
+    temporary.write_text(
+        json.dumps(payload, ensure_ascii=True, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    temporary.replace(path)
 
 
 def _load_manifest(path: Path) -> list[FormalCase]:
@@ -98,10 +119,44 @@ def _validate_composition(cases: list[FormalCase], phase: Phase) -> dict[str, in
     if {case.duration_stratum for case in cases} != {"short", "medium", "long"}:
         raise ValueError("manifest must cover short, medium, and long durations")
     if phase == "formal":
-        mvbench_families = Counter(case.task_family for case in cases if case.dataset == "MVBench")
+        mvbench_cases = [case for case in cases if case.dataset == "MVBench"]
+        if any("temporal" not in case.requirements for case in mvbench_cases):
+            raise ValueError("formal MVBench cases must be registered as temporal task families")
+        mvbench_families = Counter(case.task_family for case in mvbench_cases)
+        if not set(mvbench_families).issubset(MVBENCH_TASK_SLUGS):
+            raise ValueError("formal MVBench cases must use registered temporal task families")
         if len(mvbench_families) < 3 or min(mvbench_families.values()) < 4:
-            raise ValueError("formal MVBench cases must cover three task families with four each")
+            raise ValueError(
+                "formal MVBench cases must cover three temporal task families with four each"
+            )
     return dict(sorted(dataset_counts.items()))
+
+
+def _validate_usage_totals(value: object, *, context: str) -> dict[str, object]:
+    if not isinstance(value, dict):
+        raise ValueError(f"smoke report has no {context} usage totals")
+    for field in USAGE_FIELDS:
+        measured = value.get(field)
+        if field in COUNT_USAGE_FIELDS:
+            valid = isinstance(measured, int) and not isinstance(measured, bool) and measured >= 0
+        else:
+            valid = (
+                isinstance(measured, (int, float))
+                and not isinstance(measured, bool)
+                and math.isfinite(measured)
+                and measured >= 0
+            )
+        if not valid:
+            raise ValueError(f"smoke report has invalid {context} {field}")
+    return value
+
+
+def _validate_usage_by_variant(value: object, *, context: str) -> dict[str, object]:
+    if not isinstance(value, dict) or set(value) != {"direct", "fixed", "agentic"}:
+        raise ValueError(f"smoke report has invalid {context} variants")
+    for variant in ("direct", "fixed", "agentic"):
+        _validate_usage_totals(value[variant], context=f"{context} {variant}")
+    return value
 
 
 def _load_smoke_gate(path: Path | None) -> dict[str, object]:
@@ -113,9 +168,54 @@ def _load_smoke_gate(path: Path | None) -> dict[str, object]:
         raise ValueError("smoke report cannot be validated") from error
     if not isinstance(payload, dict) or payload.get("status") != "SMOKE_SUCCEEDED":
         raise ValueError("smoke report is not successful")
+    if payload.get("phase") != "smoke" or payload.get("case_count") != 6:
+        raise ValueError("smoke report has invalid phase or case count")
+    if payload.get("model") != QWEN_MODEL:
+        raise ValueError("smoke report has an invalid fixed model")
+    if payload.get("pre_registration_manifest_sha256") != REGISTERED_MANIFEST_SHA256["smoke"]:
+        raise ValueError("smoke report does not match the committed pre-registration")
     if payload.get("direct_input_mode") not in {"video", "frames_2fps"}:
         raise ValueError("smoke report has no registered Direct input mode")
+    measured_usage = _validate_usage_by_variant(payload.get("usage"), context="measured")
+    projection = payload.get("formal_54_case_projection")
+    if not isinstance(projection, dict):
+        raise ValueError("smoke report has no measured formal projection")
+    if projection.get("basis") != "provider-reported six-case smoke usage":
+        raise ValueError("smoke report has an invalid formal projection basis")
+    scale_factor = projection.get("scale_factor")
+    if (
+        isinstance(scale_factor, bool)
+        or not isinstance(scale_factor, (int, float))
+        or not math.isfinite(scale_factor)
+        or scale_factor != 9
+    ):
+        raise ValueError("smoke report has an invalid formal projection scale")
+    projected_usage = _validate_usage_by_variant(projection.get("usage"), context="projected")
+    for variant in ("direct", "fixed", "agentic"):
+        measured_totals = cast(dict[str, object], measured_usage[variant])
+        projected_totals = cast(dict[str, object], projected_usage[variant])
+        for field in USAGE_FIELDS:
+            measured = cast(int | float, measured_totals[field])
+            projected = cast(int | float, projected_totals[field])
+            expected = measured * scale_factor
+            matches = (
+                projected == expected
+                if field in COUNT_USAGE_FIELDS
+                else math.isclose(projected, expected, rel_tol=1e-12, abs_tol=1e-12)
+            )
+            if not matches:
+                raise ValueError("smoke projection is not derived from measured usage")
     return payload
+
+
+def _smoke_gate_provenance(path: Path, payload: dict[str, object]) -> dict[str, object]:
+    """Retain only immutable smoke-gate evidence needed to audit a formal run."""
+    return {
+        "report_sha256": _sha256(path),
+        "pre_registration_manifest_sha256": payload["pre_registration_manifest_sha256"],
+        "direct_input_mode": payload["direct_input_mode"],
+        "formal_54_case_projection": payload["formal_54_case_projection"],
+    }
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -178,8 +278,11 @@ async def _run_experiment(
     seed: int,
     formal_direct_mode: DirectInputMode | None,
     pre_registration_manifest_sha256: str,
+    smoke_gate_provenance: dict[str, object] | None = None,
 ) -> dict[str, object]:
     output_dir.mkdir(parents=True, exist_ok=False)
+    if smoke_gate_provenance is not None:
+        _atomic_json_write(output_dir / "smoke-gate.json", smoke_gate_provenance)
     config = BenchmarkProviderConfig.from_env()
     engine = FormalBenchmarkEngine(
         media=FFmpegMediaPort(),
@@ -269,6 +372,8 @@ async def _run_experiment(
     }
     if compatibility_probe is not None:
         report["direct_compatibility_probe"] = compatibility_probe
+    if smoke_gate_provenance is not None:
+        report["smoke_gate"] = smoke_gate_provenance
     outcomes_path = output_dir / "outcomes.jsonl"
     outcomes_path.write_text(
         "".join(
@@ -293,15 +398,24 @@ def main() -> None:
         parser.error("benchmark output directory must be outside the repository")
     phase: Phase = args.phase
     smoke_gate: dict[str, object] | None = None
+    smoke_gate_provenance: dict[str, object] | None = None
     if phase == "formal" and not args.validate_only:
         try:
-            smoke_gate = _load_smoke_gate(args.smoke_report)
+            smoke_report_path = args.smoke_report.resolve() if args.smoke_report else None
+            smoke_gate = _load_smoke_gate(smoke_report_path)
+            if smoke_report_path is None:  # pragma: no cover - guarded by _load_smoke_gate
+                raise ValueError("a successful smoke report is required for the formal phase")
+            smoke_gate_provenance = _smoke_gate_provenance(smoke_report_path, smoke_gate)
         except ValueError as error:
             parser.error(str(error))
     try:
-        cases = _load_manifest(args.manifest.resolve())
+        manifest_path = args.manifest.resolve()
+        manifest_sha256 = _sha256(manifest_path)
+        if manifest_sha256 != REGISTERED_MANIFEST_SHA256[phase]:
+            raise ValueError("manifest does not match the committed pre-registration")
+        cases = _load_manifest(manifest_path)
         dataset_counts = _validate_composition(cases, phase)
-    except ValueError as error:
+    except (OSError, ValueError) as error:
         parser.error(str(error))
     if args.validate_only:
         mvbench_task_family_counts = Counter(
@@ -315,7 +429,7 @@ def main() -> None:
                     "case_count": len(cases),
                     "dataset_counts": dataset_counts,
                     "mvbench_task_family_counts": dict(sorted(mvbench_task_family_counts.items())),
-                    "manifest_sha256": _sha256(args.manifest.resolve()),
+                    "manifest_sha256": manifest_sha256,
                 },
                 ensure_ascii=True,
                 sort_keys=True,
@@ -333,7 +447,8 @@ def main() -> None:
                 output_dir=output_dir,
                 seed=args.seed,
                 formal_direct_mode=formal_direct_mode,
-                pre_registration_manifest_sha256=_sha256(args.manifest.resolve()),
+                pre_registration_manifest_sha256=manifest_sha256,
+                smoke_gate_provenance=smoke_gate_provenance,
             )
         )
     except (OSError, RuntimeError, ValueError):

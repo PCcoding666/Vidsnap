@@ -39,6 +39,7 @@ def test_mvbench_formal_selection_covers_three_temporal_task_families() -> None:
 
     assert len(family_counts) >= 3
     assert min(family_counts.values()) >= 4
+    assert all("temporal" in item.requirements for item in FORMAL_SELECTION["MVBench"])
 
 
 def test_every_registered_case_has_independent_tool_label_and_reason() -> None:

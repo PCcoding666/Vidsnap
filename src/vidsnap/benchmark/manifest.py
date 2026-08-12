@@ -24,6 +24,11 @@ MVBENCH_TASK_SLUGS = {
     "Action Sequence": "action_sequence",
     "Action Prediction": "action_prediction",
 }
+REGISTERED_MANIFEST_SHA256: dict[Literal["smoke", "formal"], str] = {
+    "smoke": "e8e46847d2a9f1b7f53cf642b06eb9e92a8dec252df885b168ee33e87803b38a",
+    "formal": "34e23c8bd588725cd6564152da34f0ea5d2f5063802a7f49b21b772adb951b74",
+}
+REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
 
 
 @dataclass(frozen=True, slots=True)
@@ -495,6 +500,12 @@ def _mvbench_case(
 def prepare_manifests(root: Path) -> dict[str, Path]:
     """Create hash-bound smoke and formal manifests outside the repository."""
     root = root.resolve()
+    try:
+        root.relative_to(REPOSITORY_ROOT)
+    except ValueError:
+        pass
+    else:
+        raise ValueError("benchmark root must be outside the repository")
     video_mme_rows = _load_video_mme_rows(root)
     mvbench_rows: dict[str, list[dict[str, object]]] = {}
     for task_slug in MVBENCH_TASK_SLUGS.values():

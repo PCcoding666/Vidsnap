@@ -31,7 +31,9 @@ official source URL, revision, license notice, case ID, local absolute paths,
 video SHA-256, MCQ fields, duration/audio/requirement strata, and expected tools.
 `expected_tools` and `tool_annotation_reason` are independent, human-reviewed
 pre-registration fields; they are never derived from `requirements` or changed
-after outcomes are observed. The report binds them to a manifest SHA-256.
+after outcomes are observed. The runner accepts only the exact smoke/formal
+manifest SHA-256 values committed with this protocol, so a post-outcome label
+edit cannot be used for another run without an explicit reviewed code change.
 
 ## Registered composition
 
@@ -104,7 +106,12 @@ Run smoke through the non-printing Hermes launcher:
 
 Review `smoke-results/report.json`. It contains measured usage and a 54-case
 projection with no guessed currency conversion. Only a `SMOKE_SUCCEEDED` report
-can unlock formal execution:
+with the registered model, six-case manifest hash, complete per-variant usage,
+and measured projection can unlock formal execution. The formal report records
+the smoke report SHA-256 and carries its projection forward for auditability.
+It also atomically writes `smoke-gate.json` in the external formal output
+directory before provider initialization, so an interrupted run retains its
+authorization provenance:
 
 ```bash
 .venv/bin/python scripts/run_agentic_benchmark.py \
@@ -129,4 +136,5 @@ accuracy intervals, `pre_registered_tool_selection_alignment`, cost fields,
 case provenance, task-family coverage, and the pre-registration manifest hash.
 The only positive label is `HARNESS_SUPERIOR`, and it is emitted only when the
 Agentic-minus-Fixed paired 95% bootstrap CI lower bound is strictly above zero.
-Every other measured result is `NOT_YET_SUPERIOR`.
+Every other result, including a run with any failed path, is
+`NOT_YET_SUPERIOR`.

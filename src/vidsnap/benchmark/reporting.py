@@ -102,8 +102,10 @@ def build_benchmark_report(
         [set(case.expected_tools) for case in cases],
     )
     usage = {variant: _usage_totals(items) for variant, items in grouped.items()}
-    failed_states = {TerminalState.BLOCKED, TerminalState.EXHAUSTED, TerminalState.FAILED}
-    has_failed_path = any(outcome.terminal_state in failed_states for outcome in outcomes)
+    has_failed_path = any(
+        outcome.terminal_state is not TerminalState.SUCCEEDED or not outcome.verifier_passed
+        for outcome in outcomes
+    )
     status = (
         ("SMOKE_FAILED" if has_failed_path else "SMOKE_SUCCEEDED")
         if phase == "smoke"
@@ -148,7 +150,9 @@ def build_benchmark_report(
             variant: sum(item.verifier_passed for item in items) / len(items)
             for variant, items in grouped.items()
         },
-        "conclusion": superiority_status(fixed_to_agentic),
+        "conclusion": (
+            "NOT_YET_SUPERIOR" if has_failed_path else superiority_status(fixed_to_agentic)
+        ),
         "case_composition": [
             {
                 "case_id": case.case_id,
@@ -173,7 +177,14 @@ def build_benchmark_report(
             "basis": "provider-reported six-case smoke usage",
             "scale_factor": scale_factor,
             "usage": {
-                variant: {key: value * scale_factor for key, value in totals.items()}
+                variant: {
+                    key: (
+                        value * scale_factor
+                        if key == "latency_seconds"
+                        else int(value * scale_factor)
+                    )
+                    for key, value in totals.items()
+                }
                 for variant, totals in usage.items()
             },
         }
