@@ -22,6 +22,7 @@ def _cases() -> list[FormalCase]:
                 source_url="https://example.invalid/official",
                 source=Path(f"/external/video-{index}.mp4"),
                 source_sha256=f"{index:x}" * 64,
+                task_family="Information Synopsis" if index < 4 else "Action Sequence",
                 question="What happens?",
                 options={"A": "First", "B": "Second"},
                 answer="A",
@@ -29,6 +30,7 @@ def _cases() -> list[FormalCase]:
                 duration_stratum=("short", "medium", "long")[index % 3],
                 requirements=(("speech",) if index % 2 == 0 else ("visual",)),
                 expected_tools=(("transcribe_audio",) if index % 2 == 0 else ("sample_evidence",)),
+                tool_annotation_reason=("speech-required" if index % 2 == 0 else "visual-required"),
             )
         )
     return cases
@@ -90,6 +92,7 @@ def test_smoke_report_uses_paired_metrics_and_measured_54_case_projection() -> N
         phase="smoke",
         seed=20260812,
         direct_input_mode="frames_2fps",
+        pre_registration_manifest_sha256="f" * 64,
     )
 
     assert report["status"] == "SMOKE_SUCCEEDED"
@@ -99,7 +102,12 @@ def test_smoke_report_uses_paired_metrics_and_measured_54_case_projection() -> N
         "fixed": 0.5,
     }
     assert report["conclusion"] == "NOT_YET_SUPERIOR"
-    assert report["tool_selection"]["f1"] == 1.0
+    assert report["pre_registered_tool_selection_alignment"]["f1"] == 1.0
+    assert "tool_selection" not in report
+    assert report["pre_registration_manifest_sha256"] == "f" * 64
+    assert report["scope_limitations"] == [
+        "MVBench slice covers only Action Sequence; it is not a full MVBench estimate."
+    ]
     assert report["usage"]["agentic"]["model_calls"] == 18
     projection = report["formal_54_case_projection"]
     assert projection["scale_factor"] == 9.0

@@ -59,12 +59,17 @@ def build_benchmark_report(
     phase: BenchmarkPhase,
     seed: int,
     direct_input_mode: DirectInputMode,
+    pre_registration_manifest_sha256: str,
 ) -> dict[str, object]:
     """Build the pre-registered report and strict superiority conclusion."""
     if not cases:
         raise ValueError("benchmark report requires cases")
     if len(outcomes) != len(cases) * 3:
         raise ValueError("benchmark report requires three outcomes per case")
+    if len(pre_registration_manifest_sha256) != 64 or any(
+        character not in "0123456789abcdef" for character in pre_registration_manifest_sha256
+    ):
+        raise ValueError("pre-registration manifest SHA-256 is invalid")
     expected_pairs = {
         (case.case_id, variant) for case in cases for variant in ("direct", "fixed", "agentic")
     }
@@ -99,12 +104,27 @@ def build_benchmark_report(
         if phase == "smoke"
         else ("PARTIAL" if has_failed_path else "COMPLETED")
     )
+    mvbench_task_families = sorted(
+        {case.task_family for case in cases if case.dataset == "MVBench"}
+    )
+    scope_limitations = []
+    if mvbench_task_families:
+        scope_limitations.append(
+            "MVBench slice covers only "
+            + ", ".join(mvbench_task_families)
+            + "; it is not a full MVBench estimate."
+        )
     report: dict[str, object] = {
         "phase": phase,
         "status": status,
         "model": QWEN_MODEL,
         "case_count": len(cases),
+        "pre_registration_manifest_sha256": pre_registration_manifest_sha256,
         "dataset_counts": dict(sorted(Counter(case.dataset for case in cases).items())),
+        "mvbench_task_family_counts": dict(
+            sorted(Counter(case.task_family for case in cases if case.dataset == "MVBench").items())
+        ),
+        "scope_limitations": scope_limitations,
         "direct_input_mode": direct_input_mode,
         "accuracy": {
             variant: sum(item.correct for item in items) / len(items)
@@ -114,7 +134,7 @@ def build_benchmark_report(
             "direct_to_fixed": asdict(direct_to_fixed),
             "fixed_to_agentic": asdict(fixed_to_agentic),
         },
-        "tool_selection": asdict(tool_score),
+        "pre_registered_tool_selection_alignment": asdict(tool_score),
         "usage": usage,
         "verifier_gate_pass_rate": {
             variant: sum(item.verifier_passed for item in items) / len(items)
@@ -129,9 +149,12 @@ def build_benchmark_report(
                 "dataset_license": case.dataset_license,
                 "source_url": case.source_url,
                 "source_sha256": case.source_sha256,
+                "task_family": case.task_family,
                 "duration_stratum": case.duration_stratum,
                 "has_audio": case.has_audio,
                 "requirements": list(case.requirements),
+                "expected_tools": list(case.expected_tools),
+                "tool_annotation_reason": case.tool_annotation_reason,
             }
             for case in cases
         ],

@@ -9,12 +9,21 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
-from vidsnap.benchmark.formal import EvidenceRequirement, FormalCase
+from vidsnap.benchmark.formal import (
+    EvidenceRequirement,
+    FormalCase,
+    ToolAnnotationReason,
+)
 from vidsnap.contracts import AcquisitionTool
 
 VIDEO_MME_REVISION = "ead1408f75b618502df9a1d8e0950166bf0a2a0b"
 MVBENCH_ANNOTATION_REVISION = "230a2d4fac8900333c61754641c7a13e069ac9c6"
 MVBENCH_VIDEO_REVISION = "a776e554280b99b70f00cc3eacd69a65e0727efc"
+MVBENCH_TASK_SLUGS = {
+    "Action Antonym": "action_antonym",
+    "Action Sequence": "action_sequence",
+    "Action Prediction": "action_prediction",
+}
 
 
 @dataclass(frozen=True, slots=True)
@@ -22,68 +31,303 @@ class RegisteredCase:
     """One public case ID plus a human pre-registration of needed evidence."""
 
     case_id: str
+    task_family: str
     requirements: tuple[EvidenceRequirement, ...]
+    expected_tools: tuple[AcquisitionTool, ...]
+    tool_annotation_reason: ToolAnnotationReason
 
 
 def _registered(
     case_id: str,
-    *requirements: EvidenceRequirement,
+    task_family: str,
+    requirements: tuple[EvidenceRequirement, ...],
+    expected_tools: tuple[AcquisitionTool, ...],
+    tool_annotation_reason: ToolAnnotationReason,
 ) -> RegisteredCase:
-    return RegisteredCase(case_id, requirements)
+    return RegisteredCase(
+        case_id,
+        task_family,
+        requirements,
+        expected_tools,
+        tool_annotation_reason,
+    )
 
 
 FORMAL_SELECTION: dict[Literal["Video-MME", "MVBench"], tuple[RegisteredCase, ...]] = {
     "Video-MME": (
-        _registered("050-1", "visual", "temporal"),
-        _registered("050-2", "visual", "temporal"),
-        _registered("050-3", "speech"),
-        _registered("119-1", "visual"),
-        _registered("119-2", "visual"),
-        _registered("119-3", "speech", "visual"),
-        _registered("212-1", "visual", "temporal"),
-        _registered("212-2", "visual"),
-        _registered("212-3", "visual"),
-        _registered("007-1", "visual"),
-        _registered("007-2", "visual", "temporal"),
-        _registered("007-3", "visual"),
-        _registered("527-1", "visual", "temporal"),
-        _registered("527-2", "visual"),
-        _registered("527-3", "visual"),
-        _registered("599-1", "visual"),
-        _registered("599-2", "visual", "temporal"),
-        _registered("599-3", "visual"),
-        _registered("482-1", "speech", "visual"),
-        _registered("482-2", "visual", "temporal"),
-        _registered("482-3", "speech"),
-        _registered("428-1", "speech"),
-        _registered("428-2", "visual"),
-        _registered("428-3", "speech", "visual"),
-        _registered("673-1", "speech"),
-        _registered("673-2", "speech", "temporal"),
-        _registered("673-3", "speech"),
-        _registered("634-1", "speech"),
-        _registered("634-2", "speech", "temporal"),
-        _registered("634-3", "speech"),
-        _registered("743-1", "speech", "visual"),
-        _registered("743-2", "visual", "temporal"),
-        _registered("743-3", "visual", "temporal"),
-        _registered("847-1", "visual"),
-        _registered("847-2", "visual"),
-        _registered("847-3", "visual", "temporal"),
+        _registered(
+            "050-1",
+            "Temporal Perception",
+            ("visual", "temporal"),
+            ("sample_evidence",),
+            "visual-required",
+        ),
+        _registered(
+            "050-2",
+            "Temporal Perception",
+            ("visual", "temporal"),
+            ("sample_evidence",),
+            "visual-required",
+        ),
+        _registered(
+            "050-3", "Spatial Perception", ("speech",), ("transcribe_audio",), "speech-required"
+        ),
+        _registered(
+            "119-1", "Information Synopsis", ("visual",), ("sample_evidence",), "visual-required"
+        ),
+        _registered(
+            "119-2", "Attribute Perception", ("visual",), ("sample_evidence",), "visual-required"
+        ),
+        _registered(
+            "119-3",
+            "Information Synopsis",
+            ("speech", "visual"),
+            ("transcribe_audio", "sample_evidence"),
+            "both-required",
+        ),
+        _registered(
+            "212-1",
+            "Action Recognition",
+            ("visual", "temporal"),
+            ("sample_evidence",),
+            "visual-required",
+        ),
+        _registered(
+            "212-2", "Object Reasoning", ("visual",), ("sample_evidence",), "visual-required"
+        ),
+        _registered(
+            "212-3", "Attribute Perception", ("visual",), ("sample_evidence",), "visual-required"
+        ),
+        _registered(
+            "007-1", "Action Recognition", ("visual",), ("sample_evidence",), "visual-required"
+        ),
+        _registered(
+            "007-2",
+            "Temporal Reasoning",
+            ("visual", "temporal"),
+            ("sample_evidence",),
+            "visual-required",
+        ),
+        _registered("007-3", "OCR Problems", ("visual",), ("sample_evidence",), "visual-required"),
+        _registered(
+            "527-1",
+            "Temporal Reasoning",
+            ("visual", "temporal"),
+            ("sample_evidence",),
+            "visual-required",
+        ),
+        _registered(
+            "527-2", "Counting Problem", ("visual",), ("sample_evidence",), "visual-required"
+        ),
+        _registered("527-3", "OCR Problems", ("visual",), ("sample_evidence",), "visual-required"),
+        _registered("599-1", "OCR Problems", ("visual",), ("sample_evidence",), "visual-required"),
+        _registered(
+            "599-2",
+            "Temporal Reasoning",
+            ("visual", "temporal"),
+            ("sample_evidence",),
+            "visual-required",
+        ),
+        _registered("599-3", "OCR Problems", ("visual",), ("sample_evidence",), "visual-required"),
+        _registered(
+            "482-1",
+            "Object Reasoning",
+            ("speech", "visual"),
+            ("transcribe_audio", "sample_evidence"),
+            "both-required",
+        ),
+        _registered(
+            "482-2", "OCR Problems", ("visual", "temporal"), ("sample_evidence",), "visual-required"
+        ),
+        _registered(
+            "482-3", "Object Reasoning", ("speech",), ("transcribe_audio",), "speech-required"
+        ),
+        _registered(
+            "428-1", "Information Synopsis", ("speech",), ("transcribe_audio",), "speech-required"
+        ),
+        _registered(
+            "428-2", "Attribute Perception", ("visual",), ("sample_evidence",), "visual-required"
+        ),
+        _registered(
+            "428-3",
+            "Object Reasoning",
+            ("speech", "visual"),
+            ("transcribe_audio", "sample_evidence"),
+            "both-required",
+        ),
+        _registered(
+            "673-1", "Information Synopsis", ("speech",), ("transcribe_audio",), "speech-required"
+        ),
+        _registered(
+            "673-2",
+            "Temporal Reasoning",
+            ("speech", "temporal"),
+            ("transcribe_audio", "sample_evidence"),
+            "both-required",
+        ),
+        _registered(
+            "673-3", "Object Reasoning", ("speech",), ("transcribe_audio",), "speech-required"
+        ),
+        _registered(
+            "634-1", "Information Synopsis", ("speech",), ("transcribe_audio",), "speech-required"
+        ),
+        _registered(
+            "634-2",
+            "Temporal Reasoning",
+            ("speech", "temporal"),
+            ("transcribe_audio", "sample_evidence"),
+            "both-required",
+        ),
+        _registered(
+            "634-3", "Information Synopsis", ("speech",), ("transcribe_audio",), "speech-required"
+        ),
+        _registered(
+            "743-1",
+            "Object Reasoning",
+            ("speech", "visual"),
+            ("transcribe_audio", "sample_evidence"),
+            "both-required",
+        ),
+        _registered(
+            "743-2",
+            "Counting Problem",
+            ("visual", "temporal"),
+            ("sample_evidence",),
+            "visual-required",
+        ),
+        _registered(
+            "743-3",
+            "Action Reasoning",
+            ("visual", "temporal"),
+            ("sample_evidence",),
+            "visual-required",
+        ),
+        _registered(
+            "847-1", "Information Synopsis", ("visual",), ("sample_evidence",), "visual-required"
+        ),
+        _registered(
+            "847-2", "Spatial Reasoning", ("visual",), ("sample_evidence",), "visual-required"
+        ),
+        _registered(
+            "847-3",
+            "Spatial Perception",
+            ("visual", "temporal"),
+            ("sample_evidence",),
+            "visual-required",
+        ),
     ),
-    "MVBench": tuple(_registered(str(index), "visual", "temporal") for index in range(18)),
+    "MVBench": (
+        _registered(
+            "0", "Action Antonym", ("visual", "temporal"), ("sample_evidence",), "visual-required"
+        ),
+        _registered(
+            "1", "Action Antonym", ("visual", "temporal"), ("sample_evidence",), "visual-required"
+        ),
+        _registered(
+            "2", "Action Antonym", ("visual", "temporal"), ("sample_evidence",), "visual-required"
+        ),
+        _registered(
+            "3", "Action Antonym", ("visual", "temporal"), ("sample_evidence",), "visual-required"
+        ),
+        _registered(
+            "4", "Action Antonym", ("visual", "temporal"), ("sample_evidence",), "visual-required"
+        ),
+        _registered(
+            "5", "Action Antonym", ("visual", "temporal"), ("sample_evidence",), "visual-required"
+        ),
+        _registered(
+            "0", "Action Sequence", ("visual", "temporal"), ("sample_evidence",), "visual-required"
+        ),
+        _registered(
+            "1", "Action Sequence", ("visual", "temporal"), ("sample_evidence",), "visual-required"
+        ),
+        _registered(
+            "2", "Action Sequence", ("visual", "temporal"), ("sample_evidence",), "visual-required"
+        ),
+        _registered(
+            "3", "Action Sequence", ("visual", "temporal"), ("sample_evidence",), "visual-required"
+        ),
+        _registered(
+            "4", "Action Sequence", ("visual", "temporal"), ("sample_evidence",), "visual-required"
+        ),
+        _registered(
+            "5", "Action Sequence", ("visual", "temporal"), ("sample_evidence",), "visual-required"
+        ),
+        _registered(
+            "0",
+            "Action Prediction",
+            ("visual", "temporal"),
+            ("sample_evidence",),
+            "visual-required",
+        ),
+        _registered(
+            "1",
+            "Action Prediction",
+            ("visual", "temporal"),
+            ("sample_evidence",),
+            "visual-required",
+        ),
+        _registered(
+            "2",
+            "Action Prediction",
+            ("visual", "temporal"),
+            ("sample_evidence",),
+            "visual-required",
+        ),
+        _registered(
+            "3",
+            "Action Prediction",
+            ("visual", "temporal"),
+            ("sample_evidence",),
+            "visual-required",
+        ),
+        _registered(
+            "4",
+            "Action Prediction",
+            ("visual", "temporal"),
+            ("sample_evidence",),
+            "visual-required",
+        ),
+        _registered(
+            "5",
+            "Action Prediction",
+            ("visual", "temporal"),
+            ("sample_evidence",),
+            "visual-required",
+        ),
+    ),
 }
 
 SMOKE_SELECTION: dict[Literal["Video-MME", "MVBench"], tuple[RegisteredCase, ...]] = {
     "Video-MME": (
-        _registered("069-2", "visual"),
-        _registered("395-2", "visual", "temporal"),
-        _registered("419-1", "speech"),
-        _registered("701-2", "speech", "temporal"),
+        _registered(
+            "069-2", "Object Recognition", ("visual",), ("sample_evidence",), "visual-required"
+        ),
+        _registered(
+            "395-2",
+            "Action Recognition",
+            ("visual", "temporal"),
+            ("sample_evidence",),
+            "visual-required",
+        ),
+        _registered(
+            "419-1", "Information Synopsis", ("speech",), ("transcribe_audio",), "speech-required"
+        ),
+        _registered(
+            "701-2",
+            "Action Reasoning",
+            ("speech", "temporal"),
+            ("transcribe_audio", "sample_evidence"),
+            "both-required",
+        ),
     ),
     "MVBench": (
-        _registered("18", "visual", "temporal"),
-        _registered("19", "visual", "temporal"),
+        _registered(
+            "18", "Action Antonym", ("visual", "temporal"), ("sample_evidence",), "visual-required"
+        ),
+        _registered(
+            "19", "Action Antonym", ("visual", "temporal"), ("sample_evidence",), "visual-required"
+        ),
     ),
 }
 
@@ -126,17 +370,6 @@ def _actual_duration_stratum(duration: float) -> Literal["short", "medium", "lon
     return "long"
 
 
-def _expected_tools(
-    requirements: tuple[EvidenceRequirement, ...],
-) -> tuple[AcquisitionTool, ...]:
-    tools: list[AcquisitionTool] = []
-    if "speech" in requirements:
-        tools.append("transcribe_audio")
-    if "visual" in requirements or "temporal" in requirements:
-        tools.append("sample_evidence")
-    return tuple(tools)
-
-
 def _option_map(options: list[object]) -> dict[str, str]:
     mapped: dict[str, str] = {}
     for index, option in enumerate(options):
@@ -177,6 +410,8 @@ def _video_mme_case(
     duration_stratum = _actual_duration_stratum(duration)
     if duration_stratum != row["duration"]:
         raise ValueError(f"Video-MME duration stratum mismatch for {registered.case_id}")
+    if registered.task_family != row["task_type"]:
+        raise ValueError(f"Video-MME task family mismatch for {registered.case_id}")
     subtitle = root / "annotations" / "videomme-subtitles" / "subtitle" / f"{video_id}.srt"
     answer = str(row["answer"]).strip().removesuffix(".")
     raw_options = row["options"]
@@ -192,6 +427,7 @@ def _video_mme_case(
         source_url=str(row["url"]),
         source=source,
         source_sha256=_sha256(source),
+        task_family=registered.task_family,
         question=str(row["question"]),
         options=_option_map(raw_options),
         answer=answer,
@@ -199,21 +435,28 @@ def _video_mme_case(
         has_audio=has_audio,
         duration_stratum=duration_stratum,
         requirements=registered.requirements,
-        expected_tools=_expected_tools(registered.requirements),
+        expected_tools=registered.expected_tools,
+        tool_annotation_reason=registered.tool_annotation_reason,
     )
 
 
 def _mvbench_case(
     root: Path,
     registered: RegisteredCase,
-    rows: list[dict[str, object]],
+    rows_by_task: dict[str, list[dict[str, object]]],
 ) -> FormalCase:
+    task_slug = MVBENCH_TASK_SLUGS[registered.task_family]
+    rows = rows_by_task[task_slug]
     row_index = int(registered.case_id)
     row = rows[row_index]
     video_id = Path(str(row["video"])).stem
-    source = root / "media" / "mvbench" / f"{video_id}.mp4"
+    if task_slug == "action_antonym":
+        normalized_name = f"{video_id}.mp4"
+    else:
+        normalized_name = f"{video_id}_{row['start']}_{row['end']}.mp4"
+    source = root / "media" / "mvbench" / task_slug / normalized_name
     if not source.is_file():
-        raise ValueError(f"missing MVBench video {video_id}")
+        raise ValueError(f"missing MVBench video {task_slug}/{normalized_name}")
     duration, has_audio = _probe(source)
     raw_candidates = row["candidates"]
     if not isinstance(raw_candidates, list):
@@ -225,7 +468,7 @@ def _mvbench_case(
     except ValueError as error:
         raise ValueError(f"MVBench answer is not a candidate at row {row_index}") from error
     return FormalCase(
-        case_id=f"mvbench:action_antonym:{row_index}",
+        case_id=f"mvbench:{task_slug}:{row_index}",
         dataset="MVBench",
         dataset_version=(
             f"annotations:{MVBENCH_ANNOTATION_REVISION};video:{MVBENCH_VIDEO_REVISION}"
@@ -237,13 +480,15 @@ def _mvbench_case(
         source_url="https://huggingface.co/datasets/OpenGVLab/MVBench",
         source=source,
         source_sha256=_sha256(source),
+        task_family=registered.task_family,
         question=str(row["question"]),
         options=_option_map(candidates),
         answer=chr(ord("A") + answer_index),
         has_audio=has_audio,
         duration_stratum=_actual_duration_stratum(duration),
         requirements=registered.requirements,
-        expected_tools=_expected_tools(registered.requirements),
+        expected_tools=registered.expected_tools,
+        tool_annotation_reason=registered.tool_annotation_reason,
     )
 
 
@@ -251,10 +496,13 @@ def prepare_manifests(root: Path) -> dict[str, Path]:
     """Create hash-bound smoke and formal manifests outside the repository."""
     root = root.resolve()
     video_mme_rows = _load_video_mme_rows(root)
-    mvbench_path = root / "annotations" / "mvbench" / "action_antonym.json"
-    mvbench_rows = json.loads(mvbench_path.read_text(encoding="utf-8"))
-    if not isinstance(mvbench_rows, list) or len(mvbench_rows) != 200:
-        raise ValueError("expected 200 fixed-revision MVBench action-antonym rows")
+    mvbench_rows: dict[str, list[dict[str, object]]] = {}
+    for task_slug in MVBENCH_TASK_SLUGS.values():
+        task_path = root / "annotations" / "mvbench" / f"{task_slug}.json"
+        task_rows = json.loads(task_path.read_text(encoding="utf-8"))
+        if not isinstance(task_rows, list) or len(task_rows) != 200:
+            raise ValueError(f"expected 200 fixed-revision MVBench {task_slug} rows")
+        mvbench_rows[task_slug] = task_rows
     manifests_dir = root / "manifests"
     manifests_dir.mkdir(parents=True, exist_ok=True)
     result: dict[str, Path] = {}

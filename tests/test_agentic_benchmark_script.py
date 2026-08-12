@@ -29,6 +29,7 @@ def _write_smoke_manifest(root: Path) -> Path:
                 "source_url": "https://example.invalid/official-dataset",
                 "source": str(video),
                 "source_sha256": hashlib.sha256(video.read_bytes()).hexdigest(),
+                "task_family": "Information Synopsis" if index < 4 else "Action Antonym",
                 "question": "What happens?",
                 "options": {"A": "First", "B": "Second"},
                 "answer": "A",
@@ -36,8 +37,33 @@ def _write_smoke_manifest(root: Path) -> Path:
                 "duration_stratum": durations[index],
                 "requirements": [requirement],
                 "expected_tools": expected,
+                "tool_annotation_reason": (
+                    "speech-required" if requirement == "speech" else "visual-required"
+                ),
             }
         )
+    manifest.write_text("".join(json.dumps(row) + "\n" for row in rows))
+    return manifest
+
+
+def _write_formal_manifest(root: Path) -> Path:
+    smoke_rows = [
+        json.loads(line)
+        for line in _write_smoke_manifest(root).read_text(encoding="utf-8").splitlines()
+    ]
+    rows = []
+    mvbench_families = ("Action Antonym", "Action Sequence", "Action Prediction")
+    for index in range(54):
+        row = dict(smoke_rows[index % len(smoke_rows)])
+        row["case_id"] = f"formal-{index}"
+        if index < 36:
+            row["dataset"] = "Video-MME"
+            row["task_family"] = "Information Synopsis"
+        else:
+            row["dataset"] = "MVBench"
+            row["task_family"] = mvbench_families[(index - 36) // 6]
+        rows.append(row)
+    manifest = root / "formal.jsonl"
     manifest.write_text("".join(json.dumps(row) + "\n" for row in rows))
     return manifest
 
@@ -91,6 +117,8 @@ def test_smoke_validate_only_accepts_six_stratified_external_cases(tmp_path) -> 
     assert json.loads(result.stdout) == {
         "case_count": 6,
         "dataset_counts": {"MVBench": 2, "Video-MME": 4},
+        "manifest_sha256": hashlib.sha256(manifest.read_bytes()).hexdigest(),
+        "mvbench_task_family_counts": {"Action Antonym": 2},
         "phase": "smoke",
         "status": "VALIDATED",
     }
@@ -104,7 +132,6 @@ def test_formal_validation_requires_successful_smoke_report(tmp_path) -> None:
             "scripts/run_agentic_benchmark.py",
             "--phase",
             "formal",
-            "--validate-only",
             "--manifest",
             str(tmp_path / "formal.jsonl"),
             "--output-dir",
@@ -117,6 +144,37 @@ def test_formal_validation_requires_successful_smoke_report(tmp_path) -> None:
 
     assert result.returncode == 2
     assert "smoke report" in result.stderr
+
+
+def test_formal_validate_only_checks_multi_task_manifest_before_smoke(tmp_path) -> None:
+    """Offline pre-registration validation must not require a live smoke artifact."""
+    manifest = _write_formal_manifest(tmp_path)
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "scripts/run_agentic_benchmark.py",
+            "--phase",
+            "formal",
+            "--validate-only",
+            "--manifest",
+            str(manifest),
+            "--output-dir",
+            str(tmp_path / "formal-results"),
+        ],
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["case_count"] == 54
+    assert payload["mvbench_task_family_counts"] == {
+        "Action Antonym": 6,
+        "Action Prediction": 6,
+        "Action Sequence": 6,
+    }
 
 
 def test_smoke_compatibility_probe_uses_largest_registered_payload(tmp_path) -> None:
@@ -155,3 +213,24 @@ def test_failed_complete_video_probe_is_not_registered_as_supported() -> None:
     namespace = runpy.run_path("scripts/run_agentic_benchmark.py")
 
     assert namespace["_complete_video_probe_succeeded"](outcome) is False
+
+
+def test_formal_composition_rejects_single_mvbench_task_family(tmp_path) -> None:
+    """Eighteen action-antonym rows must not pass as broad MVBench coverage."""
+    namespace = runpy.run_path("scripts/run_agentic_benchmark.py")
+    smoke_cases = namespace["_load_manifest"](_write_smoke_manifest(tmp_path))
+    formal_cases = []
+    for index in range(54):
+        original = smoke_cases[index % len(smoke_cases)]
+        formal_cases.append(
+            original.model_copy(
+                update={
+                    "case_id": f"formal-{index}",
+                    "dataset": "Video-MME" if index < 36 else "MVBench",
+                    "task_family": ("Information Synopsis" if index < 36 else "Action Antonym"),
+                }
+            )
+        )
+
+    with __import__("pytest").raises(ValueError, match="three task families"):
+        namespace["_validate_composition"](formal_cases, "formal")

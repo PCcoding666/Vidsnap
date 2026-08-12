@@ -19,6 +19,12 @@ BenchmarkConclusion = Literal["HARNESS_SUPERIOR", "NOT_YET_SUPERIOR"]
 DatasetName = Literal["Video-MME", "MVBench"]
 DurationStratum = Literal["short", "medium", "long"]
 EvidenceRequirement = Literal["visual", "speech", "temporal"]
+ToolAnnotationReason = Literal[
+    "speech-required",
+    "visual-required",
+    "both-required",
+    "no-acquisition-required",
+]
 
 
 class FormalCase(StrictModel):
@@ -31,6 +37,7 @@ class FormalCase(StrictModel):
     source_url: str = Field(min_length=1, max_length=2_000)
     source: Path
     source_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    task_family: str = Field(min_length=1, max_length=256)
     question: str = Field(min_length=1, max_length=8_000)
     options: dict[str, str] = Field(min_length=2, max_length=8)
     answer: str = Field(min_length=1, max_length=1)
@@ -39,6 +46,7 @@ class FormalCase(StrictModel):
     duration_stratum: DurationStratum
     requirements: tuple[EvidenceRequirement, ...] = Field(min_length=1, max_length=3)
     expected_tools: tuple[AcquisitionTool, ...] = Field(max_length=2)
+    tool_annotation_reason: ToolAnnotationReason
 
     @model_validator(mode="after")
     def validate_mcq_and_tools(self) -> FormalCase:
@@ -52,6 +60,14 @@ class FormalCase(StrictModel):
         if len(set(self.requirements)) != len(self.requirements):
             raise ValueError("evidence requirements must be unique")
         ToolPlan(tools=self.expected_tools)
+        reason_to_tools: dict[ToolAnnotationReason, tuple[AcquisitionTool, ...]] = {
+            "speech-required": ("transcribe_audio",),
+            "visual-required": ("sample_evidence",),
+            "both-required": ("transcribe_audio", "sample_evidence"),
+            "no-acquisition-required": (),
+        }
+        if self.expected_tools != reason_to_tools[self.tool_annotation_reason]:
+            raise ValueError("tool annotation reason does not match expected tools")
         return self
 
     @property

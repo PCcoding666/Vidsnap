@@ -8,7 +8,7 @@ paths. It is not a leaderboard submission or a product-performance claim.
 
 - Video-MME: use the official
   [benchmark repository](https://github.com/MME-Benchmarks/Video-MME) and
-  [LMMS-Lab dataset](https://huggingface.co/datasets/lmms-lab/Video-MME). The
+  [LMMS-Eval dataset](https://huggingface.co/datasets/lmms-eval/Video-MME). The
   dataset notice limits use to academic research, prohibits commercial use and
   redistribution without approval, and leaves video copyright with the owners.
 - MVBench: use the official
@@ -29,17 +29,24 @@ outputs, RunBundles, or reports in this repository. Use an absolute external
 directory. Each manifest line is one `FormalCase` JSON object and records the
 official source URL, revision, license notice, case ID, local absolute paths,
 video SHA-256, MCQ fields, duration/audio/requirement strata, and expected tools.
+`expected_tools` and `tool_annotation_reason` are independent, human-reviewed
+pre-registration fields; they are never derived from `requirements` or changed
+after outcomes are observed. The report binds them to a manifest SHA-256.
 
 ## Registered composition
 
 The smoke manifest contains six cases across both datasets and covers short,
 medium, and long duration; audio and no-audio; and visual, speech, and temporal
 requirements. The formal manifest contains exactly 54 cases: 36 Video-MME and
-18 MVBench, with the same strata represented.
+18 MVBench, with the same strata represented. The MVBench slice contains six
+cases each from Action Antonym, Action Sequence, and Action Prediction. It must
+cover at least three task families with four cases per family.
 
 Direct first attempts complete-video input. If the endpoint rejects that media
 type during smoke, the runner records the compatibility limitation and uses the
-complete timeline sampled at exactly 2 fps. The formal run reuses the smoke
+complete timeline sampled at exactly 2 fps. The fallback is sent through the
+provider's official `video` frame-list content shape, not as unrelated image
+parts or sparse adaptive evidence. The formal run reuses the smoke
 mode. Fixed always invokes `transcribe_audio` then `sample_evidence`, skipping
 only unavailable physical evidence. Agentic receives a strict JSON tool plan
 and can select only those two acquisition tools. A supplied dataset subtitle is
@@ -71,6 +78,12 @@ Validate local manifests without reading Hermes or making a provider call:
   --manifest /absolute/external/path/smoke.jsonl \
   --output-dir /absolute/external/path/smoke-results \
   --seed 20260812
+
+.venv/bin/python scripts/run_agentic_benchmark.py \
+  --phase formal --validate-only \
+  --manifest /absolute/external/path/formal.jsonl \
+  --output-dir /absolute/external/path/formal-validation \
+  --seed 20260812
 ```
 
 Run smoke through the non-printing Hermes launcher:
@@ -86,7 +99,7 @@ Run smoke through the non-printing Hermes launcher:
 
 Review `smoke-results/report.json`. It contains measured usage and a 54-case
 projection with no guessed currency conversion. Only a `SMOKE_SUCCEEDED` report
-can unlock formal validation and execution:
+can unlock formal execution:
 
 ```bash
 .venv/bin/python scripts/run_agentic_benchmark.py \
@@ -107,7 +120,8 @@ can unlock formal validation and execution:
 
 `outcomes.jsonl` contains parsed answers, typed statuses, verifier gates, selected
 tools, and measured usage, but no raw response. `report.json` contains paired
-accuracy intervals, tool metrics, cost fields, case provenance, and limitations.
+accuracy intervals, `pre_registered_tool_selection_alignment`, cost fields,
+case provenance, task-family coverage, and the pre-registration manifest hash.
 The only positive label is `HARNESS_SUPERIOR`, and it is emitted only when the
 Agentic-minus-Fixed paired 95% bootstrap CI lower bound is strictly above zero.
 Every other measured result is `NOT_YET_SUPERIOR`.

@@ -1,5 +1,7 @@
 """Pre-registered public-case selection for external benchmark manifests."""
 
+from collections import Counter
+
 from vidsnap.benchmark.manifest import FORMAL_SELECTION, SMOKE_SELECTION
 
 
@@ -29,3 +31,31 @@ def test_registered_selection_covers_all_evidence_requirements() -> None:
         for requirement in item.requirements
     }
     assert requirements == {"visual", "speech", "temporal"}
+
+
+def test_mvbench_formal_selection_covers_three_temporal_task_families() -> None:
+    """The MVBench slice must not stand in for one action-antonym task."""
+    family_counts = Counter(item.task_family for item in FORMAL_SELECTION["MVBench"])
+
+    assert len(family_counts) >= 3
+    assert min(family_counts.values()) >= 4
+
+
+def test_every_registered_case_has_independent_tool_label_and_reason() -> None:
+    """Tool labels must be explicit fields, not derived from evidence requirements."""
+    reason_to_tools = {
+        "speech-required": ("transcribe_audio",),
+        "visual-required": ("sample_evidence",),
+        "both-required": ("transcribe_audio", "sample_evidence"),
+        "no-acquisition-required": (),
+    }
+    items = [
+        item
+        for selection in (SMOKE_SELECTION, FORMAL_SELECTION)
+        for registered in selection.values()
+        for item in registered
+    ]
+
+    assert all(
+        item.expected_tools == reason_to_tools[item.tool_annotation_reason] for item in items
+    )

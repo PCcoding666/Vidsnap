@@ -41,6 +41,23 @@ class UnsupportedVideoInput(ProviderError):
         self.input_bytes = input_bytes
 
 
+class MeasuredProviderError(ProviderError):
+    """Provider failure carrying only safe aggregate usage metadata."""
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        input_bytes: int,
+        input_tokens: int = 0,
+        output_tokens: int = 0,
+    ) -> None:
+        super().__init__(message)
+        self.input_bytes = input_bytes
+        self.input_tokens = input_tokens
+        self.output_tokens = output_tokens
+
+
 @dataclass(frozen=True, slots=True)
 class BenchmarkProviderConfig:
     """Hermes-injected fixed endpoint and non-representable credential."""
@@ -128,11 +145,19 @@ class QwenFormalClient:
             "response_format": {"type": "json_object"},
         }
         response_payload = await self._post(payload)
-        content, input_tokens, output_tokens = self._response_text(response_payload)
+        content, input_tokens, output_tokens = self._measured_response_text(
+            response_payload,
+            payload,
+        )
         try:
             plan = ToolPlan.model_validate(self._normalized_tool_plan(content))
         except (ValueError, json.JSONDecodeError) as error:
-            raise ProviderError("Qwen returned an invalid benchmark tool plan") from error
+            raise MeasuredProviderError(
+                "Qwen returned an invalid benchmark tool plan",
+                input_bytes=self._payload_size(payload),
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
+            ) from error
         return ToolPlanResponse(
             plan=plan,
             input_tokens=input_tokens,
@@ -182,7 +207,10 @@ class QwenFormalClient:
             ],
         }
         response_payload = await self._post(payload)
-        content, input_tokens, output_tokens = self._response_text(response_payload)
+        content, input_tokens, output_tokens = self._measured_response_text(
+            response_payload,
+            payload,
+        )
         return MCQModelResponse(
             content,
             input_tokens,
@@ -197,9 +225,12 @@ class QwenFormalClient:
         frames: tuple[ExtractedFrame, ...],
         transcript: str | None,
         video_path: Path | None,
+        frame_sequence_fps: int | None = None,
     ) -> MCQModelResponse:
         if frames and video_path is not None:
             raise ValueError("provide complete video or extracted frames, not both")
+        if frame_sequence_fps is not None and (frame_sequence_fps <= 0 or not frames):
+            raise ValueError("frame sequence fps requires extracted frames")
         question_payload = json.dumps(
             {
                 "instruction": "Select the best answer and respond with only its letter.",
@@ -214,8 +245,11 @@ class QwenFormalClient:
         content: list[dict[str, object]] = [{"type": "text", "text": question_payload}]
         if video_path is not None:
             content.append(self._video_part(video_path))
-        for frame in frames:
-            content.append(self._image_part(frame.path))
+        if frame_sequence_fps is not None:
+            content.append(self._video_frame_list(frames, frame_sequence_fps))
+        else:
+            for frame in frames:
+                content.append(self._image_part(frame.path))
         payload: dict[str, object] = {
             "model": QWEN_MODEL,
             "messages": [
@@ -230,7 +264,10 @@ class QwenFormalClient:
             ],
         }
         response_payload = await self._post(payload, has_complete_video=video_path is not None)
-        response_text, input_tokens, output_tokens = self._response_text(response_payload)
+        response_text, input_tokens, output_tokens = self._measured_response_text(
+            response_payload,
+            payload,
+        )
         return MCQModelResponse(
             response_text,
             input_tokens,
@@ -265,11 +302,31 @@ class QwenFormalClient:
                 except UnsupportedVideoInput:
                     raise
                 except httpx.HTTPError as error:
-                    raise ProviderError("Qwen formal benchmark request failed") from error
+                    raise MeasuredProviderError(
+                        "Qwen formal benchmark request failed",
+                        input_bytes=self._payload_size(payload),
+                    ) from error
         try:
             return response.json()
         except ValueError as error:
-            raise ProviderError("Qwen formal benchmark response was not JSON") from error
+            raise MeasuredProviderError(
+                "Qwen formal benchmark response was not JSON",
+                input_bytes=self._payload_size(payload),
+            ) from error
+
+    @classmethod
+    def _measured_response_text(
+        cls,
+        response_payload: object,
+        request_payload: dict[str, object],
+    ) -> tuple[str, int, int]:
+        try:
+            return cls._response_text(response_payload)
+        except ProviderError as error:
+            raise MeasuredProviderError(
+                str(error),
+                input_bytes=cls._payload_size(request_payload),
+            ) from error
 
     @staticmethod
     def _response_text(payload: object) -> tuple[str, int, int]:
@@ -301,13 +358,28 @@ class QwenFormalClient:
 
     @staticmethod
     def _image_part(path: Path) -> dict[str, object]:
+        return {
+            "type": "image_url",
+            "image_url": {"url": QwenFormalClient._image_data_url(path)},
+        }
+
+    @staticmethod
+    def _image_data_url(path: Path) -> str:
         mime_type, _ = mimetypes.guess_type(path.name)
         if mime_type not in {"image/jpeg", "image/png", "image/webp"}:
             raise ProviderError("benchmark frame must be JPEG, PNG, or WebP")
         encoded = base64.b64encode(path.read_bytes()).decode("ascii")
+        return f"data:{mime_type};base64,{encoded}"
+
+    @staticmethod
+    def _video_frame_list(
+        frames: tuple[ExtractedFrame, ...],
+        fps: int,
+    ) -> dict[str, object]:
         return {
-            "type": "image_url",
-            "image_url": {"url": f"data:{mime_type};base64,{encoded}"},
+            "type": "video",
+            "video": [QwenFormalClient._image_data_url(frame.path) for frame in frames],
+            "fps": fps,
         }
 
     @staticmethod
@@ -339,6 +411,7 @@ class FormalModelPort(Protocol):
         frames: tuple[ExtractedFrame, ...],
         transcript: str | None,
         video_path: Path | None,
+        frame_sequence_fps: int | None = None,
     ) -> MCQModelResponse:
         """Answer one MCQ from harness-controlled inputs."""
 
@@ -421,6 +494,12 @@ class _UsageAccumulator:
         self.output_tokens += response.output_tokens
         self.input_bytes += response.input_bytes
 
+    def record_error(self, error: ProviderError) -> None:
+        if isinstance(error, MeasuredProviderError):
+            self.input_bytes += error.input_bytes
+            self.input_tokens += error.input_tokens
+            self.output_tokens += error.output_tokens
+
 
 class FormalBenchmarkEngine:
     """Own probing, bounded acquisition, answer parsing, and verification."""
@@ -479,6 +558,9 @@ class FormalBenchmarkEngine:
                 frames=frames,
                 transcript=transcript,
                 video_path=video_path,
+                frame_sequence_fps=(
+                    2 if variant == "direct" and direct_input_mode == "frames_2fps" else None
+                ),
             )
             usage.record_response(response)
             answer = parse_mcq_answer(response.text, case.option_labels)
@@ -508,7 +590,19 @@ class FormalBenchmarkEngine:
                 TerminalState.BLOCKED,
                 "provider unavailable",
             )
-        except (ProviderError, FFmpegError, OSError, ValueError):
+        except ProviderError as error:
+            usage.record_error(error)
+            return self._failure_outcome(
+                case,
+                variant,
+                direct_input_mode,
+                selected_tools,
+                usage,
+                started_at,
+                TerminalState.FAILED,
+                "benchmark case failed",
+            )
+        except (FFmpegError, OSError, ValueError):
             return self._failure_outcome(
                 case,
                 variant,

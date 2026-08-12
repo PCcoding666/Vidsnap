@@ -85,12 +85,14 @@ def test_formal_case_rejects_answer_outside_declared_options(tmp_path) -> None:
         "source_url": "https://github.com/MME-Benchmarks/Video-MME",
         "source": tmp_path / "video.mp4",
         "source_sha256": "a" * 64,
+        "task_family": "Temporal Reasoning",
         "question": "What happens first?",
         "options": {"A": "The door opens", "B": "The person sits"},
         "has_audio": True,
         "duration_stratum": "short",
         "requirements": ["temporal"],
         "expected_tools": ["sample_evidence"],
+        "tool_annotation_reason": "visual-required",
     }
 
     case = FormalCase(answer="A", **common)
@@ -98,3 +100,26 @@ def test_formal_case_rejects_answer_outside_declared_options(tmp_path) -> None:
 
     with pytest.raises(ValueError, match="declared option"):
         FormalCase(answer="C", **common)
+
+
+def test_formal_case_rejects_tool_label_reason_mismatch(tmp_path) -> None:
+    """Human labels and their rationale must remain independently auditable."""
+    with pytest.raises(ValueError, match="annotation reason"):
+        FormalCase(
+            case_id="case",
+            dataset="MVBench",
+            dataset_version="revision",
+            dataset_license="MIT metadata; source video rights retained.",
+            source_url="https://huggingface.co/datasets/OpenGVLab/MVBench",
+            source=tmp_path / "video.mp4",
+            source_sha256="a" * 64,
+            task_family="Action Sequence",
+            question="What happened next?",
+            options={"A": "One", "B": "Two"},
+            answer="A",
+            has_audio=False,
+            duration_stratum="short",
+            requirements=("visual", "temporal"),
+            expected_tools=("transcribe_audio",),
+            tool_annotation_reason="visual-required",
+        )

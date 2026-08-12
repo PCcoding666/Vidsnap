@@ -97,6 +97,10 @@ def _validate_composition(cases: list[FormalCase], phase: Phase) -> dict[str, in
         raise ValueError("manifest must cover cases with and without audio")
     if {case.duration_stratum for case in cases} != {"short", "medium", "long"}:
         raise ValueError("manifest must cover short, medium, and long durations")
+    if phase == "formal":
+        mvbench_families = Counter(case.task_family for case in cases if case.dataset == "MVBench")
+        if len(mvbench_families) < 3 or min(mvbench_families.values()) < 4:
+            raise ValueError("formal MVBench cases must cover three task families with four each")
     return dict(sorted(dataset_counts.items()))
 
 
@@ -173,6 +177,7 @@ async def _run_experiment(
     output_dir: Path,
     seed: int,
     formal_direct_mode: DirectInputMode | None,
+    pre_registration_manifest_sha256: str,
 ) -> dict[str, object]:
     output_dir.mkdir(parents=True, exist_ok=False)
     config = BenchmarkProviderConfig.from_env()
@@ -254,6 +259,7 @@ async def _run_experiment(
         phase=phase,
         seed=seed,
         direct_input_mode=direct_mode,
+        pre_registration_manifest_sha256=pre_registration_manifest_sha256,
     )
     report["generated_at"] = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
     report["seed"] = seed
@@ -287,7 +293,7 @@ def main() -> None:
         parser.error("benchmark output directory must be outside the repository")
     phase: Phase = args.phase
     smoke_gate: dict[str, object] | None = None
-    if phase == "formal":
+    if phase == "formal" and not args.validate_only:
         try:
             smoke_gate = _load_smoke_gate(args.smoke_report)
         except ValueError as error:
@@ -298,6 +304,9 @@ def main() -> None:
     except ValueError as error:
         parser.error(str(error))
     if args.validate_only:
+        mvbench_task_family_counts = Counter(
+            case.task_family for case in cases if case.dataset == "MVBench"
+        )
         print(
             json.dumps(
                 {
@@ -305,6 +314,8 @@ def main() -> None:
                     "phase": phase,
                     "case_count": len(cases),
                     "dataset_counts": dataset_counts,
+                    "mvbench_task_family_counts": dict(sorted(mvbench_task_family_counts.items())),
+                    "manifest_sha256": _sha256(args.manifest.resolve()),
                 },
                 ensure_ascii=True,
                 sort_keys=True,
@@ -322,6 +333,7 @@ def main() -> None:
                 output_dir=output_dir,
                 seed=args.seed,
                 formal_direct_mode=formal_direct_mode,
+                pre_registration_manifest_sha256=_sha256(args.manifest.resolve()),
             )
         )
     except (OSError, RuntimeError, ValueError):
