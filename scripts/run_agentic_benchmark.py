@@ -186,8 +186,8 @@ def _load_smoke_gate(path: Path | None) -> dict[str, object]:
         raise ValueError("smoke report has an invalid fixed model")
     if payload.get("pre_registration_manifest_sha256") != REGISTERED_MANIFEST_SHA256["smoke"]:
         raise ValueError("smoke report does not match the committed pre-registration")
-    if payload.get("direct_input_mode") not in {"video", "frames_2fps"}:
-        raise ValueError("smoke report has no registered Direct input mode")
+    if payload.get("direct_input_mode") != "frames_2fps":
+        raise ValueError("smoke report Direct input mode must be frames_2fps")
     measured_usage = _validate_usage_by_variant(payload.get("usage"), context="measured")
     projection = payload.get("formal_54_case_projection")
     if not isinstance(projection, dict):
@@ -294,7 +294,9 @@ async def _run_experiment(
         media=FFmpegMediaPort(),
         model=QwenFormalClient(config),
     )
-    direct_mode: DirectInputMode = formal_direct_mode or "frames_2fps"
+    if formal_direct_mode not in {None, "frames_2fps"}:
+        raise ValueError("Direct input mode must be frames_2fps")
+    direct_mode: DirectInputMode = "frames_2fps"
     indexed_cases = list(enumerate(cases))
     random.Random(seed).shuffle(indexed_cases)
     variant_orders: tuple[tuple[BenchmarkVariant, ...], ...] = (

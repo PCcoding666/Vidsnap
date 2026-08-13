@@ -358,6 +358,51 @@ def test_smoke_gate_preserves_hashed_projection_provenance(tmp_path) -> None:
     }
 
 
+def test_smoke_gate_rejects_complete_video_direct_mode(tmp_path) -> None:
+    """A legacy video-mode smoke report must not authorize the frames-only protocol."""
+    from vidsnap.benchmark.manifest import REGISTERED_MANIFEST_SHA256
+    from vidsnap.config import QWEN_MODEL
+
+    usage = {
+        variant: {
+            "model_calls": 6,
+            "evidence_frames": 12,
+            "input_bytes": 1200,
+            "input_tokens": 120,
+            "output_tokens": 12,
+            "latency_seconds": 1.2,
+        }
+        for variant in ("direct", "fixed", "agentic")
+    }
+    report = tmp_path / "legacy-video-report.json"
+    report.write_text(
+        json.dumps(
+            {
+                "phase": "smoke",
+                "status": "SMOKE_SUCCEEDED",
+                "model": QWEN_MODEL,
+                "case_count": 6,
+                "pre_registration_manifest_sha256": REGISTERED_MANIFEST_SHA256["smoke"],
+                "direct_input_mode": "video",
+                "usage": usage,
+                "formal_54_case_projection": {
+                    "basis": "provider-reported six-case smoke usage",
+                    "scale_factor": 9,
+                    "usage": {
+                        variant: {field: value * 9 for field, value in totals.items()}
+                        for variant, totals in usage.items()
+                    },
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    namespace = runpy.run_path("scripts/run_agentic_benchmark.py")
+
+    with __import__("pytest").raises(ValueError, match="frames_2fps"):
+        namespace["_load_smoke_gate"](report)
+
+
 def test_smoke_gate_rejects_any_research_conclusion(tmp_path) -> None:
     """A successful smoke artifact containing a conclusion must not authorize formal calls."""
     from vidsnap.benchmark.manifest import REGISTERED_MANIFEST_SHA256
