@@ -66,13 +66,15 @@ def _repository_roots() -> tuple[Path, ...]:
             text=True,
         )
     except (OSError, subprocess.SubprocessError):
-        return (REPOSITORY_ROOT,)
+        raise ValueError("cannot verify every git worktree for external output") from None
     roots = tuple(
         Path(line.removeprefix("worktree ")).resolve()
         for line in result.stdout.splitlines()
         if line.startswith("worktree ")
     )
-    return roots or (REPOSITORY_ROOT,)
+    if not roots:
+        raise ValueError("cannot verify every git worktree for external output")
+    return roots
 
 
 def _assert_external_output(output_dir: Path) -> None:
@@ -165,6 +167,8 @@ def _parser() -> argparse.ArgumentParser:
 def main() -> None:
     parser = _parser()
     args = parser.parse_args()
+    if not args.manifest.is_absolute() or not args.output_dir.is_absolute():
+        parser.error("probe manifest and output directory must use absolute paths")
     output_dir = args.output_dir.resolve()
     try:
         _assert_external_output(output_dir)

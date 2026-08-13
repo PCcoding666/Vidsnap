@@ -4,13 +4,15 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Literal
+from typing import BinaryIO, Literal
 from urllib.parse import urlparse
 
 import httpx
+from pydantic import Field, model_validator
 
 from vidsnap.benchmark.formal import FormalCase
 from vidsnap.benchmark.live import BenchmarkProviderConfig
@@ -20,6 +22,10 @@ from vidsnap.contracts.models import StrictModel
 REGISTERED_PROBE_CASE_ID = "videomme:395-2"
 REGISTERED_PROBE_SHA256 = "f22889faeedd58563e5349723d10a6d81d8e0c5d167f0962d3cc221e08d3e9d2"
 REGISTERED_PROBE_SOURCE_BYTES = 15_543_000
+REGISTERED_PROBE_SUBTITLE_SHA256 = (
+    "020321fec484200c197c6dfcf1c4964c909fd5881a33902834b27b484ddfe837"
+)
+REGISTERED_PROBE_SUBTITLE_BYTES = 8_429
 DIRECT_URL_PROBE_FPS = 2
 TEMPORARY_RETENTION_HOURS = 48
 _UPLOAD_POLICY_URL = "https://dashscope.aliyuncs.com/api/v1/uploads"
@@ -37,6 +43,24 @@ ProbeFailureCategory = Literal[
 ]
 UploadStatus = Literal["not_attempted", "succeeded", "failed"]
 RequestStatus = Literal["not_attempted", "succeeded", "failed"]
+NextDiagnosticStep = Literal[
+    "verify_registered_local_inputs",
+    "confirm_token_plan_upload_policy_support",
+    "inspect_private_upload_service_status",
+    "verify_documented_oss_resolution_contract",
+    "inspect_token_plan_model_request_compatibility",
+    "verify_provider_response_schema",
+    "verify_provider_usage_reporting",
+]
+_NEXT_STEP_BY_FAILURE: dict[ProbeFailureCategory, NextDiagnosticStep] = {
+    "local_validation": "verify_registered_local_inputs",
+    "upload_policy_compatibility": "confirm_token_plan_upload_policy_support",
+    "upload_transfer": "inspect_private_upload_service_status",
+    "provider_url_resolution": "verify_documented_oss_resolution_contract",
+    "model_request": "inspect_token_plan_model_request_compatibility",
+    "response_schema": "verify_provider_response_schema",
+    "usage_missing": "verify_provider_usage_reporting",
+}
 
 
 class DirectUrlProbeFailure(RuntimeError):
@@ -54,18 +78,44 @@ class DirectUrlProbeResult(StrictModel):
     scope: Literal["transport_compatibility_only"] = "transport_compatibility_only"
     case_id: str
     source_sha256: str
-    source_bytes: int
+    source_bytes: int = Field(ge=0)
     model: Literal["qwen3.8-max"] = "qwen3.8-max"
     fps: Literal[2] = 2
     temporary_retention_hours: Literal[48] = 48
     upload_status: UploadStatus
     request_status: RequestStatus
-    model_calls: int
-    serialized_request_bytes: int
-    input_tokens: int
-    output_tokens: int
-    latency_seconds: float
+    model_calls: int = Field(ge=0, le=1)
+    serialized_request_bytes: int = Field(ge=0)
+    input_tokens: int = Field(ge=0)
+    output_tokens: int = Field(ge=0)
+    latency_seconds: float = Field(ge=0)
     failure_category: ProbeFailureCategory | None = None
+    next_step: NextDiagnosticStep | None = None
+
+    @model_validator(mode="after")
+    def validate_terminal_state(self) -> DirectUrlProbeResult:
+        if self.status == "PROBE_SUCCEEDED":
+            if (
+                self.upload_status != "succeeded"
+                or self.request_status != "succeeded"
+                or self.model_calls != 1
+                or self.input_tokens <= 0
+                or self.failure_category is not None
+                or self.next_step is not None
+            ):
+                raise ValueError("successful probe result is inconsistent")
+            return self
+        if self.failure_category is None:
+            raise ValueError("failed probe result needs a failure category")
+        if self.next_step != _NEXT_STEP_BY_FAILURE[self.failure_category]:
+            raise ValueError("failed probe result needs its bounded next step")
+        if self.request_status == "not_attempted" and self.model_calls != 0:
+            raise ValueError("unattempted model request cannot count a model call")
+        if self.request_status != "not_attempted" and self.model_calls != 1:
+            raise ValueError("attempted model request must count exactly one call")
+        if self.upload_status != "succeeded" and self.request_status != "not_attempted":
+            raise ValueError("model request cannot precede a successful upload")
+        return self
 
 
 @dataclass(frozen=True, slots=True)
@@ -92,6 +142,18 @@ def _sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
+def _sha256_handle(handle: BinaryIO) -> str:
+    digest = hashlib.sha256()
+    try:
+        handle.seek(0)
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+        handle.seek(0)
+    except OSError:
+        raise DirectUrlProbeFailure("local_validation") from None
+    return digest.hexdigest()
+
+
 def _source_size(path: Path) -> int:
     try:
         return path.stat().st_size
@@ -102,6 +164,10 @@ def _source_size(path: Path) -> int:
 def _available_subtitle(case: FormalCase) -> str:
     path = case.subtitle_path
     if path is None or not path.is_absolute() or not path.is_file():
+        raise DirectUrlProbeFailure("local_validation")
+    if _source_size(path) != REGISTERED_PROBE_SUBTITLE_BYTES:
+        raise DirectUrlProbeFailure("local_validation")
+    if _sha256(path) != REGISTERED_PROBE_SUBTITLE_SHA256:
         raise DirectUrlProbeFailure("local_validation")
     try:
         subtitle = path.read_text(encoding="utf-8").strip()
@@ -115,16 +181,31 @@ def _available_subtitle(case: FormalCase) -> str:
 def validate_probe_case(case: FormalCase) -> None:
     """Bind the diagnostic to the one approved external benchmark source."""
     _available_subtitle(case)
-    valid = (
+    identity_is_valid = (
         case.case_id == REGISTERED_PROBE_CASE_ID
         and case.dataset == "Video-MME"
         and case.source.is_absolute()
         and case.source.is_file()
         and case.source_sha256 == REGISTERED_PROBE_SHA256
-        and _source_size(case.source) == REGISTERED_PROBE_SOURCE_BYTES
-        and _sha256(case.source) == REGISTERED_PROBE_SHA256
     )
-    if not valid:
+    if not identity_is_valid:
+        raise DirectUrlProbeFailure("local_validation")
+    try:
+        with case.source.open("rb") as source_handle:
+            _validate_source_handle(source_handle)
+    except OSError:
+        raise DirectUrlProbeFailure("local_validation") from None
+
+
+def _validate_source_handle(source_handle: BinaryIO) -> None:
+    try:
+        source_bytes = os.fstat(source_handle.fileno()).st_size
+    except OSError:
+        raise DirectUrlProbeFailure("local_validation") from None
+    if (
+        source_bytes != REGISTERED_PROBE_SOURCE_BYTES
+        or _sha256_handle(source_handle) != REGISTERED_PROBE_SHA256
+    ):
         raise DirectUrlProbeFailure("local_validation")
 
 
@@ -150,31 +231,46 @@ class DirectUrlProbeClient:
         input_tokens = 0
         output_tokens = 0
         try:
-            validate_probe_case(case)
+            identity_is_valid = (
+                case.case_id == REGISTERED_PROBE_CASE_ID
+                and case.dataset == "Video-MME"
+                and case.source.is_absolute()
+                and case.source_sha256 == REGISTERED_PROBE_SHA256
+            )
+            if not identity_is_valid:
+                raise DirectUrlProbeFailure("local_validation")
             subtitle = _available_subtitle(case)
-            async with httpx.AsyncClient(
-                timeout=self._config.timeout_seconds,
-                transport=self._transport,
-                follow_redirects=False,
-            ) as client:
-                policy = await self._get_policy(client)
-                try:
-                    await self._upload(client, policy, case.source)
-                except DirectUrlProbeFailure:
-                    upload_status = "failed"
-                    raise
-                upload_status = "succeeded"
-                temporary_reference = f"oss://{policy.upload_dir.rstrip('/')}/{_UPLOAD_FILENAME}"
-                payload = self._model_payload(case, temporary_reference, subtitle)
-                serialized_request_bytes = self._payload_size(payload)
-                model_calls = 1
-                try:
-                    response = await self._request_model(client, payload)
-                except DirectUrlProbeFailure:
-                    request_status = "failed"
-                    raise
-                request_status = "succeeded"
-                input_tokens, output_tokens = self._usage(response)
+            try:
+                source_handle = case.source.open("rb")
+            except OSError:
+                raise DirectUrlProbeFailure("local_validation") from None
+            with source_handle:
+                _validate_source_handle(source_handle)
+                async with httpx.AsyncClient(
+                    timeout=self._config.timeout_seconds,
+                    transport=self._transport,
+                    follow_redirects=False,
+                ) as client:
+                    policy = await self._get_policy(client)
+                    try:
+                        await self._upload(client, policy, source_handle)
+                    except DirectUrlProbeFailure:
+                        upload_status = "failed"
+                        raise
+                    upload_status = "succeeded"
+                    temporary_reference = (
+                        f"oss://{policy.upload_dir.rstrip('/')}/{_UPLOAD_FILENAME}"
+                    )
+                    payload = self._model_payload(case, temporary_reference, subtitle)
+                    serialized_request_bytes = self._payload_size(payload)
+                    model_calls = 1
+                    try:
+                        response = await self._request_model(client, payload)
+                    except DirectUrlProbeFailure:
+                        request_status = "failed"
+                        raise
+                    request_status = "succeeded"
+                    input_tokens, output_tokens = self._usage(response)
         except DirectUrlProbeFailure as error:
             return self._result(
                 case,
@@ -255,7 +351,7 @@ class DirectUrlProbeClient:
         self,
         client: httpx.AsyncClient,
         policy: _UploadPolicy,
-        source: Path,
+        source_handle: BinaryIO,
     ) -> None:
         key = f"{policy.upload_dir.rstrip('/')}/{_UPLOAD_FILENAME}"
         data = {
@@ -268,12 +364,12 @@ class DirectUrlProbeClient:
             "success_action_status": "200",
         }
         try:
-            with source.open("rb") as handle:
-                response = await client.post(
-                    policy.upload_host,
-                    data=data,
-                    files={"file": (_UPLOAD_FILENAME, handle, "video/mp4")},
-                )
+            source_handle.seek(0)
+            response = await client.post(
+                policy.upload_host,
+                data=data,
+                files={"file": (_UPLOAD_FILENAME, source_handle, "video/mp4")},
+            )
         except (OSError, httpx.HTTPError):
             raise DirectUrlProbeFailure("upload_transfer") from None
         if response.status_code != 200:
@@ -295,9 +391,12 @@ class DirectUrlProbeClient:
             )
         except httpx.HTTPError:
             raise DirectUrlProbeFailure("model_request") from None
-        if response.status_code in {400, 403, 404, 415, 422}:
-            raise DirectUrlProbeFailure("provider_url_resolution")
         if response.status_code != 200:
+            if self._provider_error_code(response) in {
+                "invalid_parameter_error",
+                "InvalidParameter.DataInspection",
+            }:
+                raise DirectUrlProbeFailure("provider_url_resolution")
             raise DirectUrlProbeFailure("model_request")
         try:
             response_payload: object = response.json()
@@ -351,12 +450,6 @@ class DirectUrlProbeClient:
         try:
             if not isinstance(payload, dict):
                 raise ValueError
-            choices = payload.get("choices")
-            if not isinstance(choices, list) or not choices or not isinstance(choices[0], dict):
-                raise ValueError
-            message = choices[0].get("message")
-            if not isinstance(message, dict) or not isinstance(message.get("content"), str):
-                raise ValueError
             usage = payload.get("usage")
             if not isinstance(usage, dict):
                 raise DirectUrlProbeFailure("usage_missing")
@@ -376,6 +469,21 @@ class DirectUrlProbeClient:
             raise
         except (IndexError, TypeError, ValueError):
             raise DirectUrlProbeFailure("response_schema") from None
+
+    @staticmethod
+    def _provider_error_code(response: httpx.Response) -> str | None:
+        try:
+            payload: object = response.json()
+        except ValueError:
+            return None
+        if not isinstance(payload, dict):
+            return None
+        error = payload.get("error")
+        error_code = error.get("code") if isinstance(error, dict) else None
+        if isinstance(error_code, str):
+            return error_code
+        code = payload.get("code")
+        return code if isinstance(code, str) else None
 
     @staticmethod
     def _payload_size(payload: dict[str, object]) -> int:
@@ -428,4 +536,7 @@ class DirectUrlProbeClient:
             output_tokens=output_tokens,
             latency_seconds=max(0.0, latency_seconds),
             failure_category=failure_category,
+            next_step=(
+                _NEXT_STEP_BY_FAILURE[failure_category] if failure_category is not None else None
+            ),
         )

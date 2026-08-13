@@ -28,6 +28,9 @@ The selected case is `videomme:395-2`:
 - source SHA-256:
   `f22889faeedd58563e5349723d10a6d81d8e0c5d167f0962d3cc221e08d3e9d2`;
 - local source size: `15,543,000` bytes;
+- available subtitle SHA-256:
+  `020321fec484200c197c6dfcf1c4964c909fd5881a33902834b27b484ddfe837`;
+- local subtitle size: `8,429` bytes;
 - the case previously failed in Direct `frames_2fps` mode;
 - the original video is small enough for a low-budget upload while exceeding the
   documented threshold where inline video transport is unsuitable.
@@ -58,8 +61,9 @@ benchmark runner:
 
 1. The existing Hermes launcher reads the already configured Token Plan endpoint
    and credential and injects them only into the diagnostic child process.
-2. The child validates the selected local file's path, size, and SHA-256 before
-   any network operation.
+2. The child validates the selected video and subtitle paths, sizes, and
+   SHA-256 values before any network operation. It keeps the validated video
+   descriptor open through upload and reads the validated subtitle only once.
 3. The child requests a temporary upload policy for exactly `qwen3.8-max`, uploads
    the original MP4 to the returned private destination, and retains the
    resulting `oss://` reference only in memory.
