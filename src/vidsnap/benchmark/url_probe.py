@@ -206,9 +206,13 @@ class DirectUrlProbeClient:
         self,
         config: BenchmarkProviderConfig,
         *,
+        upload_api_key: str,
         transport: httpx.AsyncBaseTransport | None = None,
     ) -> None:
+        if not upload_api_key:
+            raise ValueError("Model Studio upload credential is unavailable")
         self._config = config
+        self._upload_api_key = upload_api_key
         self._transport = transport
 
     async def run(self, case: FormalCase) -> DirectUrlProbeResult:
@@ -296,7 +300,7 @@ class DirectUrlProbeClient:
                 _UPLOAD_POLICY_URL,
                 params={"action": "getPolicy", "model": QWEN_MODEL},
                 headers={
-                    "Authorization": f"Bearer {self._config.api_key}",
+                    "Authorization": f"Bearer {self._upload_api_key}",
                     "Content-Type": "application/json",
                 },
             )

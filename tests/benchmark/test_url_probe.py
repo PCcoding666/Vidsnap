@@ -24,7 +24,8 @@ from vidsnap.benchmark.url_probe import (
 )
 from vidsnap.config import TOKEN_PLAN_BASE_URL
 
-_FAKE_CREDENTIAL = "child-only-credential"
+_FAKE_CREDENTIAL = "child-only-token-plan-credential"
+_FAKE_UPLOAD_CREDENTIAL = "child-only-workspace-credential"
 
 
 def _registered_case(tmp_path: Path) -> FormalCase:
@@ -184,6 +185,39 @@ def test_probe_result_rejects_impossible_success_state() -> None:
 
 
 @pytest.mark.asyncio
+async def test_probe_uses_workspace_key_only_for_policy_and_token_plan_key_for_model(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Using the Token Plan key for upload policy would cross the approved boundary."""
+    case = _registered_case(tmp_path)
+    _patch_registered_hash(monkeypatch)
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        if request.method == "GET":
+            assert request.headers["Authorization"] == f"Bearer {_FAKE_UPLOAD_CREDENTIAL}"
+            return httpx.Response(200, json=_policy_payload())
+        if request.url.host == "dashscope-file-test.oss-cn-beijing.aliyuncs.com":
+            return httpx.Response(200)
+        assert request.headers["Authorization"] == f"Bearer {_FAKE_CREDENTIAL}"
+        return httpx.Response(
+            200,
+            json={"usage": {"prompt_tokens": 1234, "completion_tokens": 0}},
+        )
+
+    result = await DirectUrlProbeClient(
+        BenchmarkProviderConfig(api_key=_FAKE_CREDENTIAL, base_url=TOKEN_PLAN_BASE_URL),
+        upload_api_key=_FAKE_UPLOAD_CREDENTIAL,
+        transport=httpx.MockTransport(handler),
+    ).run(case)
+
+    assert result.status == "PROBE_SUCCEEDED"
+    serialized = repr(result) + result.model_dump_json()
+    assert _FAKE_CREDENTIAL not in serialized
+    assert _FAKE_UPLOAD_CREDENTIAL not in serialized
+
+
+@pytest.mark.asyncio
 async def test_probe_uploads_once_and_calls_fixed_qwen_video_url_once(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -219,6 +253,7 @@ async def test_probe_uploads_once_and_calls_fixed_qwen_video_url_once(
 
     client = DirectUrlProbeClient(
         BenchmarkProviderConfig(api_key=_FAKE_CREDENTIAL, base_url=TOKEN_PLAN_BASE_URL),
+        upload_api_key=_FAKE_UPLOAD_CREDENTIAL,
         transport=httpx.MockTransport(handler),
     )
 
@@ -294,6 +329,7 @@ async def test_probe_uploads_the_same_file_descriptor_that_was_validated(
 
     result = await DirectUrlProbeClient(
         BenchmarkProviderConfig(api_key=_FAKE_CREDENTIAL, base_url=TOKEN_PLAN_BASE_URL),
+        upload_api_key=_FAKE_UPLOAD_CREDENTIAL,
         transport=httpx.MockTransport(handler),
     ).run(case)
 
@@ -324,6 +360,7 @@ async def test_probe_sanitizes_upload_policy_failure(
 
     result = await DirectUrlProbeClient(
         BenchmarkProviderConfig(api_key=_FAKE_CREDENTIAL, base_url=TOKEN_PLAN_BASE_URL),
+        upload_api_key=_FAKE_UPLOAD_CREDENTIAL,
         transport=httpx.MockTransport(handler),
     ).run(case)
 
@@ -359,6 +396,7 @@ async def test_probe_rejects_non_private_upload_policy_before_transfer(
 
     result = await DirectUrlProbeClient(
         BenchmarkProviderConfig(api_key=_FAKE_CREDENTIAL, base_url=TOKEN_PLAN_BASE_URL),
+        upload_api_key=_FAKE_UPLOAD_CREDENTIAL,
         transport=httpx.MockTransport(handler),
     ).run(case)
 
@@ -390,6 +428,7 @@ async def test_probe_accepts_successful_usage_without_retaining_answer_shape(
 
     result = await DirectUrlProbeClient(
         BenchmarkProviderConfig(api_key=_FAKE_CREDENTIAL, base_url=TOKEN_PLAN_BASE_URL),
+        upload_api_key=_FAKE_UPLOAD_CREDENTIAL,
         transport=httpx.MockTransport(handler),
     ).run(case)
 
@@ -430,6 +469,7 @@ async def test_probe_stops_after_one_rejected_model_request(
 
     result = await DirectUrlProbeClient(
         BenchmarkProviderConfig(api_key=_FAKE_CREDENTIAL, base_url=TOKEN_PLAN_BASE_URL),
+        upload_api_key=_FAKE_UPLOAD_CREDENTIAL,
         transport=httpx.MockTransport(handler),
     ).run(case)
 
@@ -463,6 +503,7 @@ async def test_probe_does_not_mislabel_unknown_client_error_as_url_resolution(
 
     result = await DirectUrlProbeClient(
         BenchmarkProviderConfig(api_key=_FAKE_CREDENTIAL, base_url=TOKEN_PLAN_BASE_URL),
+        upload_api_key=_FAKE_UPLOAD_CREDENTIAL,
         transport=httpx.MockTransport(handler),
     ).run(case)
 
@@ -497,6 +538,7 @@ async def test_probe_requires_documented_url_message_with_generic_error_code(
 
     result = await DirectUrlProbeClient(
         BenchmarkProviderConfig(api_key=_FAKE_CREDENTIAL, base_url=TOKEN_PLAN_BASE_URL),
+        upload_api_key=_FAKE_UPLOAD_CREDENTIAL,
         transport=httpx.MockTransport(handler),
     ).run(case)
 
@@ -544,6 +586,7 @@ async def test_probe_reports_each_network_failure_as_one_bounded_category(
 
     result = await DirectUrlProbeClient(
         BenchmarkProviderConfig(api_key=_FAKE_CREDENTIAL, base_url=TOKEN_PLAN_BASE_URL),
+        upload_api_key=_FAKE_UPLOAD_CREDENTIAL,
         transport=httpx.MockTransport(handler),
     ).run(case)
 

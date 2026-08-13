@@ -11,7 +11,11 @@
 ## Global Constraints
 
 - Use only model `qwen3.8-max`, explicit `fps=2`, case `videomme:395-2`, video SHA-256 `f22889faeedd58563e5349723d10a6d81d8e0c5d167f0962d3cc221e08d3e9d2`, video size `15,543,000` bytes, subtitle SHA-256 `020321fec484200c197c6dfcf1c4964c909fd5881a33902834b27b484ddfe837`, and subtitle size `8,429` bytes.
-- Read the Token Plan credential and endpoint only through `scripts/run_with_hermes_qwen.py`; never print or persist either value.
+- Read the Token Plan credential and endpoint only through `scripts/run_with_hermes_qwen.py`.
+  On the user-authorized retry, read exactly one ordinary Model Studio workspace key
+  from the supplied external CSV through the same launcher. Use it only for upload
+  policy acquisition, use Token Plan only for the model request, and never print or
+  persist either value.
 - Permit exactly one temporary upload and at most one model request; do not retry or switch credentials, models, endpoints, public hosts, or cases.
 - Keep upload credentials, upload host, object key, `oss://` reference, Authorization header, raw request, raw response, and answer text out of files, terminal output, exceptions, reports, and git.
 - Write the diagnostic report only outside the repository and record no accuracy, efficiency, noninferiority, or superiority conclusion.

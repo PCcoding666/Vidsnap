@@ -7,6 +7,7 @@ import argparse
 import asyncio
 import hashlib
 import json
+import os
 import subprocess
 from pathlib import Path
 from typing import Protocol
@@ -187,11 +188,14 @@ def main() -> None:
         config = BenchmarkProviderConfig.from_env()
     except (ProviderUnavailable, ValueError):
         parser.error("Hermes Qwen configuration is unavailable")
+    upload_api_key = os.getenv("VIDSNAP_MODEL_STUDIO_UPLOAD_API_KEY", "")
+    if not upload_api_key:
+        parser.error("Model Studio upload credential is unavailable")
     result, report_path = asyncio.run(
         _execute_probe(
             case,
             output_dir=output_dir,
-            client=DirectUrlProbeClient(config),
+            client=DirectUrlProbeClient(config, upload_api_key=upload_api_key),
         )
     )
     print(json.dumps(_terminal_summary(result, report_path), ensure_ascii=True, sort_keys=True))

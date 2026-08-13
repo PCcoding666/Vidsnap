@@ -60,7 +60,11 @@ The implementation will add a narrow diagnostic command, separate from the
 benchmark runner:
 
 1. The existing Hermes launcher reads the already configured Token Plan endpoint
-   and credential and injects them only into the diagnostic child process.
+   and credential. For this authorized retry, it also reads exactly one ordinary
+   Model Studio workspace key from the user-provided external CSV. Both credentials
+   are injected only into the diagnostic child process: the workspace key is used
+   only to request the private upload policy, while the Token Plan key is used only
+   for the `qwen3.8-max` model request.
 2. The child validates the selected video and subtitle paths, sizes, and
    SHA-256 values before any network operation. It keeps the validated video
    descriptor open through upload and reads the validated subtitle only once.
@@ -85,7 +89,10 @@ does not mark the smoke successful by itself.
 
 ## Security and data-lifecycle boundary
 
-- Use only the Hermes-injected Token Plan credential and approved endpoint.
+- Use the external ordinary Model Studio workspace key only for temporary upload
+  policy acquisition, and use the Hermes-injected Token Plan credential only for
+  the model request at the approved endpoint. The two keys must belong to the same
+  Alibaba Cloud account for the private object to resolve.
 - Keep the credential, Authorization header, upload policy, signed fields,
   temporary upload destination, `oss://` reference, raw request, raw response,
   and answer text out of stdout, stderr, exceptions, files, reports, and git.
