@@ -15,9 +15,9 @@ and does not change the default fixed Harness behavior.
 Each case uses the same local video bytes, question, answer options, ground-truth
 answer, available subtitle, and Qwen model across three variants:
 
-- `direct`: submit the complete video when the endpoint accepts it. If the smoke
-  probe shows that complete-video input is unsupported, extract the complete
-  timeline at exactly 2 fps and use that frame sequence for every Direct case.
+- `direct`: extract the complete timeline at exactly 2 fps and submit that fixed
+  frame sequence for every Direct case. Under the registered Qwen 3.8 Token Plan
+  protocol, smoke and formal execution never attempt complete-video input.
 - `fixed`: run both acquisition tools in the existing fixed order, skipping only
   a physically unavailable modality such as audio on a silent video.
 - `agentic`: after deterministic probing, request one strict JSON `ToolPlan` from
@@ -38,9 +38,9 @@ fallback to another model.
 
 The smoke phase contains six cases, stratified across both datasets and covering
 audio/no-audio plus visual, speech, and temporal requirements. It validates the
-Hermes endpoint, all three execution paths, usage accounting, Direct input mode,
-and leak controls. Its provider-reported usage is the only basis for estimating
-the 54-case formal run.
+Hermes endpoint, all three execution paths, usage accounting, the fixed Direct
+`frames_2fps` input mode, and leak controls. Its provider-reported usage is the
+only basis for estimating the 54-case formal run.
 
 The formal phase contains exactly 54 cases: 36 Video-MME and 18 MVBench. Sampling
 is deterministic from a local manifest and is stratified by dataset, duration,

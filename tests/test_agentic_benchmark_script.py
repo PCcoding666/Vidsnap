@@ -165,42 +165,69 @@ def test_formal_validate_only_rejects_unregistered_multi_task_manifest(tmp_path)
     assert "committed pre-registration" in result.stderr
 
 
-def test_smoke_compatibility_probe_uses_largest_registered_payload(tmp_path) -> None:
-    """A small random first video must not decide complete-video compatibility."""
-    manifest = _write_smoke_manifest(tmp_path)
-    rows = manifest.read_text(encoding="utf-8").splitlines()
-    largest = json.loads(rows[-1])
-    largest_path = Path(largest["source"])
-    largest_path.write_bytes(b"largest-video-payload")
-    largest["source_sha256"] = hashlib.sha256(largest_path.read_bytes()).hexdigest()
-    rows[-1] = json.dumps(largest)
-    manifest.write_text("\n".join(rows) + "\n", encoding="utf-8")
-
-    namespace = runpy.run_path("scripts/run_agentic_benchmark.py")
-    cases = namespace["_load_manifest"](manifest)
-
-    assert namespace["_compatibility_probe_case"](cases).case_id == "case-5"
-
-
-def test_failed_complete_video_probe_is_not_registered_as_supported() -> None:
-    """A typed failed outcome must force the registered Direct fallback."""
+def test_smoke_starts_with_registered_frame_sequence_without_video_probe(tmp_path) -> None:
+    """A complete-video attempt would violate the selected Qwen 3.8 Direct contract."""
     from vidsnap.benchmark.live import BenchmarkUsage, VariantOutcome
     from vidsnap.contracts import TerminalState
 
-    outcome = VariantOutcome(
-        case_id="case",
-        variant="direct",
-        terminal_state=TerminalState.FAILED,
-        correct=False,
-        direct_input_mode="video",
-        usage=BenchmarkUsage(model_calls=1, input_bytes=123),
-        verifier_gates={},
-        verifier_passed=False,
-        failure_reason="benchmark case failed",
-    )
     namespace = runpy.run_path("scripts/run_agentic_benchmark.py")
+    cases = namespace["_load_manifest"](_write_smoke_manifest(tmp_path))
+    calls: list[tuple[str, str]] = []
 
-    assert namespace["_complete_video_probe_succeeded"](outcome) is False
+    class FakeConfig:
+        @classmethod
+        def from_env(cls):
+            return object()
+
+    class FakeEngine:
+        def __init__(self, *, media, model) -> None:
+            del media, model
+
+        async def run_case(self, case, *, variant, work_dir, direct_input_mode):
+            del work_dir
+            calls.append((variant, direct_input_mode))
+            return VariantOutcome(
+                case_id=case.case_id,
+                variant=variant,
+                terminal_state=TerminalState.SUCCEEDED,
+                answer="A",
+                correct=True,
+                direct_input_mode=direct_input_mode if variant == "direct" else None,
+                usage=BenchmarkUsage(model_calls=1),
+                verifier_gates={"schema_valid": True},
+                verifier_passed=True,
+            )
+
+    def fake_report(cases, outcomes, *, direct_input_mode, **kwargs):
+        del outcomes, kwargs
+        return {
+            "status": "SMOKE_SUCCEEDED",
+            "case_count": len(cases),
+            "direct_input_mode": direct_input_mode,
+        }
+
+    globals_ = namespace["_run_experiment"].__globals__
+    globals_["BenchmarkProviderConfig"] = FakeConfig
+    globals_["FormalBenchmarkEngine"] = FakeEngine
+    globals_["FFmpegMediaPort"] = lambda: object()
+    globals_["QwenFormalClient"] = lambda config: config
+    globals_["build_benchmark_report"] = fake_report
+
+    report = asyncio.run(
+        namespace["_run_experiment"](
+            cases,
+            phase="smoke",
+            output_dir=tmp_path / "smoke-output",
+            seed=20260812,
+            formal_direct_mode=None,
+            pre_registration_manifest_sha256="a" * 64,
+        )
+    )
+
+    assert report["direct_input_mode"] == "frames_2fps"
+    assert "direct_compatibility_probe" not in report
+    assert len(calls) == 18
+    assert all(mode == "frames_2fps" for _, mode in calls)
 
 
 def test_formal_composition_rejects_single_mvbench_task_family(tmp_path) -> None:

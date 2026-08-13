@@ -18,7 +18,7 @@
 - Do not commit benchmark media, source annotations, generated manifests, RunBundles, raw model responses, credentials, or result reports.
 - Write experiment files under a caller-provided directory outside the repository; record source URLs, dataset versions, local SHA-256s, selected case IDs, and a UTC timestamp in its local manifest.
 - Use Video-MME and MVBench only for private, non-commercial internal research; cite their official repositories in the local report.
-- Every baseline uses the same Qwen model, question text, answer options, source video, transcript availability, and randomized case order. Direct uses complete-video input when supported, otherwise the complete timeline at exactly 2 fps.
+- Every baseline uses the same Qwen model, question text, answer options, source video, transcript availability, and randomized case order. Direct always uses the complete timeline at exactly 2 fps and never attempts complete-video input.
 - Run six smoke cases before the formal experiment and derive the formal cost projection only from provider-reported smoke usage.
 - Run exactly 54 formal cases: 36 `Video-MME` and 18 `MVBench`.
 

@@ -141,7 +141,7 @@ def _validate_usage_totals(value: object, *, context: str) -> dict[str, object]:
             valid = isinstance(measured, int) and not isinstance(measured, bool) and measured >= 0
         else:
             valid = (
-                isinstance(measured, (int, float))
+                isinstance(measured, int | float)
                 and not isinstance(measured, bool)
                 and math.isfinite(measured)
                 and measured >= 0
@@ -197,7 +197,7 @@ def _load_smoke_gate(path: Path | None) -> dict[str, object]:
     scale_factor = projection.get("scale_factor")
     if (
         isinstance(scale_factor, bool)
-        or not isinstance(scale_factor, (int, float))
+        or not isinstance(scale_factor, int | float)
         or not math.isfinite(scale_factor)
         or scale_factor != 9
     ):
@@ -276,21 +276,6 @@ def _unsupported_outcome(
     )
 
 
-def _compatibility_probe_case(cases: list[FormalCase]) -> FormalCase:
-    """Use the largest registered payload to decide complete-video support."""
-    if not cases:
-        raise ValueError("compatibility probe requires at least one case")
-    return max(cases, key=lambda case: case.source.stat().st_size)
-
-
-def _complete_video_probe_succeeded(outcome: VariantOutcome) -> bool:
-    """Require an actual provider response before registering video support."""
-    return (
-        outcome.terminal_state in {TerminalState.SUCCEEDED, TerminalState.PARTIAL}
-        and outcome.usage.model_calls == 1
-    )
-
-
 async def _run_experiment(
     cases: list[FormalCase],
     *,
@@ -309,49 +294,7 @@ async def _run_experiment(
         media=FFmpegMediaPort(),
         model=QwenFormalClient(config),
     )
-    direct_mode: DirectInputMode = formal_direct_mode or "video"
-    direct_mode_decided = formal_direct_mode is not None
-    compatibility_probe: dict[str, float | int | str] | None = None
-    cached_direct: dict[str, VariantOutcome] = {}
-    if phase == "smoke" and not direct_mode_decided:
-        probe_case = _compatibility_probe_case(cases)
-        try:
-            probe_outcome = await engine.run_case(
-                probe_case,
-                variant="direct",
-                work_dir=output_dir / "artifacts" / "compatibility" / "direct-video",
-                direct_input_mode="video",
-            )
-        except UnsupportedVideoInput as error:
-            compatibility_probe = {
-                "status": "complete_video_unsupported",
-                "case_id": probe_case.case_id,
-                "model_calls": 1,
-                "input_bytes": error.input_bytes,
-            }
-            direct_mode = "frames_2fps"
-        else:
-            if not _complete_video_probe_succeeded(probe_outcome):
-                compatibility_probe = {
-                    "status": "complete_video_unusable",
-                    "case_id": probe_case.case_id,
-                    "model_calls": probe_outcome.usage.model_calls,
-                    "input_bytes": probe_outcome.usage.input_bytes,
-                    "latency_seconds": probe_outcome.usage.latency_seconds,
-                }
-                direct_mode = "frames_2fps"
-                direct_mode_decided = True
-            else:
-                compatibility_probe = {
-                    "status": "complete_video_supported",
-                    "case_id": probe_case.case_id,
-                    "model_calls": probe_outcome.usage.model_calls,
-                    "input_bytes": probe_outcome.usage.input_bytes,
-                    "latency_seconds": probe_outcome.usage.latency_seconds,
-                }
-                cached_direct[probe_case.case_id] = probe_outcome
-                direct_mode = "video"
-        direct_mode_decided = True
+    direct_mode: DirectInputMode = formal_direct_mode or "frames_2fps"
     indexed_cases = list(enumerate(cases))
     random.Random(seed).shuffle(indexed_cases)
     variant_orders: tuple[tuple[BenchmarkVariant, ...], ...] = (
@@ -363,9 +306,6 @@ async def _run_experiment(
     for order_index, (_, case) in enumerate(indexed_cases):
         for variant in variant_orders[order_index % len(variant_orders)]:
             work_dir = output_dir / "artifacts" / f"{order_index:03d}" / variant
-            if variant == "direct" and case.case_id in cached_direct:
-                outcomes.append(cached_direct.pop(case.case_id))
-                continue
             try:
                 outcome = await engine.run_case(
                     case,
@@ -391,8 +331,6 @@ async def _run_experiment(
         "python": platform.python_version(),
         "platform": platform.system(),
     }
-    if compatibility_probe is not None:
-        report["direct_compatibility_probe"] = compatibility_probe
     if smoke_gate_provenance is not None:
         report["smoke_gate"] = smoke_gate_provenance
     outcomes_path = output_dir / "outcomes.jsonl"
