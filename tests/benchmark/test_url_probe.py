@@ -9,6 +9,7 @@ from pathlib import Path
 import httpx
 import pytest
 
+import vidsnap.benchmark.url_probe as url_probe
 from vidsnap.benchmark.formal import FormalCase
 from vidsnap.benchmark.live import BenchmarkProviderConfig
 from vidsnap.benchmark.url_probe import (
@@ -62,14 +63,6 @@ def _patch_registered_hash(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
         "vidsnap.benchmark.url_probe.REGISTERED_PROBE_SUBTITLE_BYTES",
         len(subtitle_bytes),
-    )
-    monkeypatch.setattr(
-        "vidsnap.benchmark.url_probe._sha256",
-        lambda path: (
-            REGISTERED_PROBE_SHA256
-            if path.suffix == ".mp4"
-            else hashlib.sha256(path.read_bytes()).hexdigest()
-        ),
     )
     monkeypatch.setattr(
         "vidsnap.benchmark.url_probe._sha256_handle",
@@ -130,6 +123,32 @@ def test_probe_preflight_rejects_changed_subtitle(
         validate_probe_case(case)
 
 
+def test_registered_subtitle_is_opened_only_once(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Subtitle bytes must be validated and decoded from the same single read."""
+    case = _registered_case(tmp_path)
+    _patch_registered_hash(monkeypatch)
+    assert case.subtitle_path is not None
+    subtitle_path = case.subtitle_path
+    real_open = Path.open
+    subtitle_opens = 0
+
+    def tracked_open(path: Path, *args, **kwargs):
+        nonlocal subtitle_opens
+        if path == subtitle_path:
+            subtitle_opens += 1
+        return real_open(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "open", tracked_open)
+
+    subtitle = url_probe._available_subtitle(case)
+
+    assert subtitle == "registered subtitle"
+    assert subtitle_opens == 1
+
+
 def test_probe_result_rejects_impossible_success_state() -> None:
     """A successful report cannot exceed one call or carry a failure category."""
     with pytest.raises(ValueError):
@@ -146,6 +165,21 @@ def test_probe_result_rejects_impossible_success_state() -> None:
             output_tokens=0,
             latency_seconds=1,
             failure_category="model_request",
+        )
+
+    with pytest.raises(ValueError):
+        DirectUrlProbeResult(
+            status="PROBE_SUCCEEDED",
+            case_id=REGISTERED_PROBE_CASE_ID,
+            source_sha256=REGISTERED_PROBE_SHA256,
+            source_bytes=1,
+            upload_status="succeeded",
+            request_status="succeeded",
+            model_calls=1,
+            serialized_request_bytes=1,
+            input_tokens=1,
+            output_tokens=0,
+            latency_seconds=1,
         )
 
 
@@ -244,11 +278,7 @@ async def test_probe_uploads_the_same_file_descriptor_that_was_validated(
         nonlocal upload_body
         if request.method == "GET":
             replacement = tmp_path / "replacement.mp4"
-            with replacement.open("wb") as handle:
-                handle.truncate(REGISTERED_PROBE_SOURCE_BYTES)
-            with replacement.open("r+b") as handle:
-                handle.seek(-len(replacement_marker), 2)
-                handle.write(replacement_marker)
+            replacement.write_bytes(replacement_marker)
             replacement.replace(case.source)
             return httpx.Response(200, json=_policy_payload())
         if request.url.host == "dashscope-file-test.oss-cn-beijing.aliyuncs.com":
@@ -268,6 +298,7 @@ async def test_probe_uploads_the_same_file_descriptor_that_was_validated(
     ).run(case)
 
     assert result.status == "PROBE_SUCCEEDED"
+    assert result.source_bytes == REGISTERED_PROBE_SOURCE_BYTES
     assert original_marker in upload_body
     assert replacement_marker not in upload_body
 
@@ -389,7 +420,10 @@ async def test_probe_stops_after_one_rejected_model_request(
             json={
                 "error": {
                     "code": "invalid_parameter_error",
-                    "message": "oss://private-object cannot resolve",
+                    "message": (
+                        "InternalError.Algo.InvalidParameter: The provided URL does not "
+                        "appear to be valid. Ensure it is correctly formatted."
+                    ),
                 }
             },
         )
@@ -435,6 +469,38 @@ async def test_probe_does_not_mislabel_unknown_client_error_as_url_resolution(
     assert result.status == "PROBE_FAILED"
     assert result.failure_category == "model_request"
     assert "private details" not in result.model_dump_json()
+
+
+@pytest.mark.asyncio
+async def test_probe_requires_documented_url_message_with_generic_error_code(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A generic invalid-parameter code alone must remain a model-request failure."""
+    case = _registered_case(tmp_path)
+    _patch_registered_hash(monkeypatch)
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        if request.method == "GET":
+            return httpx.Response(200, json=_policy_payload())
+        if request.url.host == "dashscope-file-test.oss-cn-beijing.aliyuncs.com":
+            return httpx.Response(200)
+        return httpx.Response(
+            400,
+            json={
+                "error": {
+                    "code": "invalid_parameter_error",
+                    "message": "another parameter is malformed",
+                }
+            },
+        )
+
+    result = await DirectUrlProbeClient(
+        BenchmarkProviderConfig(api_key=_FAKE_CREDENTIAL, base_url=TOKEN_PLAN_BASE_URL),
+        transport=httpx.MockTransport(handler),
+    ).run(case)
+
+    assert result.failure_category == "model_request"
 
 
 @pytest.mark.asyncio

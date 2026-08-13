@@ -67,10 +67,6 @@ def _patch_registered_evidence(monkeypatch: pytest.MonkeyPatch) -> None:
         len(subtitle_bytes),
     )
     monkeypatch.setattr(
-        "vidsnap.benchmark.url_probe._sha256",
-        lambda path: hashlib.sha256(path.read_bytes()).hexdigest(),
-    )
-    monkeypatch.setattr(
         "vidsnap.benchmark.url_probe._sha256_handle",
         lambda handle: REGISTERED_PROBE_SHA256,
     )
@@ -243,10 +239,6 @@ def test_full_validate_only_command_never_reads_provider_configuration(
     monkeypatch.setattr(
         "vidsnap.benchmark.url_probe.REGISTERED_PROBE_SUBTITLE_BYTES",
         len(subtitle_bytes),
-    )
-    monkeypatch.setattr(
-        "vidsnap.benchmark.url_probe._sha256",
-        lambda path: hashlib.sha256(path.read_bytes()).hexdigest(),
     )
     monkeypatch.setattr(
         "vidsnap.benchmark.url_probe._sha256_handle",

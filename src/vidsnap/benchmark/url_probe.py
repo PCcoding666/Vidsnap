@@ -7,7 +7,6 @@ import json
 import os
 import time
 from dataclasses import dataclass, field
-from pathlib import Path
 from typing import BinaryIO, Literal
 from urllib.parse import urlparse
 
@@ -98,6 +97,9 @@ class DirectUrlProbeResult(StrictModel):
             if (
                 self.upload_status != "succeeded"
                 or self.request_status != "succeeded"
+                or self.case_id != REGISTERED_PROBE_CASE_ID
+                or self.source_sha256 != REGISTERED_PROBE_SHA256
+                or self.source_bytes != REGISTERED_PROBE_SOURCE_BYTES
                 or self.model_calls != 1
                 or self.input_tokens <= 0
                 or self.failure_category is not None
@@ -131,17 +133,6 @@ class _UploadPolicy:
     max_file_size_mb: int
 
 
-def _sha256(path: Path) -> str:
-    digest = hashlib.sha256()
-    try:
-        with path.open("rb") as handle:
-            for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-                digest.update(chunk)
-    except OSError:
-        raise DirectUrlProbeFailure("local_validation") from None
-    return digest.hexdigest()
-
-
 def _sha256_handle(handle: BinaryIO) -> str:
     digest = hashlib.sha256()
     try:
@@ -154,24 +145,22 @@ def _sha256_handle(handle: BinaryIO) -> str:
     return digest.hexdigest()
 
 
-def _source_size(path: Path) -> int:
-    try:
-        return path.stat().st_size
-    except OSError:
-        raise DirectUrlProbeFailure("local_validation") from None
-
-
 def _available_subtitle(case: FormalCase) -> str:
     path = case.subtitle_path
     if path is None or not path.is_absolute() or not path.is_file():
         raise DirectUrlProbeFailure("local_validation")
-    if _source_size(path) != REGISTERED_PROBE_SUBTITLE_BYTES:
-        raise DirectUrlProbeFailure("local_validation")
-    if _sha256(path) != REGISTERED_PROBE_SUBTITLE_SHA256:
+    try:
+        subtitle_bytes = path.read_bytes()
+    except (OSError, UnicodeError):
+        raise DirectUrlProbeFailure("local_validation") from None
+    if (
+        len(subtitle_bytes) != REGISTERED_PROBE_SUBTITLE_BYTES
+        or hashlib.sha256(subtitle_bytes).hexdigest() != REGISTERED_PROBE_SUBTITLE_SHA256
+    ):
         raise DirectUrlProbeFailure("local_validation")
     try:
-        subtitle = path.read_text(encoding="utf-8").strip()
-    except (OSError, UnicodeError):
+        subtitle = subtitle_bytes.decode("utf-8").strip()
+    except UnicodeError:
         raise DirectUrlProbeFailure("local_validation") from None
     if not subtitle:
         raise DirectUrlProbeFailure("local_validation")
@@ -197,7 +186,7 @@ def validate_probe_case(case: FormalCase) -> None:
         raise DirectUrlProbeFailure("local_validation") from None
 
 
-def _validate_source_handle(source_handle: BinaryIO) -> None:
+def _validate_source_handle(source_handle: BinaryIO) -> int:
     try:
         source_bytes = os.fstat(source_handle.fileno()).st_size
     except OSError:
@@ -207,6 +196,7 @@ def _validate_source_handle(source_handle: BinaryIO) -> None:
         or _sha256_handle(source_handle) != REGISTERED_PROBE_SHA256
     ):
         raise DirectUrlProbeFailure("local_validation")
+    return source_bytes
 
 
 class DirectUrlProbeClient:
@@ -230,6 +220,7 @@ class DirectUrlProbeClient:
         serialized_request_bytes = 0
         input_tokens = 0
         output_tokens = 0
+        validated_source_bytes = 0
         try:
             identity_is_valid = (
                 case.case_id == REGISTERED_PROBE_CASE_ID
@@ -245,7 +236,7 @@ class DirectUrlProbeClient:
             except OSError:
                 raise DirectUrlProbeFailure("local_validation") from None
             with source_handle:
-                _validate_source_handle(source_handle)
+                validated_source_bytes = _validate_source_handle(source_handle)
                 async with httpx.AsyncClient(
                     timeout=self._config.timeout_seconds,
                     transport=self._transport,
@@ -281,6 +272,7 @@ class DirectUrlProbeClient:
                 serialized_request_bytes=serialized_request_bytes,
                 input_tokens=input_tokens,
                 output_tokens=output_tokens,
+                source_bytes=validated_source_bytes,
                 latency_seconds=time.monotonic() - started_at,
                 failure_category=error.category,
             )
@@ -293,6 +285,7 @@ class DirectUrlProbeClient:
             serialized_request_bytes=serialized_request_bytes,
             input_tokens=input_tokens,
             output_tokens=output_tokens,
+            source_bytes=validated_source_bytes,
             latency_seconds=time.monotonic() - started_at,
             failure_category=None,
         )
@@ -392,10 +385,12 @@ class DirectUrlProbeClient:
         except httpx.HTTPError:
             raise DirectUrlProbeFailure("model_request") from None
         if response.status_code != 200:
-            if self._provider_error_code(response) in {
-                "invalid_parameter_error",
-                "InvalidParameter.DataInspection",
-            }:
+            error_code, error_message = self._provider_error_details(response)
+            if (
+                error_code == "invalid_parameter_error"
+                and error_message is not None
+                and "The provided URL does not appear to be valid" in error_message
+            ):
                 raise DirectUrlProbeFailure("provider_url_resolution")
             raise DirectUrlProbeFailure("model_request")
         try:
@@ -471,19 +466,24 @@ class DirectUrlProbeClient:
             raise DirectUrlProbeFailure("response_schema") from None
 
     @staticmethod
-    def _provider_error_code(response: httpx.Response) -> str | None:
+    def _provider_error_details(response: httpx.Response) -> tuple[str | None, str | None]:
         try:
             payload: object = response.json()
         except ValueError:
-            return None
+            return None, None
         if not isinstance(payload, dict):
-            return None
+            return None, None
         error = payload.get("error")
-        error_code = error.get("code") if isinstance(error, dict) else None
-        if isinstance(error_code, str):
-            return error_code
-        code = payload.get("code")
-        return code if isinstance(code, str) else None
+        if isinstance(error, dict):
+            error_code = error.get("code")
+            error_message = error.get("message")
+        else:
+            error_code = payload.get("code")
+            error_message = payload.get("message")
+        return (
+            error_code if isinstance(error_code, str) else None,
+            error_message if isinstance(error_message, str) else None,
+        )
 
     @staticmethod
     def _payload_size(payload: dict[str, object]) -> int:
@@ -516,13 +516,10 @@ class DirectUrlProbeClient:
         serialized_request_bytes: int,
         input_tokens: int,
         output_tokens: int,
+        source_bytes: int,
         latency_seconds: float,
         failure_category: ProbeFailureCategory | None,
     ) -> DirectUrlProbeResult:
-        try:
-            source_bytes = case.source.stat().st_size
-        except OSError:
-            source_bytes = 0
         return DirectUrlProbeResult(
             status=status,
             case_id=case.case_id,
