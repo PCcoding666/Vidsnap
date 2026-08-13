@@ -21,6 +21,8 @@ from vidsnap.benchmark.url_probe import (
 )
 from vidsnap.config import TOKEN_PLAN_BASE_URL
 
+_FAKE_CREDENTIAL = "child-only-credential"
+
 
 def _registered_case(tmp_path: Path) -> FormalCase:
     source = tmp_path / "registered.mp4"
@@ -130,7 +132,7 @@ async def test_probe_uploads_once_and_calls_fixed_qwen_video_url_once(
         )
 
     client = DirectUrlProbeClient(
-        BenchmarkProviderConfig(api_key="child-only-credential", base_url=TOKEN_PLAN_BASE_URL),
+        BenchmarkProviderConfig(api_key=_FAKE_CREDENTIAL, base_url=TOKEN_PLAN_BASE_URL),
         transport=httpx.MockTransport(handler),
     )
 
@@ -159,7 +161,7 @@ async def test_probe_uploads_once_and_calls_fixed_qwen_video_url_once(
     assert result.serialized_request_bytes > 0
     serialized = repr(result) + result.model_dump_json()
     for forbidden in (
-        "child-only-credential",
+        _FAKE_CREDENTIAL,
         "private-policy-value",
         "private-signature-value",
         "private-access-id",
@@ -191,7 +193,7 @@ async def test_probe_sanitizes_upload_policy_failure(
         )
 
     result = await DirectUrlProbeClient(
-        BenchmarkProviderConfig(api_key="child-only-credential", base_url=TOKEN_PLAN_BASE_URL),
+        BenchmarkProviderConfig(api_key=_FAKE_CREDENTIAL, base_url=TOKEN_PLAN_BASE_URL),
         transport=httpx.MockTransport(handler),
     ).run(case)
 
@@ -204,7 +206,7 @@ async def test_probe_sanitizes_upload_policy_failure(
     serialized = repr(result) + result.model_dump_json()
     assert "private-policy-value" not in serialized
     assert "oss://" not in serialized
-    assert "child-only-credential" not in serialized
+    assert _FAKE_CREDENTIAL not in serialized
 
 
 @pytest.mark.asyncio
@@ -227,7 +229,7 @@ async def test_probe_stops_after_one_rejected_model_request(
         return httpx.Response(400, json={"error": "oss://private-object cannot resolve"})
 
     result = await DirectUrlProbeClient(
-        BenchmarkProviderConfig(api_key="child-only-credential", base_url=TOKEN_PLAN_BASE_URL),
+        BenchmarkProviderConfig(api_key=_FAKE_CREDENTIAL, base_url=TOKEN_PLAN_BASE_URL),
         transport=httpx.MockTransport(handler),
     ).run(case)
 
