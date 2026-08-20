@@ -9,8 +9,14 @@ def test_registered_selection_has_required_counts_and_no_smoke_overlap() -> None
     """Changing the 36/18 split or reusing smoke cases must fail this test."""
     assert len(FORMAL_SELECTION["Video-MME"]) == 36
     assert len(FORMAL_SELECTION["MVBench"]) == 18
-    assert len(SMOKE_SELECTION["Video-MME"]) == 4
-    assert len(SMOKE_SELECTION["MVBench"]) == 2
+    assert [item.case_id for item in SMOKE_SELECTION["Video-MME"]] == [
+        "069-1",
+        "069-2",
+        "069-3",
+    ]
+    assert [item.case_id for item in SMOKE_SELECTION["MVBench"]] == ["6", "18", "19"]
+    assert len(SMOKE_SELECTION["Video-MME"]) == 3
+    assert len(SMOKE_SELECTION["MVBench"]) == 3
 
     formal_ids = {
         (dataset, item.case_id) for dataset, items in FORMAL_SELECTION.items() for item in items

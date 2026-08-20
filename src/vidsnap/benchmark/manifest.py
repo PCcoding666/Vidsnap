@@ -306,27 +306,19 @@ FORMAL_SELECTION: dict[Literal["Video-MME", "MVBench"], tuple[RegisteredCase, ..
 SMOKE_SELECTION: dict[Literal["Video-MME", "MVBench"], tuple[RegisteredCase, ...]] = {
     "Video-MME": (
         _registered(
+            "069-1", "Counting Problem", ("speech",), ("transcribe_audio",), "speech-required"
+        ),
+        _registered(
             "069-2", "Object Recognition", ("visual",), ("sample_evidence",), "visual-required"
         ),
         _registered(
-            "395-2",
-            "Action Recognition",
-            ("visual", "temporal"),
-            ("sample_evidence",),
-            "visual-required",
-        ),
-        _registered(
-            "419-1", "Information Synopsis", ("speech",), ("transcribe_audio",), "speech-required"
-        ),
-        _registered(
-            "701-2",
-            "Action Reasoning",
-            ("speech", "temporal"),
-            ("transcribe_audio", "sample_evidence"),
-            "both-required",
+            "069-3", "Action Recognition", ("visual",), ("sample_evidence",), "visual-required"
         ),
     ),
     "MVBench": (
+        _registered(
+            "6", "Action Antonym", ("visual", "temporal"), ("sample_evidence",), "visual-required"
+        ),
         _registered(
             "18", "Action Antonym", ("visual", "temporal"), ("sample_evidence",), "visual-required"
         ),

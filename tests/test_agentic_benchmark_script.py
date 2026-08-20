@@ -15,7 +15,7 @@ def _write_smoke_manifest(root: Path) -> Path:
     manifest = root / "smoke.jsonl"
     rows = []
     requirements = ("visual", "speech", "temporal", "visual", "speech", "temporal")
-    durations = ("short", "short", "medium", "medium", "long", "long")
+    durations = ("short",) * 6
     for index in range(6):
         video = root / f"video-{index}.mp4"
         video.write_bytes(f"video-{index}".encode())
@@ -57,6 +57,7 @@ def _write_formal_manifest(root: Path) -> Path:
     for index in range(54):
         row = dict(smoke_rows[index % len(smoke_rows)])
         row["case_id"] = f"formal-{index}"
+        row["duration_stratum"] = ("short", "medium", "long")[index % 3]
         if index < 36:
             row["dataset"] = "Video-MME"
             row["task_family"] = "Information Synopsis"
@@ -230,6 +231,22 @@ def test_smoke_starts_with_registered_frame_sequence_without_video_probe(tmp_pat
     assert all(mode == "frames_2fps" for _, mode in calls)
 
 
+def test_smoke_composition_accepts_only_short_videos(tmp_path) -> None:
+    """A medium or long case must not silently widen the approved smoke scope."""
+    namespace = runpy.run_path("scripts/run_agentic_benchmark.py")
+    cases = namespace["_load_manifest"](_write_smoke_manifest(tmp_path))
+
+    assert namespace["_validate_composition"](cases, "smoke") == {
+        "MVBench": 2,
+        "Video-MME": 4,
+    }
+
+    mixed = list(cases)
+    mixed[0] = mixed[0].model_copy(update={"duration_stratum": "medium"})
+    with __import__("pytest").raises(ValueError, match="short videos"):
+        namespace["_validate_composition"](mixed, "smoke")
+
+
 def test_formal_composition_rejects_single_mvbench_task_family(tmp_path) -> None:
     """Eighteen action-antonym rows must not pass as broad MVBench coverage."""
     namespace = runpy.run_path("scripts/run_agentic_benchmark.py")
@@ -244,6 +261,7 @@ def test_formal_composition_rejects_single_mvbench_task_family(tmp_path) -> None
                     "case_id": f"formal-{index}",
                     "dataset": dataset,
                     "task_family": ("Information Synopsis" if index < 36 else "Action Antonym"),
+                    "duration_stratum": ("short", "medium", "long")[index % 3],
                     "requirements": (
                         original.requirements if dataset == "Video-MME" else ("visual", "temporal")
                     ),
@@ -267,6 +285,7 @@ def test_formal_composition_rejects_non_temporal_mvbench_family(tmp_path) -> Non
         updates = {
             "case_id": f"formal-{index}",
             "dataset": dataset,
+            "duration_stratum": ("short", "medium", "long")[index % 3],
             "task_family": (
                 "Information Synopsis" if dataset == "Video-MME" else families[(index - 36) // 6]
             ),

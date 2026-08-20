@@ -116,8 +116,11 @@ def _validate_composition(cases: list[FormalCase], phase: Phase) -> dict[str, in
         raise ValueError("manifest must cover visual, speech, and temporal requirements")
     if {case.has_audio for case in cases} != {True, False}:
         raise ValueError("manifest must cover cases with and without audio")
-    if {case.duration_stratum for case in cases} != {"short", "medium", "long"}:
-        raise ValueError("manifest must cover short, medium, and long durations")
+    duration_strata = {case.duration_stratum for case in cases}
+    if phase == "smoke" and duration_strata != {"short"}:
+        raise ValueError("smoke manifest must contain only short videos")
+    if phase == "formal" and duration_strata != {"short", "medium", "long"}:
+        raise ValueError("formal manifest must cover short, medium, and long durations")
     if phase == "formal":
         mvbench_cases = [case for case in cases if case.dataset == "MVBench"]
         if any("temporal" not in case.requirements for case in mvbench_cases):
