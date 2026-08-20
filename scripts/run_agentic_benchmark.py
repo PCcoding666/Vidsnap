@@ -220,6 +220,8 @@ def _load_smoke_gate(path: Path | None) -> dict[str, object]:
             )
             if not matches:
                 raise ValueError("smoke projection is not derived from measured usage")
+    if payload.get("benchmark_scope") != "full_duration":
+        raise ValueError("short-video smoke cannot authorize the full-duration formal phase")
     return payload
 
 
@@ -228,6 +230,7 @@ def _smoke_gate_provenance(path: Path, payload: dict[str, object]) -> dict[str, 
     return {
         "report_sha256": _sha256(path),
         "pre_registration_manifest_sha256": payload["pre_registration_manifest_sha256"],
+        "benchmark_scope": payload["benchmark_scope"],
         "direct_input_mode": payload["direct_input_mode"],
         "formal_54_case_projection": payload["formal_54_case_projection"],
     }

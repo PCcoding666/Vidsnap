@@ -70,6 +70,41 @@ def _write_formal_manifest(root: Path) -> Path:
     return manifest
 
 
+def _valid_smoke_gate_payload(*, benchmark_scope: str) -> dict[str, object]:
+    from vidsnap.benchmark.manifest import REGISTERED_MANIFEST_SHA256
+    from vidsnap.config import QWEN_MODEL
+
+    usage = {
+        variant: {
+            "model_calls": 6,
+            "evidence_frames": 12,
+            "input_bytes": 1200,
+            "input_tokens": 120,
+            "output_tokens": 12,
+            "latency_seconds": 1.2,
+        }
+        for variant in ("direct", "fixed", "agentic")
+    }
+    return {
+        "phase": "smoke",
+        "status": "SMOKE_SUCCEEDED",
+        "benchmark_scope": benchmark_scope,
+        "model": QWEN_MODEL,
+        "case_count": 6,
+        "pre_registration_manifest_sha256": REGISTERED_MANIFEST_SHA256["smoke"],
+        "direct_input_mode": "frames_2fps",
+        "usage": usage,
+        "formal_54_case_projection": {
+            "basis": "provider-reported six-case smoke usage",
+            "scale_factor": 9.0,
+            "usage": {
+                variant: {field: value * 9 for field, value in totals.items()}
+                for variant, totals in usage.items()
+            },
+        },
+    }
+
+
 def test_runner_rejects_output_inside_repository(tmp_path) -> None:
     """Writing benchmark artifacts into git scope must fail before manifest access."""
     result = subprocess.run(
@@ -331,37 +366,9 @@ def test_smoke_cli_summary_has_no_benchmark_conclusion() -> None:
 def test_smoke_gate_preserves_hashed_projection_provenance(tmp_path) -> None:
     """A structurally complete gate retains its report digest and measured projection."""
     from vidsnap.benchmark.manifest import REGISTERED_MANIFEST_SHA256
-    from vidsnap.config import QWEN_MODEL
 
-    usage = {
-        variant: {
-            "model_calls": 6,
-            "evidence_frames": 12,
-            "input_bytes": 1200,
-            "input_tokens": 120,
-            "output_tokens": 12,
-            "latency_seconds": 1.2,
-        }
-        for variant in ("direct", "fixed", "agentic")
-    }
-    projection = {
-        "basis": "provider-reported six-case smoke usage",
-        "scale_factor": 9.0,
-        "usage": {
-            variant: {field: value * 9 for field, value in totals.items()}
-            for variant, totals in usage.items()
-        },
-    }
-    payload = {
-        "phase": "smoke",
-        "status": "SMOKE_SUCCEEDED",
-        "model": QWEN_MODEL,
-        "case_count": 6,
-        "pre_registration_manifest_sha256": REGISTERED_MANIFEST_SHA256["smoke"],
-        "direct_input_mode": "frames_2fps",
-        "usage": usage,
-        "formal_54_case_projection": projection,
-    }
+    payload = _valid_smoke_gate_payload(benchmark_scope="full_duration")
+    projection = payload["formal_54_case_projection"]
     report = tmp_path / "report.json"
     report.write_text(json.dumps(payload, sort_keys=True), encoding="utf-8")
     namespace = runpy.run_path("scripts/run_agentic_benchmark.py")
@@ -372,9 +379,23 @@ def test_smoke_gate_preserves_hashed_projection_provenance(tmp_path) -> None:
     assert provenance == {
         "report_sha256": hashlib.sha256(report.read_bytes()).hexdigest(),
         "pre_registration_manifest_sha256": REGISTERED_MANIFEST_SHA256["smoke"],
+        "benchmark_scope": "full_duration",
         "direct_input_mode": "frames_2fps",
         "formal_54_case_projection": projection,
     }
+
+
+def test_short_video_smoke_cannot_authorize_formal(tmp_path) -> None:
+    """A successful narrow smoke must not unlock the full-duration experiment."""
+    report = tmp_path / "short-video-report.json"
+    report.write_text(
+        json.dumps(_valid_smoke_gate_payload(benchmark_scope="short_video_only")),
+        encoding="utf-8",
+    )
+    namespace = runpy.run_path("scripts/run_agentic_benchmark.py")
+
+    with __import__("pytest").raises(ValueError, match="cannot authorize.*formal"):
+        namespace["_load_smoke_gate"](report)
 
 
 def test_smoke_gate_rejects_complete_video_direct_mode(tmp_path) -> None:

@@ -168,9 +168,19 @@ def build_benchmark_report(
             + ", ".join(mvbench_task_families)
             + "; it is not a full MVBench estimate."
         )
+    if phase == "smoke":
+        scope_limitations.append(
+            "Short-video smoke only; it does not validate medium or long videos."
+        )
+        video_mme_sources = {case.source_sha256 for case in cases if case.dataset == "Video-MME"}
+        if len(video_mme_sources) == 1:
+            scope_limitations.append(
+                "Video-MME slice contains three questions from one source video."
+            )
     report: dict[str, object] = {
         "phase": phase,
         "status": status,
+        "benchmark_scope": ("short_video_only" if phase == "smoke" else "full_duration_formal"),
         "model": QWEN_MODEL,
         "case_count": len(cases),
         "pre_registration_manifest_sha256": pre_registration_manifest_sha256,

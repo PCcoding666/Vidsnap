@@ -100,6 +100,7 @@ def test_smoke_report_uses_paired_metrics_and_measured_54_case_projection() -> N
     )
 
     assert report["status"] == "SMOKE_SUCCEEDED"
+    assert report["benchmark_scope"] == "short_video_only"
     for formal_only_field in (
         "accuracy",
         "paired_accuracy_delta",
@@ -113,7 +114,8 @@ def test_smoke_report_uses_paired_metrics_and_measured_54_case_projection() -> N
         assert formal_only_field not in report
     assert report["pre_registration_manifest_sha256"] == "f" * 64
     assert report["scope_limitations"] == [
-        "MVBench slice covers only Action Sequence; it is not a full MVBench estimate."
+        "MVBench slice covers only Action Sequence; it is not a full MVBench estimate.",
+        "Short-video smoke only; it does not validate medium or long videos.",
     ]
     assert report["direct_frame_transport_profile"] == {
         "timeline": "complete",
@@ -128,6 +130,35 @@ def test_smoke_report_uses_paired_metrics_and_measured_54_case_projection() -> N
     assert projection["scale_factor"] == 9.0
     assert projection["usage"]["agentic"]["model_calls"] == 162
     assert isinstance(projection["usage"]["agentic"]["model_calls"], int)
+
+
+def test_smoke_report_discloses_one_videomme_source_for_three_questions() -> None:
+    """Reusing one source video must remain visible in the report limitations."""
+    cases = _cases()
+    cases[3] = cases[3].model_copy(update={"dataset": "MVBench", "task_family": "Action Antonym"})
+    cases = [
+        case.model_copy(update={"source_sha256": "a" * 64}) if case.dataset == "Video-MME" else case
+        for case in cases
+    ]
+    outcomes = [
+        _outcome(case, variant, correct=True, calls=1)
+        for case in cases
+        for variant in ("direct", "fixed", "agentic")
+    ]
+
+    report = build_benchmark_report(
+        cases,
+        outcomes,
+        phase="smoke",
+        seed=20260812,
+        direct_input_mode="frames_2fps",
+        pre_registration_manifest_sha256="f" * 64,
+    )
+
+    assert (
+        "Video-MME slice contains three questions from one source video."
+        in report["scope_limitations"]
+    )
 
 
 def test_formal_report_uses_median_provider_input_and_registered_boundaries() -> None:
