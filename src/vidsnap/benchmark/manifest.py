@@ -25,7 +25,7 @@ MVBENCH_TASK_SLUGS = {
     "Action Prediction": "action_prediction",
 }
 REGISTERED_MANIFEST_SHA256: dict[Literal["smoke", "formal"], str] = {
-    "smoke": "e8e46847d2a9f1b7f53cf642b06eb9e92a8dec252df885b168ee33e87803b38a",
+    "smoke": "5e82277f5d4d2774c27dc1d47f26a9fcf394217c99f8b6a99d2d3c8007e0a265",
     "formal": "34e23c8bd588725cd6564152da34f0ea5d2f5063802a7f49b21b772adb951b74",
 }
 REPOSITORY_ROOT = Path(__file__).resolve().parents[3]

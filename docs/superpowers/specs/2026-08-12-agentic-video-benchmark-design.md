@@ -36,11 +36,14 @@ fallback to another model.
 
 ## Cases and phases
 
-The smoke phase contains six cases, stratified across both datasets and covering
-audio/no-audio plus visual, speech, and temporal requirements. It validates the
-Hermes endpoint, all three execution paths, usage accounting, the fixed Direct
-`frames_2fps` input mode, and leak controls. Its provider-reported usage is the
-only basis for estimating the 54-case formal run.
+The replacement smoke phase contains six short-video cases: three Video-MME
+questions and three MVBench Action Antonym cases. It covers audio/no-audio plus
+visual, speech, and temporal requirements and validates the Hermes endpoint, all
+three execution paths, usage accounting, the fixed Direct `frames_2fps` input
+mode, and leak controls. It is marked `short_video_only`; its provider-reported
+usage may support a mechanical 54-case usage projection but cannot authorize or
+validate the existing full-duration formal run. The exact scope and case IDs are
+registered in `2026-08-17-short-video-smoke-design.md`.
 
 The formal phase contains exactly 54 cases: 36 Video-MME and 18 MVBench. Sampling
 is deterministic from a local manifest and is stratified by dataset, duration,
@@ -110,5 +113,7 @@ research claims.
 Malformed plans, unsupported modalities, request failures, missing media, hash
 mismatches, invalid answers, budget exhaustion, and verifier failures produce
 typed per-case outcomes. A failed case is never silently retried with another
-model or broader tool surface. The formal command requires a successful smoke
-report and records its cost projection before any formal request is made.
+model or broader tool surface. The formal command requires a successful
+full-duration smoke report and records its cost projection before any formal
+request is made. A successful `short_video_only` report is explicitly rejected
+as a formal gate.

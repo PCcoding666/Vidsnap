@@ -19,8 +19,13 @@
 - Write experiment files under a caller-provided directory outside the repository; record source URLs, dataset versions, local SHA-256s, selected case IDs, and a UTC timestamp in its local manifest.
 - Use Video-MME and MVBench only for private, non-commercial internal research; cite their official repositories in the local report.
 - Every baseline uses the same Qwen model, question text, answer options, source video, transcript availability, and randomized case order. Direct always uses the complete timeline at exactly 2 fps and never attempts complete-video input.
-- Run six smoke cases before the formal experiment and derive the formal cost projection only from provider-reported smoke usage.
+- Run the approved three-Video-MME/three-MVBench short-video smoke and derive only a mechanical 54-case projection from provider-reported usage. Mark it `short_video_only`; it cannot authorize the existing full-duration formal experiment.
 - Run exactly 54 formal cases: 36 `Video-MME` and 18 `MVBench`.
+
+The short-video replacement protocol and exact six case IDs are defined in
+`docs/superpowers/specs/2026-08-17-short-video-smoke-design.md`. Smoke output
+remains limited to execution status, provenance, usage, and projection; it emits
+no accuracy, noninferiority, or superiority conclusion.
 
 ---
 

@@ -2,7 +2,11 @@
 
 from collections import Counter
 
-from vidsnap.benchmark.manifest import FORMAL_SELECTION, SMOKE_SELECTION
+from vidsnap.benchmark.manifest import (
+    FORMAL_SELECTION,
+    REGISTERED_MANIFEST_SHA256,
+    SMOKE_SELECTION,
+)
 
 
 def test_registered_selection_has_required_counts_and_no_smoke_overlap() -> None:
@@ -25,6 +29,13 @@ def test_registered_selection_has_required_counts_and_no_smoke_overlap() -> None
         (dataset, item.case_id) for dataset, items in SMOKE_SELECTION.items() for item in items
     }
     assert formal_ids.isdisjoint(smoke_ids)
+
+
+def test_registered_short_smoke_manifest_digest_is_frozen() -> None:
+    """Changing any approved external row must invalidate smoke preflight."""
+    assert REGISTERED_MANIFEST_SHA256["smoke"] == (
+        "5e82277f5d4d2774c27dc1d47f26a9fcf394217c99f8b6a99d2d3c8007e0a265"
+    )
 
 
 def test_registered_selection_covers_all_evidence_requirements() -> None:
