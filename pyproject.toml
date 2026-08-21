@@ -41,6 +41,8 @@ packages = ["src/vidsnap"]
 "src/vidsnap/prompts/synthesizer.json" = "vidsnap/prompts/synthesizer.json"
 "src/vidsnap/prompts/verifier.json" = "vidsnap/prompts/verifier.json"
 "src/vidsnap/prompts/repair.json" = "vidsnap/prompts/repair.json"
+"src/vidsnap/trace/assets/trace.html" = "vidsnap/trace/assets/trace.html"
+"src/vidsnap/trace/assets/timeline.js" = "vidsnap/trace/assets/timeline.js"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

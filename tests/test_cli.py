@@ -14,6 +14,14 @@ def test_cli_help_lists_harness_commands() -> None:
     assert "analyze" in result.stdout
     assert "benchmark" in result.stdout
     assert "conformance" in result.stdout
+    assert "trace" in result.stdout
+
+
+def test_cli_help_exposes_trace_export() -> None:
+    result = CliRunner().invoke(app, ["trace", "--help"])
+
+    assert result.exit_code == 0
+    assert "export" in result.stdout
 
 
 def test_benchmark_commands_truthfully_report_blocked_without_local_key(monkeypatch) -> None:

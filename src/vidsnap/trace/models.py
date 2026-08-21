@@ -19,6 +19,8 @@ class TraceItem(StrictModel):
     phase: str = Field(min_length=1, max_length=128)
     event_type: str = Field(min_length=1, max_length=128)
     lane: TraceLane
+    turn: int | None = Field(default=None, ge=1)
+    step: int | None = Field(default=None, ge=1)
     offset_ms: int | None = Field(default=None, ge=0)
     duration_ms: int | None = Field(default=None, ge=0)
     status: EventStatus | None = None

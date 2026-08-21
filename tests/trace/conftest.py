@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import itertools
 import json
+from collections.abc import Callable
 from pathlib import Path
 
 import pytest
@@ -53,6 +54,29 @@ def traced_run(tmp_path: Path) -> Path:
         payload={"name": "sample_evidence", "api_key": "must-not-appear"},
     )
     recorder.finish(tool_span, status="completed", payload={"name": "sample_evidence"})
+    recorder.finish(run_span, status="completed", phase="terminal")
+    bundle.finalize(TerminalState.SUCCEEDED)
+    return bundle.path
+
+
+@pytest.fixture
+def timed_run(tmp_path: Path) -> Path:
+    """A finalized RunBundle whose recorded run duration is exactly 450 ms.
+
+    Offsets: run 0→450, model.request 120→200, tool.call 310→400.
+    """
+    bundle = RunBundle.create(
+        tmp_path / "timed",
+        loop_spec=default_loop_spec(),
+        provider_url="https://host/v1",
+    )
+    clock = iter((0.0, 0.12, 0.2, 0.31, 0.4, 0.45)).__next__
+    recorder = TraceRecorder(bundle, clock=clock)
+    run_span = recorder.start("run", phase="run")
+    model_span = recorder.start("model.request", phase="agent_decision", turn=1, step=1)
+    recorder.finish(model_span, status="completed")
+    tool_span = recorder.start("tool.call", phase="sample_evidence", turn=1, step=2)
+    recorder.finish(tool_span, status="completed")
     recorder.finish(run_span, status="completed", phase="terminal")
     bundle.finalize(TerminalState.SUCCEEDED)
     return bundle.path
@@ -149,3 +173,100 @@ def legacy_smoke_dir(tmp_path: Path) -> Path:
         json.dumps({"case_id": "c1", "variant": "agentic", "usage": {"model_calls": 2}}) + "\n"
     )
     return path
+
+
+@pytest.fixture
+def escaping_run(tmp_path: Path) -> Path:
+    """A finalized RunBundle whose recorded payload contains raw HTML markup."""
+    bundle = RunBundle.create(
+        tmp_path / "escaping",
+        loop_spec=default_loop_spec(),
+        provider_url="https://host/v1",
+    )
+    recorder = TraceRecorder(bundle, clock=iter((0.0, 0.5, 1.0)).__next__)
+    run_span = recorder.start(
+        "run",
+        phase="run",
+        payload={"objective": 'answer </script><script>alert("x")</script>'},
+    )
+    recorder.finish(run_span, status="completed", phase="terminal")
+    bundle.finalize(TerminalState.SUCCEEDED)
+    return bundle.path
+
+
+@pytest.fixture
+def run_with_evidence(traced_run: Path) -> Path:
+    """A traced run that also carries real evidence and artifact files on disk."""
+    (traced_run / "evidence" / "frame-001.json").write_text(
+        json.dumps({"id": "frame-001", "marker": "EVIDENCE_MARKER_9f3c"})
+    )
+    artifact_dir = traced_run / "artifacts" / "turn-1"
+    artifact_dir.mkdir()
+    (artifact_dir / "frame-001.jpg").write_bytes(b"\xff\xd8ARTIFACT_BYTES_77e1")
+    return traced_run
+
+
+def _record_variant(path: Path, steps: Callable[[TraceRecorder], None]) -> None:
+    bundle = RunBundle.create(
+        path,
+        loop_spec=default_loop_spec(),
+        provider_url="https://host/v1",
+    )
+    recorder = TraceRecorder(bundle, clock=itertools.count(0.0, 0.05).__next__)
+    run_span = recorder.start("run", phase="run")
+    steps(recorder)
+    recorder.finish(run_span, status="completed", phase="terminal")
+    bundle.finalize(TerminalState.SUCCEEDED)
+
+
+@pytest.fixture
+def variant_case_dir(tmp_path: Path) -> Path:
+    """A benchmark case directory with Direct, Fixed and Agentic variant runs."""
+    case_dir = tmp_path / "case"
+
+    def direct_steps(recorder: TraceRecorder) -> None:
+        probe = recorder.start("probe", phase="probe_media")
+        recorder.finish(probe, status="completed")
+        evidence = recorder.start(
+            "evidence.added",
+            phase="prepare_direct_baseline",
+            payload={"id": "frame-001"},
+        )
+        recorder.finish(evidence, status="completed", payload={"id": "frame-001"})
+        model = recorder.start("model.request", phase="synthesize_result")
+        recorder.finish(model, status="completed")
+
+    def fixed_steps(recorder: TraceRecorder) -> None:
+        probe = recorder.start("probe", phase="probe_media")
+        recorder.finish(probe, status="completed")
+        first = recorder.start(
+            "tool.call", phase="transcribe_audio", payload={"name": "transcribe_audio"}
+        )
+        recorder.finish(first, status="completed", payload={"name": "transcribe_audio"})
+        second = recorder.start(
+            "tool.call", phase="sample_evidence", payload={"name": "sample_evidence"}
+        )
+        recorder.finish(second, status="completed", payload={"name": "sample_evidence"})
+        model = recorder.start("model.request", phase="synthesize_result")
+        recorder.finish(model, status="completed")
+
+    def agentic_steps(recorder: TraceRecorder) -> None:
+        probe = recorder.start("probe", phase="probe_media")
+        recorder.finish(probe, status="completed")
+        decision = recorder.start("model.request", phase="agent_decision", turn=1, step=1)
+        recorder.finish(decision, status="completed")
+        tool = recorder.start(
+            "tool.call",
+            phase="sample_evidence",
+            turn=1,
+            step=2,
+            payload={"name": "sample_evidence"},
+        )
+        recorder.finish(tool, status="completed", payload={"name": "sample_evidence"})
+        final = recorder.start("model.request", phase="agent_decision", turn=2, step=3)
+        recorder.finish(final, status="completed")
+
+    _record_variant(case_dir / "direct" / "run", direct_steps)
+    _record_variant(case_dir / "fixed" / "run", fixed_steps)
+    _record_variant(case_dir / "agentic" / "run", agentic_steps)
+    return case_dir

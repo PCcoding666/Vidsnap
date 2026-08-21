@@ -3,12 +3,14 @@
 import asyncio
 import json
 from pathlib import Path
+from typing import Annotated
 
 import typer
 
 from vidsnap.config import HarnessConfig
 from vidsnap.contracts import HarnessPolicy, VideoGoal, VideoSource
 from vidsnap.harness import VideoHarness
+from vidsnap.trace.export import export_trace
 
 app = typer.Typer(
     name="vidsnap",
@@ -17,6 +19,8 @@ app = typer.Typer(
 )
 benchmark_app = typer.Typer(help="Run fair Direct-vs-Harness benchmarks.")
 app.add_typer(benchmark_app, name="benchmark")
+trace_app = typer.Typer(help="Export truthful local run traces.")
+app.add_typer(trace_app, name="trace")
 
 
 @app.callback()
@@ -57,6 +61,23 @@ def manifest(run_dir: Path = typer.Argument(..., exists=True, file_okay=False)) 
     if not manifest_path.is_file():
         raise typer.BadParameter("run directory does not contain manifest.json")
     typer.echo(manifest_path.read_text(encoding="utf-8"))
+
+
+@trace_app.command("export")
+def trace_export(
+    source: Annotated[Path, typer.Argument(exists=True, file_okay=False)],
+    output: Annotated[Path, typer.Option("--output", "-o", help="Destination HTML file.")],
+    include_thumbnails: Annotated[
+        bool,
+        typer.Option(
+            "--include-thumbnails",
+            help="Embed bounded bundle-local images; never enabled by default.",
+        ),
+    ] = False,
+) -> None:
+    """Render one RunBundle, legacy result dir, or benchmark case to offline HTML."""
+    exported = export_trace(source.resolve(), output.resolve(), include_thumbnails)
+    typer.echo(str(exported))
 
 
 @app.command()

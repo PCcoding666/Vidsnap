@@ -1,0 +1,734 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>VidSnap Harness · Run Trace</title>
+<style>
+  :root {
+    --bg: #0b1120;
+    --bg-accent: #0d1730;
+    --panel: #111a2e;
+    --panel-deep: #0d1526;
+    --border: #24324f;
+    --border-soft: #1b2740;
+    --text: #e6edf7;
+    --muted: #8ea0bf;
+    --faint: #5c6c8a;
+    --accent: #7aa2ff;
+    --accent-strong: #4f8cff;
+    --lane-input: #38bdf8;
+    --lane-model: #818cf8;
+    --lane-tools: #34d399;
+    --lane-verifier: #f59e0b;
+    --ok: #34d399;
+    --warn: #fbbf24;
+    --bad: #f87171;
+    --neutral: #94a3b8;
+    --mono: ui-monospace, "SF Mono", "Menlo", "Consolas", "Liberation Mono", monospace;
+  }
+  * { box-sizing: border-box; }
+  html { color-scheme: dark; }
+  body {
+    margin: 0;
+    background:
+      radial-gradient(1100px 420px at 80% -10%, rgba(79, 140, 255, 0.14), transparent 60%),
+      radial-gradient(900px 380px at 8% -12%, rgba(56, 189, 248, 0.10), transparent 55%),
+      var(--bg);
+    color: var(--text);
+    font: 15px/1.55 -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial,
+      "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+
+  .app-bar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 24px;
+    border-bottom: 1px solid var(--border-soft);
+    background: rgba(13, 23, 48, 0.72);
+    backdrop-filter: blur(6px);
+    position: sticky;
+    top: 0;
+    z-index: 10;
+  }
+  .brand { display: flex; align-items: center; gap: 10px; }
+  .brand-mark {
+    width: 22px; height: 22px; border-radius: 6px;
+    background: linear-gradient(135deg, var(--accent-strong), var(--lane-input));
+    box-shadow: 0 0 18px rgba(79, 140, 255, 0.45);
+  }
+  .brand-name { font-weight: 650; letter-spacing: 0.2px; }
+  .brand-sub { color: var(--muted); font-size: 13px; }
+  .run-meta { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .run-id { color: var(--muted); font-family: var(--mono); font-size: 12px; }
+
+  main { max-width: 1120px; margin: 0 auto; padding: 20px 24px 40px; }
+  section { margin-top: 22px; }
+  h2 {
+    margin: 0 0 10px;
+    font-size: 13px;
+    font-weight: 650;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+
+  .badge {
+    display: inline-block;
+    padding: 2px 10px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 650;
+    letter-spacing: 0.04em;
+    border: 1px solid var(--border);
+    color: var(--neutral);
+    background: var(--panel-deep);
+  }
+  .badge.ok { color: var(--ok); border-color: rgba(52, 211, 153, 0.45); background: rgba(52, 211, 153, 0.09); }
+  .badge.warn { color: var(--warn); border-color: rgba(251, 191, 36, 0.45); background: rgba(251, 191, 36, 0.09); }
+  .badge.bad { color: var(--bad); border-color: rgba(248, 113, 113, 0.5); background: rgba(248, 113, 113, 0.1); }
+
+  .variant-bar { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 18px; }
+  .variant-bar button {
+    appearance: none;
+    border: 1px solid var(--border);
+    background: var(--panel-deep);
+    color: var(--muted);
+    padding: 7px 18px;
+    border-radius: 999px;
+    font: inherit;
+    font-size: 13.5px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .variant-bar button:hover { color: var(--text); border-color: var(--accent); }
+  .variant-bar button[aria-pressed="true"] {
+    color: #0b1120;
+    background: linear-gradient(135deg, var(--accent), var(--accent-strong));
+    border-color: transparent;
+    box-shadow: 0 4px 16px rgba(79, 140, 255, 0.35);
+  }
+
+  .banner {
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px 16px;
+    background: var(--panel);
+    color: var(--muted);
+    margin-top: 14px;
+  }
+  .banner.limitation { border-color: rgba(251, 191, 36, 0.4); background: rgba(251, 191, 36, 0.07); }
+  .banner.failure { border-color: rgba(248, 113, 113, 0.5); background: rgba(248, 113, 113, 0.08); color: var(--text); }
+  .banner ul { margin: 6px 0 0; padding-left: 20px; }
+  .banner strong { color: var(--text); }
+
+  .summary-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 10px;
+  }
+  .metric {
+    background: linear-gradient(180deg, var(--panel), var(--panel-deep));
+    border: 1px solid var(--border-soft);
+    border-radius: 12px;
+    padding: 12px 14px;
+    min-height: 74px;
+  }
+  .metric-label {
+    font-size: 11.5px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--faint);
+    margin-bottom: 6px;
+  }
+  .metric-value { font-size: 20px; font-weight: 650; font-family: var(--mono); }
+  .metric-value.missing { color: var(--faint); font-size: 15px; font-family: inherit; }
+
+  .track-wrap { background: var(--panel); border: 1px solid var(--border-soft); border-radius: 12px; padding: 14px 16px; }
+  .track {
+    position: relative;
+    height: 16px;
+    border-radius: 8px;
+    background: var(--panel-deep);
+    border: 1px solid var(--border-soft);
+    overflow: hidden;
+  }
+  .segment {
+    position: absolute;
+    top: 2px;
+    bottom: 2px;
+    min-width: 2px;
+    border-radius: 3px;
+    opacity: 0.92;
+  }
+  .segment.lane-input { background: var(--lane-input); }
+  .segment.lane-model { background: var(--lane-model); }
+  .segment.lane-tools { background: var(--lane-tools); }
+  .segment.lane-verifier { background: var(--lane-verifier); }
+  .segment.failed { background: var(--bad); box-shadow: 0 0 0 1px rgba(248, 113, 113, 0.8) inset; }
+  .scale { display: flex; justify-content: space-between; color: var(--faint); font-size: 11.5px; margin-top: 6px; font-family: var(--mono); }
+  .legend { display: flex; gap: 14px; flex-wrap: wrap; margin-top: 10px; font-size: 12px; color: var(--muted); }
+  .legend .dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 5px; }
+
+  .lane-grid { display: grid; grid-template-columns: 96px 1fr; gap: 8px 12px; align-items: center; }
+  .lane-label { font-size: 12.5px; font-weight: 600; color: var(--muted); text-align: right; }
+  .lane-empty { color: var(--faint); font-size: 12px; padding: 2px 8px; }
+
+  .panel-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+  .search-box { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 13px; }
+  .search-box input {
+    background: var(--panel-deep);
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: 8px;
+    padding: 7px 12px;
+    font: inherit;
+    font-size: 13.5px;
+    min-width: 220px;
+  }
+  .search-box input::placeholder { color: var(--faint); }
+
+  .event {
+    background: var(--panel);
+    border: 1px solid var(--border-soft);
+    border-radius: 10px;
+    margin-top: 8px;
+    overflow: hidden;
+  }
+  .event summary {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    padding: 9px 14px;
+    cursor: pointer;
+    list-style: none;
+  }
+  .event summary::-webkit-details-marker { display: none; }
+  .event summary::before {
+    content: "▸";
+    color: var(--faint);
+    font-size: 11px;
+    transition: transform 0.15s ease;
+  }
+  .event[open] summary::before { transform: rotate(90deg); }
+  .event summary:hover { background: rgba(122, 162, 255, 0.06); }
+  .seq { color: var(--faint); font-family: var(--mono); font-size: 12px; min-width: 34px; }
+  .offset { color: var(--muted); font-family: var(--mono); font-size: 12px; min-width: 78px; }
+  .type { font-family: var(--mono); font-size: 13px; font-weight: 600; }
+  .phase { color: var(--muted); font-size: 12.5px; }
+  .duration { margin-left: auto; color: var(--muted); font-family: var(--mono); font-size: 12px; }
+  .chip {
+    display: inline-block;
+    padding: 1px 8px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 650;
+    letter-spacing: 0.03em;
+    border: 1px solid var(--border);
+    background: var(--panel-deep);
+  }
+  .chip.lane-input { color: var(--lane-input); border-color: rgba(56, 189, 248, 0.4); }
+  .chip.lane-model { color: var(--lane-model); border-color: rgba(129, 140, 248, 0.45); }
+  .chip.lane-tools { color: var(--lane-tools); border-color: rgba(52, 211, 153, 0.4); }
+  .chip.lane-verifier { color: var(--lane-verifier); border-color: rgba(245, 158, 11, 0.45); }
+  .chip.status-ok { color: var(--ok); border-color: rgba(52, 211, 153, 0.4); }
+  .chip.status-bad { color: var(--bad); border-color: rgba(248, 113, 113, 0.45); }
+  .chip.status-warn { color: var(--warn); border-color: rgba(251, 191, 36, 0.45); }
+  .chip.status-neutral { color: var(--neutral); }
+  .chip.turnstep { color: var(--accent); border-color: rgba(122, 162, 255, 0.4); font-family: var(--mono); }
+  .payload {
+    margin: 0;
+    padding: 12px 16px;
+    border-top: 1px solid var(--border-soft);
+    background: var(--panel-deep);
+    font-family: var(--mono);
+    font-size: 12px;
+    line-height: 1.5;
+    color: #b8c6e0;
+    overflow: auto;
+    max-height: 340px;
+    white-space: pre;
+  }
+  .empty-note {
+    border: 1px dashed var(--border);
+    border-radius: 10px;
+    padding: 18px;
+    text-align: center;
+    color: var(--muted);
+    background: var(--panel-deep);
+  }
+
+  .thumb-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
+  .thumb {
+    background: var(--panel);
+    border: 1px solid var(--border-soft);
+    border-radius: 10px;
+    padding: 8px;
+  }
+  .thumb img { width: 100%; height: 96px; object-fit: cover; border-radius: 6px; background: var(--panel-deep); }
+  .thumb figcaption { color: var(--muted); font-family: var(--mono); font-size: 11px; margin-top: 6px; overflow-wrap: anywhere; }
+
+  footer {
+    max-width: 1120px;
+    margin: 0 auto;
+    padding: 0 24px 32px;
+    color: var(--faint);
+    font-size: 12px;
+  }
+
+  @media (max-width: 720px) {
+    main { padding: 14px 12px 32px; }
+    .lane-grid { grid-template-columns: 1fr; gap: 4px; }
+    .lane-label { text-align: left; }
+    .duration { margin-left: 0; width: 100%; }
+    .search-box input { min-width: 0; width: 100%; }
+    .search-box { width: 100%; }
+  }
+</style>
+</head>
+<body>
+<header class="app-bar">
+  <div class="brand">
+    <div class="brand-mark" aria-hidden="true"></div>
+    <span class="brand-name">VidSnap Harness</span>
+    <span class="brand-sub">Run Trace</span>
+  </div>
+  <div class="run-meta">
+    <span class="run-id" id="run-id"></span>
+    <span class="badge" id="terminal-badge"></span>
+  </div>
+</header>
+
+<main>
+  <nav class="variant-bar" id="variant-bar" aria-label="Benchmark variant" hidden></nav>
+
+  <div id="notices"></div>
+
+  <section aria-labelledby="summary-title">
+    <h2 id="summary-title">Summary</h2>
+    <div class="summary-grid" id="summary-grid"></div>
+  </section>
+
+  <section id="timeline-section" aria-labelledby="timeline-title" hidden>
+    <h2 id="timeline-title">Timeline</h2>
+    <div class="track-wrap">
+      <div class="track" id="timeline-track"></div>
+      <div class="scale" id="timeline-scale"></div>
+      <div class="legend" id="legend"></div>
+    </div>
+  </section>
+
+  <section id="lanes-section" aria-labelledby="lanes-title" hidden>
+    <h2 id="lanes-title">Lanes</h2>
+    <div class="track-wrap">
+      <div class="lane-grid" id="lane-grid"></div>
+    </div>
+  </section>
+
+  <section aria-labelledby="events-title">
+    <div class="panel-head">
+      <h2 id="events-title">Events</h2>
+      <div class="search-box">
+        <label for="search-input">Search</label>
+        <input id="search-input" type="search" placeholder="type, phase, payload…" autocomplete="off">
+      </div>
+    </div>
+    <div id="events"></div>
+    <div class="empty-note" id="events-empty" hidden>
+      No step-level events were recorded for this run.
+    </div>
+  </section>
+
+  <section id="thumbnails-section" aria-labelledby="thumbnails-title" hidden>
+    <h2 id="thumbnails-title">Evidence thumbnails</h2>
+    <div class="thumb-grid" id="thumb-grid"></div>
+  </section>
+</main>
+
+<noscript>
+  <main>
+    <h2>JavaScript required</h2>
+    <p>
+      This trace viewer is rendered by a small offline script embedded in this page.
+      The recorded trace data is embedded exactly once, as JSON, in the
+      vidsnap-trace-data script element of this file; enable JavaScript to view it.
+      Values are shown exactly as recorded and missing metrics are marked 未记录.
+    </p>
+  </main>
+</noscript>
+
+<footer>
+  Generated locally by VidSnap Harness · fully offline page · payloads are redacted ·
+  values shown exactly as recorded; missing metrics are marked 未记录.
+</footer>
+
+<script id="vidsnap-trace-data" type="application/json">__VIDSNAP_TRACE_JSON__</script>
+<script>
+"use strict";
+
+__VIDSNAP_TIMELINE_JS__
+
+const LANES = ["input", "model", "tools", "verifier"];
+const LANE_LABELS = { input: "Input", model: "Model", tools: "Tools", verifier: "Verifier" };
+const MODEL_PREFIXES = ["model.request", "agent.decision"];
+const TOOL_PREFIXES = ["tool.call"];
+const EVIDENCE_PREFIXES = ["evidence.added"];
+const VARIANT_LABELS = { direct: "Direct", fixed: "Fixed", agentic: "Agentic" };
+const BAD_TERMINALS = ["FAILED", "EXHAUSTED", "BLOCKED"];
+const STATUS_CLASS = {
+  completed: "status-ok",
+  failed: "status-bad",
+  blocked: "status-bad",
+  skipped: "status-warn",
+  started: "status-neutral",
+};
+
+function el(tag, className, text) {
+  const node = document.createElement(tag);
+  if (className) node.className = className;
+  if (text !== undefined && text !== null) node.textContent = text;
+  return node;
+}
+
+function clear(node) {
+  while (node.firstChild) node.removeChild(node.firstChild);
+}
+
+function hasPrefix(eventType, prefixes) {
+  for (const prefix of prefixes) {
+    if (eventType === prefix || eventType.indexOf(prefix + ".") === 0) return true;
+  }
+  return false;
+}
+
+function isTerminalStatus(status) {
+  return status === "completed" || status === "failed";
+}
+
+function countTerminalEvents(items, prefixes) {
+  let count = 0;
+  for (const item of items) {
+    if (isTerminalStatus(item.status) && hasPrefix(item.event_type, prefixes)) count += 1;
+  }
+  return count;
+}
+
+function metricText(eventCount, usageValue) {
+  if (eventCount > 0) return String(eventCount);
+  if (isRecorded(usageValue) && usageValue > 0) return String(usageValue);
+  return NOT_RECORDED;
+}
+
+function maxRecorded(items, field) {
+  let best = null;
+  for (const item of items) {
+    const value = item[field];
+    if (isRecorded(value) && (best === null || value > best)) best = value;
+  }
+  return best;
+}
+
+function averageModelLatency(items) {
+  let total = 0;
+  let count = 0;
+  for (const item of items) {
+    if (!isTerminalStatus(item.status)) continue;
+    if (!hasPrefix(item.event_type, MODEL_PREFIXES)) continue;
+    if (!isRecorded(item.duration_ms)) continue;
+    total += item.duration_ms;
+    count += 1;
+  }
+  return count > 0 ? Math.round(total / count) : null;
+}
+
+function loadPayload() {
+  const node = document.getElementById("vidsnap-trace-data");
+  try {
+    return JSON.parse(node.textContent || "{}");
+  } catch (error) {
+    return {};
+  }
+}
+
+function normalizePayload(payload) {
+  if (payload && typeof payload === "object" && payload.traces && typeof payload.traces === "object") {
+    return payload;
+  }
+  return { traces: { run: payload } };
+}
+
+const state = {
+  traces: {},
+  thumbnails: {},
+  keys: [],
+  current: null,
+  query: "",
+};
+
+function renderSummary(doc) {
+  const grid = document.getElementById("summary-grid");
+  clear(grid);
+  const usage = doc.usage || null;
+  const usageField = (field) => (usage && isRecorded(usage[field]) && usage[field] > 0 ? usage[field] : null);
+  const turns = maxRecorded(doc.items, "turn");
+  const steps = maxRecorded(doc.items, "step");
+  const metrics = [
+    ["Recorded duration", formatMs(doc.duration_ms)],
+    ["Turns", turns === null ? NOT_RECORDED : String(turns)],
+    ["Steps", steps === null ? NOT_RECORDED : String(steps)],
+    ["Model calls", metricText(countTerminalEvents(doc.items, MODEL_PREFIXES), usage ? usage.model_calls : null)],
+    ["Tool calls", metricText(countTerminalEvents(doc.items, TOOL_PREFIXES), usage ? usage.tool_calls : null)],
+    ["Evidence frames", metricText(countTerminalEvents(doc.items, EVIDENCE_PREFIXES), usage ? usage.evidence_frames : null)],
+    ["Input bytes", formatBytes(usageField("input_bytes"))],
+    ["Input tokens", usageField("input_tokens") === null ? NOT_RECORDED : String(usageField("input_tokens"))],
+    ["Output tokens", usageField("output_tokens") === null ? NOT_RECORDED : String(usageField("output_tokens"))],
+    ["Avg model latency", formatMs(averageModelLatency(doc.items))],
+  ];
+  for (const [label, value] of metrics) {
+    const card = el("div", "metric");
+    card.appendChild(el("div", "metric-label", label));
+    card.appendChild(el("div", value === NOT_RECORDED ? "metric-value missing" : "metric-value", value));
+    grid.appendChild(card);
+  }
+}
+
+function renderNotices(doc) {
+  const notices = document.getElementById("notices");
+  clear(notices);
+  if (doc.limitations && doc.limitations.length > 0) {
+    const banner = el("div", "banner limitation");
+    banner.setAttribute("role", "note");
+    const title = el("strong", null, doc.summary_only ? "Summary-only trace" : "Trace limitations");
+    banner.appendChild(title);
+    const list = el("ul");
+    for (const limitation of doc.limitations) list.appendChild(el("li", null, limitation));
+    banner.appendChild(list);
+    const hint = el("div", null, "Durations, steps, and event rows below are shown only where they were actually recorded; anything absent is marked " + NOT_RECORDED + ".");
+    banner.appendChild(hint);
+    notices.appendChild(banner);
+  }
+  if (doc.terminal_state && BAD_TERMINALS.indexOf(doc.terminal_state) !== -1) {
+    const banner = el("div", "banner failure");
+    banner.setAttribute("role", "alert");
+    banner.appendChild(el("strong", null, "Terminal state: " + doc.terminal_state));
+    banner.appendChild(el("div", null, "This run did not reach a successful terminal state; the recorded events below show exactly where it stopped."));
+    notices.appendChild(banner);
+  }
+}
+
+function renderTrack(container, items, total) {
+  const track = el("div", "track");
+  for (const item of items) {
+    const span = itemSpan(item);
+    if (span === null) continue;
+    const start = span[0];
+    const end = span[1];
+    const width = end > start ? Math.max(((end - start) / total) * 100, 0.35) : 0.35;
+    const segment = el(
+      "span",
+      "segment lane-" + item.lane + (item.status === "failed" ? " failed" : "")
+    );
+    segment.style.left = (start / total) * 100 + "%";
+    segment.style.width = width + "%";
+    segment.title =
+      item.event_type + " · " + item.phase + " · " + String(start) + " ms → " + String(end) + " ms";
+    track.appendChild(segment);
+  }
+  container.appendChild(track);
+}
+
+function renderTimeline(doc) {
+  const section = document.getElementById("timeline-section");
+  const track = document.getElementById("timeline-track");
+  const scale = document.getElementById("timeline-scale");
+  const legend = document.getElementById("legend");
+  clear(track);
+  clear(scale);
+  clear(legend);
+  const total = timelineSpan(doc);
+  if (total === null) {
+    section.hidden = true;
+    return;
+  }
+  section.hidden = false;
+  renderTrack(track, doc.items, total);
+  scale.appendChild(el("span", null, "0 ms"));
+  scale.appendChild(el("span", null, formatMs(total)));
+  for (const lane of LANES) {
+    const entry = el("span", null, LANE_LABELS[lane]);
+    const dot = el("span", "dot");
+    dot.style.background = "var(--lane-" + lane + ")";
+    entry.insertBefore(dot, entry.firstChild);
+    legend.appendChild(entry);
+  }
+}
+
+function renderLanes(doc) {
+  const section = document.getElementById("lanes-section");
+  const grid = document.getElementById("lane-grid");
+  clear(grid);
+  const total = timelineSpan(doc);
+  if (total === null) {
+    section.hidden = true;
+    return;
+  }
+  section.hidden = false;
+  for (const lane of LANES) {
+    grid.appendChild(el("div", "lane-label", LANE_LABELS[lane]));
+    const laneItems = doc.items.filter((item) => item.lane === lane);
+    if (laneItems.length === 0) {
+      grid.appendChild(el("div", "lane-empty", "no recorded events"));
+      continue;
+    }
+    const holder = el("div");
+    renderTrack(holder, laneItems, total);
+    grid.appendChild(holder.firstChild);
+  }
+}
+
+function turnStepChip(item) {
+  const parts = [];
+  if (isRecorded(item.turn)) parts.push("T" + String(item.turn));
+  if (isRecorded(item.step)) parts.push("S" + String(item.step));
+  if (parts.length === 0) return null;
+  return el("span", "chip turnstep", parts.join(" · "));
+}
+
+function renderEvents(doc) {
+  const container = document.getElementById("events");
+  const emptyNote = document.getElementById("events-empty");
+  clear(container);
+  if (!doc.items || doc.items.length === 0) {
+    emptyNote.hidden = false;
+    return;
+  }
+  emptyNote.hidden = true;
+  const query = state.query.trim().toLowerCase();
+  for (const item of doc.items) {
+    const details = el("details", "event");
+    const summary = el("summary");
+    summary.appendChild(el("span", "seq", "#" + String(item.sequence)));
+    summary.appendChild(
+      el("span", "offset", isRecorded(item.offset_ms) ? "+" + String(item.offset_ms) + " ms" : NOT_RECORDED)
+    );
+    summary.appendChild(el("span", "type", item.event_type));
+    summary.appendChild(el("span", "chip lane-" + item.lane, LANE_LABELS[item.lane] || item.lane));
+    if (item.status) {
+      summary.appendChild(
+        el("span", "chip " + (STATUS_CLASS[item.status] || "status-neutral"), item.status)
+      );
+    }
+    const turnStep = turnStepChip(item);
+    if (turnStep) summary.appendChild(turnStep);
+    summary.appendChild(el("span", "phase", item.phase));
+    summary.appendChild(el("span", "duration", "dur " + formatMs(item.duration_ms)));
+    details.appendChild(summary);
+    const body = el("pre", "payload");
+    body.textContent = JSON.stringify(item, null, 2);
+    details.appendChild(body);
+    const haystack = JSON.stringify(item).toLowerCase();
+    details.hidden = query !== "" && haystack.indexOf(query) === -1;
+    container.appendChild(details);
+  }
+}
+
+function renderThumbnails(key) {
+  const section = document.getElementById("thumbnails-section");
+  const grid = document.getElementById("thumb-grid");
+  clear(grid);
+  const thumbs = state.thumbnails && state.thumbnails[key];
+  if (!thumbs || typeof thumbs !== "object") {
+    section.hidden = true;
+    return;
+  }
+  const names = Object.keys(thumbs);
+  if (names.length === 0) {
+    section.hidden = true;
+    return;
+  }
+  section.hidden = false;
+  for (const name of names) {
+    const figure = el("figure", "thumb");
+    const image = el("img");
+    image.src = thumbs[name];
+    image.alt = "recorded evidence thumbnail " + name;
+    image.loading = "lazy";
+    figure.appendChild(image);
+    figure.appendChild(el("figcaption", null, name));
+    grid.appendChild(figure);
+  }
+}
+
+function renderHeader(doc) {
+  const runIdNode = document.getElementById("run-id");
+  const badge = document.getElementById("terminal-badge");
+  runIdNode.textContent = doc.run_id ? "run " + doc.run_id : "";
+  const terminal = doc.terminal_state;
+  clear(badge);
+  badge.className = "badge";
+  if (!terminal) {
+    badge.textContent = "terminal " + NOT_RECORDED;
+    return;
+  }
+  badge.textContent = terminal;
+  if (terminal === "SUCCEEDED") badge.classList.add("ok");
+  else if (terminal === "PARTIAL" || terminal === "NO_OP") badge.classList.add("warn");
+  else if (BAD_TERMINALS.indexOf(terminal) !== -1) badge.classList.add("bad");
+}
+
+function renderVariant(key) {
+  state.current = key;
+  const doc = state.traces[key];
+  renderHeader(doc);
+  renderNotices(doc);
+  renderSummary(doc);
+  renderTimeline(doc);
+  renderLanes(doc);
+  renderEvents(doc);
+  renderThumbnails(key);
+  const bar = document.getElementById("variant-bar");
+  for (const button of bar.querySelectorAll("button")) {
+    button.setAttribute("aria-pressed", button.dataset.key === key ? "true" : "false");
+  }
+}
+
+function buildVariantBar() {
+  const bar = document.getElementById("variant-bar");
+  clear(bar);
+  if (state.keys.length <= 1) {
+    bar.hidden = true;
+    return;
+  }
+  bar.hidden = false;
+  for (const key of state.keys) {
+    const button = el("button", null, VARIANT_LABELS[key] || key);
+    button.type = "button";
+    button.dataset.key = key;
+    button.setAttribute("aria-pressed", "false");
+    button.addEventListener("click", () => renderVariant(key));
+    bar.appendChild(button);
+  }
+}
+
+function main() {
+  const payload = normalizePayload(loadPayload());
+  state.traces = payload.traces;
+  state.thumbnails = payload.thumbnails || {};
+  state.keys = Object.keys(state.traces);
+  buildVariantBar();
+  document.getElementById("search-input").addEventListener("input", (event) => {
+    state.query = event.target.value || "";
+    if (state.current) renderEvents(state.traces[state.current]);
+  });
+  if (state.keys.length > 0) renderVariant(state.keys[0]);
+}
+
+main();
+</script>
+</body>
+</html>

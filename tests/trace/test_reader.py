@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+
 from vidsnap.trace import TraceDocument, TraceLane, read_trace
 
 EXPECTED_LANES: dict[str, TraceLane] = {
@@ -99,6 +100,42 @@ def test_unpaired_items_preserve_recorded_status_without_duration(
     assert _item(trace, "model.request.completed").status == "completed"
     assert _item(trace, "tool.call.failed").status == "failed"
     assert _item(trace, "run.started").status == "started"
+
+
+def test_recorded_turn_and_step_are_preserved_verbatim(traced_run: Path) -> None:
+    trace = read_trace(traced_run)
+
+    assert _item(trace, "model.request.started").turn == 1
+    assert _item(trace, "model.request.started").step == 1
+    assert _item(trace, "model.request.completed").turn == 1
+    assert _item(trace, "model.request.completed").step == 1
+    assert _item(trace, "tool.call.started").turn == 1
+    assert _item(trace, "tool.call.started").step == 2
+    assert _item(trace, "tool.call.completed").turn == 1
+    assert _item(trace, "tool.call.completed").step == 2
+
+    dumped = trace.model_dump()
+    model_row = next(
+        item for item in dumped["items"] if item["event_type"] == "model.request.completed"
+    )
+    tool_row = next(item for item in dumped["items"] if item["event_type"] == "tool.call.completed")
+    assert model_row["turn"] == 1 and model_row["step"] == 1
+    assert tool_row["turn"] == 1 and tool_row["step"] == 2
+
+
+def test_items_without_recorded_turn_step_stay_null_never_inferred(
+    traced_run: Path,
+) -> None:
+    trace = read_trace(traced_run)
+
+    # The run span was recorded without turn/step: nothing may be invented for it.
+    run_started = _item(trace, "run.started")
+    assert run_started.turn is None
+    assert run_started.step is None
+
+    dumped = trace.model_dump()
+    run_rows = [item for item in dumped["items"] if item["event_type"].startswith("run.")]
+    assert run_rows and all(row["turn"] is None and row["step"] is None for row in run_rows)
 
 
 def test_payload_and_usage_stay_typed_and_redacted(traced_run: Path) -> None:

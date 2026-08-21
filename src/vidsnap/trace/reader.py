@@ -83,6 +83,8 @@ def _read_step_events(path: Path, manifest: dict[str, Any]) -> TraceDocument:
                 phase=event.phase,
                 event_type=event_type,
                 lane=lane,
+                turn=event.turn,
+                step=event.step,
                 offset_ms=event.monotonic_offset_ms,
                 duration_ms=duration_ms if duration_ms is not None and duration_ms >= 0 else None,
                 status=event.status,
