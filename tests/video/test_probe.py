@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import shutil
 import subprocess
+from pathlib import Path
 
 import pytest
 
@@ -70,6 +71,67 @@ async def test_ffmpeg_port_extracts_complete_timeline_in_one_batch(tmp_path) -> 
         ).stdout
     )
     assert metadata["streams"][0]["height"] == 96
+
+
+def make_synthetic_video_with_audio(path: Path) -> None:
+    subprocess.run(
+        [
+            "ffmpeg",
+            "-y",
+            "-f",
+            "lavfi",
+            "-i",
+            "color=c=red:s=64x64:r=10:d=2",
+            "-f",
+            "lavfi",
+            "-i",
+            "sine=frequency=440:duration=2",
+            "-shortest",
+            "-pix_fmt",
+            "yuv420p",
+            str(path),
+        ],
+        check=True,
+        capture_output=True,
+    )
+
+
+@pytest.mark.asyncio
+async def test_ffmpeg_port_extracts_windowed_audio_and_keeps_legacy_call(tmp_path) -> None:
+    source = tmp_path / "synthetic-audio.mp4"
+    make_synthetic_video_with_audio(source)
+    media = FFmpegMediaPort()
+
+    full = await media.extract_audio(source, tmp_path / "full.wav")
+    windowed = await media.extract_audio(
+        source,
+        tmp_path / "window.wav",
+        start_seconds=0.5,
+        end_seconds=1.0,
+    )
+
+    assert full.exists() and windowed.exists()
+    assert windowed.stat().st_size < full.stat().st_size
+
+    def wav_duration(path: Path) -> float:
+        output = subprocess.run(
+            [
+                "ffprobe",
+                "-v",
+                "error",
+                "-show_entries",
+                "format=duration",
+                "-of",
+                "json",
+                str(path),
+            ],
+            capture_output=True,
+            check=True,
+            text=True,
+        ).stdout
+        return float(json.loads(output)["format"]["duration"])
+
+    assert wav_duration(windowed) == pytest.approx(0.5, abs=0.15)
 
 
 def test_high_motion_windows_are_local_and_merged() -> None:
