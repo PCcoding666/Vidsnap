@@ -85,6 +85,7 @@ async def test_video_task_adapter_maps_final_model_usage() -> None:
     adapter = VideoAnalysisTaskAdapter(VideoGoal(objective="Summarize"))
     output, usage = await adapter.request_final(FakeVideoModel(), evidence=(), probe=make_probe())
     assert output.summary == "Done."
+    assert usage.model_calls == 1
     assert usage.input_tokens == 9
     assert usage.output_tokens == 2
     assert usage.reported is True

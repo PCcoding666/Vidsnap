@@ -40,6 +40,7 @@ class VideoAnalysisTaskAdapter:
         del probe
         response = await model.analyze_evidence(evidence, self.goal)
         usage = ProviderUsage(
+            model_calls=1,
             input_tokens=response.input_tokens,
             output_tokens=response.output_tokens,
             reported=response.usage_reported,

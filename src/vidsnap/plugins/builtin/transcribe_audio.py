@@ -64,10 +64,7 @@ class TranscribeAudioPlugin:
 
         evidence_ids: list[str] = []
         character_count = 0
-        input_bytes = 0
-        input_tokens = 0
-        output_tokens = 0
-        all_reported = True
+        total_usage = ProviderUsage()
         for index, window in enumerate(windows):
             audio_path = context.artifact_root / "audio" / f"window-{index:03d}.wav"
             await context.media.extract_audio(
@@ -91,10 +88,7 @@ class TranscribeAudioPlugin:
             )
             evidence_ids.append(evidence_id)
             character_count += len(response.text)
-            input_bytes += response.usage.input_bytes
-            input_tokens += response.usage.input_tokens
-            output_tokens += response.usage.output_tokens
-            all_reported = all_reported and response.usage.reported
+            total_usage = total_usage + response.usage
 
         return ToolResult(
             status="completed",
@@ -103,10 +97,5 @@ class TranscribeAudioPlugin:
                 "transcript_count": len(evidence_ids),
                 "character_count": character_count,
             },
-            usage=ProviderUsage(
-                input_bytes=input_bytes,
-                input_tokens=input_tokens,
-                output_tokens=output_tokens,
-                reported=all_reported,
-            ),
+            usage=total_usage,
         )

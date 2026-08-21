@@ -239,6 +239,7 @@ def test_missing_provider_usage_preserves_locally_measured_input_bytes() -> None
     payload = {"choices": [{"message": {"content": json.dumps(decision)}}]}
     response = QwenCompatibleClient._parse_agent_decision(payload, input_bytes=2048)
     assert response.usage.reported is False
+    assert response.usage.model_calls == 1
     assert response.usage.input_bytes == 2048
     assert response.usage.input_tokens == 0
     assert response.usage.output_tokens == 0
@@ -290,6 +291,7 @@ def test_reported_provider_usage_is_preserved_in_agent_decision() -> None:
     }
     response = QwenCompatibleClient._parse_agent_decision(payload, input_bytes=11)
     assert response.usage.reported is True
+    assert response.usage.model_calls == 1
     assert response.usage.input_tokens == 5
     assert response.usage.output_tokens == 2
     assert response.usage.input_bytes == 11

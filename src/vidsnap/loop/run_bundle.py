@@ -17,7 +17,8 @@ from urllib.parse import urlsplit, urlunsplit
 from pydantic import JsonValue
 
 from vidsnap import __version__
-from vidsnap.contracts import Evidence, LoopSpec, TerminalState, VideoAnalysisResult
+from vidsnap.contracts import Evidence, LoopSpec, TerminalState
+from vidsnap.contracts.models import StrictModel
 from vidsnap.loop.events import EventStatus, EventUsage, RunEvent
 
 _SENSITIVE_KEY_PARTS = ("api_key", "authorization", "credential", "password", "secret", "token")
@@ -191,7 +192,7 @@ class RunBundle:
         _atomic_json_write(output_path, evidence.model_dump(mode="json"))
         return output_path
 
-    def write_result(self, result: VideoAnalysisResult) -> Path:
+    def write_result(self, result: StrictModel) -> Path:
         """Atomically write the validated structured result."""
         self._ensure_open()
         output_path = self.path / "result.json"

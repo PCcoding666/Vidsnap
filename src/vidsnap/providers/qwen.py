@@ -333,11 +333,12 @@ class QwenCompatibleClient:
         usage_payload = payload.get("usage")
         if isinstance(usage_payload, dict) and usage_payload:
             usage = ProviderUsage(
+                model_calls=1,
                 input_bytes=input_bytes,
                 input_tokens=int(usage_payload.get("prompt_tokens") or 0),
                 output_tokens=int(usage_payload.get("completion_tokens") or 0),
                 reported=True,
             )
         else:
-            usage = ProviderUsage(input_bytes=input_bytes, reported=False)
+            usage = ProviderUsage(model_calls=1, input_bytes=input_bytes, reported=False)
         return AgentDecisionResponse(decision=decision, usage=usage)

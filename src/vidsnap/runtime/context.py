@@ -107,6 +107,7 @@ class RunContext(Generic[OutputT, ModelT]):
         payload: dict[str, JsonValue] = {
             "evidence_id": evidence.id,
             "modality": evidence.modality,
+            "budget_class": evidence.budget_class,
             "start_seconds": evidence.start_seconds,
             "end_seconds": evidence.end_seconds,
             "captured_at": evidence.captured_at.isoformat().replace("+00:00", "Z"),

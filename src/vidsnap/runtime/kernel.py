@@ -14,8 +14,8 @@ from typing import TYPE_CHECKING, Generic, TypeVar
 
 from pydantic import JsonValue, ValidationError
 
-from vidsnap.contracts import TerminalState
-from vidsnap.contracts.agent import AgentDecision
+from vidsnap.contracts import Evidence, TerminalState
+from vidsnap.contracts.agent import AgentDecision, ProviderUsage
 from vidsnap.contracts.loopspec import default_loop_spec
 from vidsnap.contracts.models import StrictModel
 from vidsnap.loop.events import EventStatus
@@ -39,6 +39,7 @@ OutputT = TypeVar("OutputT", bound=StrictModel)
 ModelT = TypeVar("ModelT")
 
 _SENSITIVE_KEY_PARTS = ("api_key", "authorization", "credential", "password", "secret", "token")
+_DIRECT_BASELINE_FPS = 2
 
 
 @dataclass(slots=True)
@@ -166,6 +167,47 @@ class HarnessKernel(Generic[OutputT, ModelT]):
             },
         )
 
+    async def prepare_direct_baseline(self, context: RunContext[OutputT, ModelT]) -> None:
+        """Extract one complete fps=2 timeline as uncapped direct-baseline evidence."""
+        probe = context.probe
+        if probe is None:
+            raise RuntimeError("probe_media must run before direct baseline preparation")
+        self._enforce_wall(context)
+        frames = await context.media.extract_timeline_frames(
+            context.source.path,
+            fps=_DIRECT_BASELINE_FPS,
+            output_dir=context.next_artifact_dir() / "timeline",
+        )
+        for frame in frames:
+            context.add(
+                Evidence(
+                    id=context.next_id("frame"),
+                    start_seconds=frame.timestamp,
+                    end_seconds=frame.timestamp,
+                    modality="frame",
+                    artifact_path=frame.path,
+                    budget_class="direct_baseline",
+                )
+            )
+        subtitle = _registered_subtitle(context.task_adapter)
+        if subtitle is not None:
+            context.add(
+                Evidence(
+                    id=context.next_id("transcript"),
+                    start_seconds=0.0,
+                    end_seconds=probe.duration_seconds,
+                    modality="transcript",
+                    content=subtitle,
+                    budget_class="direct_baseline",
+                )
+            )
+        self._complete_phase(
+            context,
+            "prepare_direct_baseline",
+            {"frame_count": len(frames), "transcript": subtitle is not None},
+        )
+        self._emit_budget(context)
+
     async def run_tool(
         self,
         context: RunContext[OutputT, ModelT],
@@ -202,8 +244,10 @@ class HarnessKernel(Generic[OutputT, ModelT]):
                 evidence_sink=context,
             )
             result = await plugin.execute(validated, execution)
-        except BaseException:
-            context.trace.finish(span, status="failed", payload={"name": name})
+        except BaseException as error:
+            context.trace.finish(
+                span, status="failed", payload={"name": name}, usage=_error_usage(error)
+            )
             self._emit_budget(context)
             raise
         if self._frame_count(context) > context.policy.max_evidence_frames:
@@ -248,8 +292,8 @@ class HarnessKernel(Generic[OutputT, ModelT]):
                 context.evidence,
                 context.probe,
             )
-        except BaseException:
-            context.trace.finish(span, status="failed")
+        except BaseException as error:
+            context.trace.finish(span, status="failed", usage=_error_usage(error))
             self._emit_budget(context)
             raise
         context.trace.finish(span, status="completed", usage=usage)
@@ -291,8 +335,8 @@ class HarnessKernel(Generic[OutputT, ModelT]):
             raise ProviderUnavailable("agentic runs require an agent model")
         try:
             response = await context.agent_model.decide_next(request)
-        except AgentDecisionFormatError:
-            context.trace.finish(span, status="failed")
+        except AgentDecisionFormatError as error:
+            context.trace.finish(span, status="failed", usage=_error_usage(error))
             context.bundle.append_event(
                 "agent.decision",
                 {"reason": "format_error"},
@@ -302,8 +346,8 @@ class HarnessKernel(Generic[OutputT, ModelT]):
             )
             self._emit_budget(context)
             raise
-        except BaseException:
-            context.trace.finish(span, status="failed")
+        except BaseException as error:
+            context.trace.finish(span, status="failed", usage=_error_usage(error))
             self._emit_budget(context)
             raise
         context.trace.finish(span, status="completed", usage=response.usage)
@@ -433,6 +477,39 @@ class HarnessKernel(Generic[OutputT, ModelT]):
     @staticmethod
     def _frame_count(context: RunContext[OutputT, ModelT]) -> int:
         return sum(1 for item in context.evidence if item.modality == "frame")
+
+
+def _registered_subtitle(adapter: object) -> str | None:
+    """Read one task adapter's optional registered subtitle without invoking ASR."""
+    getter = getattr(adapter, "registered_subtitle", None)
+    if not callable(getter):
+        return None
+    subtitle = getter()
+    if not isinstance(subtitle, str):
+        return None
+    return subtitle or None
+
+
+def _error_usage(error: BaseException) -> ProviderUsage | None:
+    """Map safe aggregate counters from one failed provider attempt into usage."""
+    counters: dict[str, int] = {}
+    for attribute in ("input_bytes", "input_tokens", "output_tokens"):
+        value = getattr(error, attribute, None)
+        if value is None:
+            counters[attribute] = 0
+            continue
+        if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+            return None
+        counters[attribute] = value
+    if not any(counters.values()):
+        return None
+    return ProviderUsage(
+        model_calls=1,
+        input_bytes=counters["input_bytes"],
+        input_tokens=counters["input_tokens"],
+        output_tokens=counters["output_tokens"],
+        reported=False,
+    )
 
 
 def _repair_feedback(verification: TaskVerification) -> dict[str, JsonValue]:

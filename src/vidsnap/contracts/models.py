@@ -61,6 +61,8 @@ class EvidenceReference(StrictModel):
 
 EvidenceModality = Literal["frame", "transcript", "ocr", "audio", "scene"]
 
+EvidenceBudgetClass = Literal["direct_baseline", "model_selected"]
+
 
 class Evidence(StrictModel):
     """A timestamped observation that may support one or more claims."""
@@ -72,6 +74,7 @@ class Evidence(StrictModel):
     content: str | None = Field(default=None, max_length=100_000)
     artifact_path: Path | None = None
     captured_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    budget_class: EvidenceBudgetClass = "model_selected"
 
     @model_validator(mode="after")
     def validate_time_range_and_timezone(self) -> Evidence:

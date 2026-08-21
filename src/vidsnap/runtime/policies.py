@@ -103,6 +103,27 @@ def _valid_windows(windows: tuple[tuple[float, float], ...]) -> list[JsonValue]:
     return valid[:_MAX_TOOL_WINDOWS]
 
 
+class DirectPolicy(Generic[OutputT, ModelT]):
+    """A tool-free fps=2 baseline that never consults tools or the agent model."""
+
+    async def execute(
+        self,
+        context: RunContext[OutputT, ModelT],
+        kernel: HarnessKernel[OutputT, ModelT],
+    ) -> None:
+        """Probe, capture the complete direct baseline, synthesize, and verify."""
+        await kernel.run_probe(context)
+        await kernel.prepare_direct_baseline(context)
+        await kernel.synthesize(context)
+        if context.terminal_state is not None:
+            return
+        verification = kernel.verify(context)
+        if verification.passed:
+            context.terminal_state = TerminalState.SUCCEEDED
+        else:
+            context.terminal_state = TerminalState.PARTIAL
+
+
 class AgenticPolicy(Generic[OutputT, ModelT]):
     """An iterative loop where the agent model chooses each bounded next step."""
 

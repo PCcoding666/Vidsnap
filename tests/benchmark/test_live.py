@@ -2,22 +2,34 @@
 
 from __future__ import annotations
 
+import base64
+import inspect
+import json
 from pathlib import Path
 
 import httpx
 import pytest
 
+from vidsnap.benchmark.adapters import MCQResult
 from vidsnap.benchmark.formal import FormalCase
 from vidsnap.benchmark.live import (
     BenchmarkProviderConfig,
     FormalBenchmarkEngine,
     MCQModelResponse,
+    MeasuredProviderError,
     QwenFormalClient,
     UnsupportedVideoInput,
+    VariantOutcome,
 )
 from vidsnap.config import TOKEN_PLAN_BASE_URL
-from vidsnap.contracts import ToolPlan, VideoGoal
-from vidsnap.providers.base import ToolPlanResponse
+from vidsnap.contracts import Evidence, ToolPlan, VideoGoal
+from vidsnap.contracts.agent import AgentDecision, ProviderUsage, ToolCallRequest
+from vidsnap.providers.base import (
+    AgentDecisionFormatError,
+    AgentDecisionResponse,
+    AgentStepRequest,
+    ToolPlanResponse,
+)
 from vidsnap.video.probe import ExtractedFrame, FFmpegError, MediaProbe
 from vidsnap.video.sampling import FrameCandidate
 
@@ -75,8 +87,15 @@ class FakeFormalMedia:
         ]
         return await self.extract_frames(source, candidates, output_dir)
 
-    async def extract_audio(self, source: Path, output_path: Path) -> Path:
-        del source
+    async def extract_audio(
+        self,
+        source: Path,
+        output_path: Path,
+        *,
+        start_seconds: float = 0.0,
+        end_seconds: float | None = None,
+    ) -> Path:
+        del source, start_seconds, end_seconds
         output_path.parent.mkdir(parents=True, exist_ok=True)
         output_path.write_bytes(b"audio")
         return output_path
@@ -87,6 +106,7 @@ class FakeFormalModel:
         self.plan = plan
         self.plan_calls = 0
         self.answer_calls = 0
+        self.decision_calls = 0
 
     async def plan_tools(self, probe: MediaProbe, goal) -> ToolPlanResponse:
         del probe, goal
@@ -96,6 +116,28 @@ class FakeFormalModel:
             input_tokens=5,
             output_tokens=2,
             input_bytes=50,
+        )
+
+    async def decide_next(self, request: AgentStepRequest) -> AgentDecisionResponse:
+        self.decision_calls += 1
+        called = [str(summary["tool"]) for summary in request.tool_results]
+        for name in self.plan.tools:
+            if name not in called:
+                return AgentDecisionResponse(
+                    decision=AgentDecision(
+                        kind="tool_calls",
+                        calls=(
+                            ToolCallRequest(
+                                name=name,
+                                arguments={"max_frames": 2} if name == "sample_evidence" else {},
+                            ),
+                        ),
+                    ),
+                    usage=ProviderUsage(input_tokens=6, output_tokens=2, input_bytes=60),
+                )
+        return AgentDecisionResponse(
+            decision=AgentDecision(kind="final", output={"answer": "A"}),
+            usage=ProviderUsage(input_tokens=9, output_tokens=1, input_bytes=80),
         )
 
     async def transcribe_audio(self, audio_bytes: bytes) -> MCQModelResponse:
@@ -126,12 +168,11 @@ class FakeFormalModel:
         )
 
 
-class FailingPlanModel(FakeFormalModel):
-    async def plan_tools(self, probe: MediaProbe, goal) -> ToolPlanResponse:
-        del probe, goal
-        from vidsnap.providers.base import ProviderError
-
-        raise ProviderError("safe planner failure")
+class FailingDecisionModel(FakeFormalModel):
+    async def decide_next(self, request: AgentStepRequest) -> AgentDecisionResponse:
+        del request
+        self.decision_calls += 1
+        raise MeasuredProviderError("safe decision failure", input_bytes=55)
 
 
 def make_case(tmp_path: Path, *, subtitle: bool = True) -> FormalCase:
@@ -178,29 +219,87 @@ async def test_agentic_path_runs_only_selected_audio_tool_and_accounts_usage(tmp
     assert outcome.correct is True
     assert outcome.selected_tools == ("transcribe_audio",)
     assert outcome.usage.model_calls == 2
-    assert outcome.usage.input_tokens == 18
+    assert outcome.usage.input_tokens == 15
     assert outcome.usage.output_tokens == 3
-    assert outcome.usage.input_bytes == 150
+    assert outcome.usage.input_bytes == 140
     assert outcome.usage.evidence_frames == 0
     assert outcome.verifier_passed is True
     assert media.visual_candidate_calls == 0
 
 
 @pytest.mark.asyncio
-async def test_agentic_failed_planner_attempt_is_counted(tmp_path) -> None:
+async def test_agentic_failed_decision_attempt_is_counted(tmp_path) -> None:
     """A failed provider attempt must not disappear from model-call accounting."""
     outcome = await FormalBenchmarkEngine(
         media=FakeFormalMedia(),
-        model=FailingPlanModel(ToolPlan(tools=())),
+        model=FailingDecisionModel(ToolPlan(tools=())),
     ).run_case(
         make_case(tmp_path),
         variant="agentic",
-        work_dir=tmp_path / "failed-plan",
+        work_dir=tmp_path / "failed-decision",
         direct_input_mode="frames_2fps",
     )
 
     assert outcome.terminal_state.value == "FAILED"
     assert outcome.usage.model_calls == 1
+    assert outcome.usage.input_bytes == 55
+
+
+def read_events(run_path: Path) -> list[dict[str, object]]:
+    return [json.loads(line) for line in (run_path / "events.jsonl").read_text().splitlines()]
+
+
+@pytest.mark.asyncio
+async def test_all_benchmark_variants_emit_finalized_kernel_runbundles(tmp_path) -> None:
+    """Bypassing the kernel or writing no RunBundle ledger must fail this test."""
+    case = make_case(tmp_path)
+    media = FakeFormalMedia()
+    model = FakeFormalModel(ToolPlan(tools=("transcribe_audio",)))
+    engine = FormalBenchmarkEngine(media=media, model=model)
+
+    outcomes: dict[str, VariantOutcome] = {}
+    for variant in ("direct", "fixed", "agentic"):
+        outcomes[variant] = await engine.run_case(
+            case,
+            variant=variant,
+            work_dir=tmp_path / variant,
+            direct_input_mode="frames_2fps",
+        )
+
+    sequences: dict[str, tuple[object, ...]] = {}
+    for variant in ("direct", "fixed", "agentic"):
+        run_path = tmp_path / variant / "run"
+        manifest = json.loads((run_path / "manifest.json").read_text())
+        assert manifest["terminal_state"] == "SUCCEEDED"
+        assert manifest["finalized_at"] is not None
+
+        events = read_events(run_path)
+        assert events, "each variant must record a non-empty typed event ledger"
+        assert events[0]["event_type"] == "run.started"
+        assert events[-1]["event_type"] == "run.completed"
+        sequences[variant] = tuple(event["event_type"] for event in events)
+
+        outcome = outcomes[variant]
+        assert outcome.case_id == case.case_id
+        assert outcome.variant == variant
+        assert outcome.terminal_state.value == "SUCCEEDED"
+        assert outcome.answer == "A"
+        assert outcome.correct is True
+        assert outcome.verifier_passed is True
+        assert outcome.failure_reason is None
+
+    assert model.plan_calls == 0, "agentic must never fall back to the legacy plan_tools port"
+
+    assert outcomes["direct"].direct_input_mode == "frames_2fps"
+    assert outcomes["fixed"].direct_input_mode is None
+    assert outcomes["agentic"].direct_input_mode is None
+    assert outcomes["direct"].selected_tools == ()
+    assert outcomes["fixed"].selected_tools == ("transcribe_audio", "sample_evidence")
+    assert outcomes["agentic"].selected_tools == ("transcribe_audio",)
+
+    assert len(set(sequences.values())) == 3, (
+        "each variant must keep its own truthful event sequence"
+    )
 
 
 @pytest.mark.asyncio
@@ -240,6 +339,23 @@ async def test_direct_frame_fallback_covers_complete_timeline_at_two_fps(tmp_pat
     assert media.timeline_calls == 1
     assert outcome.usage.evidence_frames == 4
     assert outcome.direct_input_mode == "frames_2fps"
+
+
+@pytest.mark.asyncio
+async def test_direct_variant_rejects_retired_complete_video_mode(tmp_path) -> None:
+    """Claiming complete-video input while frames were used must fail this test."""
+    engine = FormalBenchmarkEngine(
+        media=FakeFormalMedia(),
+        model=FakeFormalModel(ToolPlan(tools=())),
+    )
+
+    with pytest.raises(ValueError, match="frames_2fps"):
+        await engine.run_case(
+            make_case(tmp_path),
+            variant="direct",
+            work_dir=tmp_path / "direct-video",
+            direct_input_mode="video",
+        )
 
 
 @pytest.mark.asyncio
@@ -313,6 +429,49 @@ async def test_formal_qwen_client_uses_only_fixed_model_for_mcq(tmp_path) -> Non
     assert response.input_tokens == 23
     assert response.output_tokens == 1
     assert response.input_bytes > len(b"jpeg-bytes")
+    assert response.usage_reported is True
+
+
+@pytest.mark.asyncio
+async def test_formal_qwen_client_mcq_usage_reported_only_when_provider_reports(
+    tmp_path,
+) -> None:
+    """Missing or empty provider usage must never be claimed as reported."""
+    frame_path = tmp_path / "frame.jpg"
+    frame_path.write_bytes(b"jpeg-bytes")
+
+    async def handler_without_usage(request: httpx.Request) -> httpx.Response:
+        del request
+        return httpx.Response(200, json={"choices": [{"message": {"content": "A"}}]})
+
+    response = await make_formal_client(handler_without_usage).answer_mcq(
+        make_case(tmp_path),
+        frames=(ExtractedFrame(frame_path, 0.5, "hash"),),
+        transcript=None,
+        video_path=None,
+    )
+    assert response.usage_reported is False
+    assert response.input_bytes > 0
+    assert response.input_tokens == 0
+    assert response.output_tokens == 0
+
+    async def handler_with_empty_usage(request: httpx.Request) -> httpx.Response:
+        del request
+        return httpx.Response(
+            200,
+            json={"choices": [{"message": {"content": "A"}}], "usage": {}},
+        )
+
+    response = await make_formal_client(handler_with_empty_usage).answer_mcq(
+        make_case(tmp_path),
+        frames=(ExtractedFrame(frame_path, 0.5, "hash"),),
+        transcript=None,
+        video_path=None,
+    )
+    assert response.usage_reported is False
+    assert response.input_bytes > 0
+    assert response.input_tokens == 0
+    assert response.output_tokens == 0
 
 
 @pytest.mark.asyncio
@@ -356,7 +515,7 @@ async def test_failed_provider_request_retains_attempted_call_and_bytes(tmp_path
         make_case(tmp_path),
         variant="direct",
         work_dir=tmp_path / "failed-request",
-        direct_input_mode="video",
+        direct_input_mode="frames_2fps",
     )
 
     assert outcome.terminal_state.value == "FAILED"
@@ -384,6 +543,38 @@ async def test_formal_qwen_client_uses_qwen_max_for_audio_transcription() -> Non
     assert payload["model"] == "qwen3.8-max"
     assert payload["messages"][1]["content"][0]["type"] == "input_audio"
     assert response.text == "hello"
+    assert response.usage_reported is False
+    assert response.input_bytes > 0
+    assert response.input_tokens == 0
+    assert response.output_tokens == 0
+
+    async def handler_with_usage(request: httpx.Request) -> httpx.Response:
+        del request
+        return httpx.Response(
+            200,
+            json={
+                "choices": [{"message": {"content": "hello"}}],
+                "usage": {"prompt_tokens": 11, "completion_tokens": 4},
+            },
+        )
+
+    reported_response = await make_formal_client(handler_with_usage).transcribe_audio(b"audio")
+    assert reported_response.usage_reported is True
+    assert reported_response.input_tokens == 11
+    assert reported_response.output_tokens == 4
+
+    async def handler_with_empty_usage(request: httpx.Request) -> httpx.Response:
+        del request
+        return httpx.Response(
+            200,
+            json={"choices": [{"message": {"content": "hello"}}], "usage": {}},
+        )
+
+    empty_response = await make_formal_client(handler_with_empty_usage).transcribe_audio(b"audio")
+    assert empty_response.usage_reported is False
+    assert empty_response.input_bytes > 0
+    assert empty_response.input_tokens == 0
+    assert empty_response.output_tokens == 0
 
 
 @pytest.mark.asyncio
@@ -466,3 +657,293 @@ async def test_formal_engine_records_local_media_failure_as_typed_outcome(tmp_pa
 
     assert outcome.terminal_state.value == "FAILED"
     assert outcome.failure_reason == "benchmark case failed"
+
+
+def make_mcq_step_request(
+    *,
+    evidence: tuple[Evidence, ...] = (),
+    tool_results: tuple[dict[str, object], ...] = (),
+    remaining_model_calls: int = 12,
+    remaining_tool_calls: int = 6,
+    remaining_frames: int = 96,
+) -> AgentStepRequest:
+    return AgentStepRequest(
+        goal=VideoGoal(
+            objective=json.dumps(
+                {
+                    "question": "What happens?",
+                    "options": {"A": "One event", "B": "Another event"},
+                },
+                ensure_ascii=True,
+                separators=(",", ":"),
+                sort_keys=True,
+            )
+        ),
+        probe=MediaProbe(2, 24, 640, 360, True),
+        evidence=evidence,
+        tool_results=tool_results,
+        tool_schemas=(
+            {"name": "transcribe_audio", "input_schema": {"type": "object"}},
+            {"name": "sample_evidence", "input_schema": {"type": "object"}},
+        ),
+        output_schema=MCQResult.model_json_schema(),
+        remaining_model_calls=remaining_model_calls,
+        remaining_tool_calls=remaining_tool_calls,
+        remaining_frames=remaining_frames,
+    )
+
+
+def planner_input_from(captured: dict[str, object]) -> dict[str, object]:
+    content = captured["payload"]["messages"][1]["content"]
+    if isinstance(content, list):
+        content = content[0]["text"]
+    return json.loads(content)
+
+
+def make_formal_client(handler) -> QwenFormalClient:
+    return QwenFormalClient(
+        BenchmarkProviderConfig(api_key="test", base_url=TOKEN_PLAN_BASE_URL),
+        transport=httpx.MockTransport(handler),
+    )
+
+
+def final_answer_response(answer: str = "A", *, usage: bool = True) -> httpx.Response:
+    payload: dict[str, object] = {
+        "choices": [
+            {"message": {"content": json.dumps({"kind": "final", "output": {"answer": answer}})}}
+        ]
+    }
+    if usage:
+        payload["usage"] = {"prompt_tokens": 23, "completion_tokens": 1}
+    return httpx.Response(200, json=payload)
+
+
+@pytest.mark.asyncio
+async def test_formal_decide_next_sends_fixed_model_endpoint_and_harness_state_only() -> None:
+    """A caller-supplied URL, model, prompt, or budget must fail this test."""
+    captured: dict[str, object] = {}
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        captured["url"] = str(request.url)
+        captured["payload"] = json.loads(request.content)
+        return final_answer_response()
+
+    with pytest.raises(ValueError):
+        BenchmarkProviderConfig(api_key="test", base_url="https://other.example/v1")
+    assert list(inspect.signature(QwenFormalClient.decide_next).parameters) == [
+        "self",
+        "request",
+    ]
+
+    transcript = Evidence(
+        id="transcript-1",
+        start_seconds=0.0,
+        end_seconds=2.0,
+        modality="transcript",
+        content="spoken words",
+    )
+    response = await make_formal_client(handler).decide_next(
+        make_mcq_step_request(
+            evidence=(transcript,),
+            tool_results=({"tool": "transcribe_audio", "status": "completed"},),
+        )
+    )
+
+    assert captured["url"] == f"{TOKEN_PLAN_BASE_URL}/chat/completions"
+    assert captured["payload"]["model"] == "qwen3.8-max"
+    planner_input = planner_input_from(captured)
+    assert planner_input["option_labels"] == ["A", "B"], (
+        "declared MCQ option labels must be derived from the registered goal"
+    )
+    assert planner_input["output_schema"] == MCQResult.model_json_schema()
+    assert planner_input["tool_schemas"] == [
+        {"name": "transcribe_audio", "input_schema": {"type": "object"}},
+        {"name": "sample_evidence", "input_schema": {"type": "object"}},
+    ]
+    assert planner_input["budgets"] == {
+        "remaining_model_calls": 12,
+        "remaining_tool_calls": 6,
+        "remaining_frames": 96,
+    }
+    assert planner_input["tool_results"] == [{"tool": "transcribe_audio", "status": "completed"}]
+    assert planner_input["evidence"][0]["id"] == "transcript-1"
+    assert planner_input["evidence"][0]["content"] == "spoken words"
+    assert "artifact_path" not in planner_input["evidence"][0]
+
+    assert isinstance(response, AgentDecisionResponse)
+    assert response.decision.kind == "final"
+    assert response.decision.output == {"answer": "A"}
+    assert response.usage.model_calls == 1
+    assert response.usage.input_tokens == 23
+    assert response.usage.output_tokens == 1
+    assert response.usage.input_bytes > 0
+    assert response.usage.reported is True
+
+
+@pytest.mark.asyncio
+async def test_formal_decide_next_parses_strict_tool_calls_with_measured_usage() -> None:
+    """A loose tool-call shape or unmeasured usage must fail this test."""
+    captured: dict[str, object] = {}
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        captured["payload"] = json.loads(request.content)
+        return httpx.Response(
+            200,
+            json={
+                "choices": [
+                    {
+                        "message": {
+                            "content": json.dumps(
+                                {
+                                    "kind": "tool_calls",
+                                    "calls": [
+                                        {
+                                            "name": "sample_evidence",
+                                            "arguments": {"max_frames": 4},
+                                        }
+                                    ],
+                                }
+                            )
+                        }
+                    }
+                ],
+                "usage": {"prompt_tokens": 7, "completion_tokens": 3},
+            },
+        )
+
+    response = await make_formal_client(handler).decide_next(make_mcq_step_request())
+
+    assert response.decision.kind == "tool_calls"
+    assert response.decision.calls == (
+        ToolCallRequest(name="sample_evidence", arguments={"max_frames": 4}),
+    )
+    assert response.usage.model_calls == 1
+    assert response.usage.input_tokens == 7
+    assert response.usage.output_tokens == 3
+    assert response.usage.input_bytes > 0
+    assert response.usage.reported is True
+
+
+@pytest.mark.asyncio
+async def test_formal_decide_next_missing_usage_is_unreported_but_still_measured() -> None:
+    """Silently reporting absent provider usage as measured zero must fail this test."""
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        del request
+        return final_answer_response(usage=False)
+
+    response = await make_formal_client(handler).decide_next(make_mcq_step_request())
+
+    assert response.usage.reported is False
+    assert response.usage.model_calls == 1
+    assert response.usage.input_bytes > 0
+    assert response.usage.input_tokens == 0
+    assert response.usage.output_tokens == 0
+
+
+@pytest.mark.asyncio
+async def test_formal_decide_next_emits_image_data_only_for_supplied_frame_evidence(
+    tmp_path,
+) -> None:
+    """Image bytes for non-frame evidence or missing frames must fail this test."""
+    captured: dict[str, object] = {}
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        captured["payload"] = json.loads(request.content)
+        return final_answer_response()
+
+    client = make_formal_client(handler)
+    frame_path = tmp_path / "frame.jpg"
+    frame_path.write_bytes(b"jpeg-bytes")
+    frame = Evidence(
+        id="frame-1",
+        start_seconds=0.5,
+        end_seconds=0.5,
+        modality="frame",
+        artifact_path=frame_path,
+    )
+
+    await client.decide_next(make_mcq_step_request(evidence=(frame,)))
+    content = captured["payload"]["messages"][1]["content"]
+    assert isinstance(content, list)
+    image_parts = [part for part in content if part["type"] == "image_url"]
+    assert len(image_parts) == 1
+    url = image_parts[0]["image_url"]["url"]
+    assert url.startswith("data:image/jpeg;base64,")
+    assert base64.b64decode(url.split(",", 1)[1]) == b"jpeg-bytes"
+
+    captured.clear()
+    await client.decide_next(make_mcq_step_request())
+    content = captured["payload"]["messages"][1]["content"]
+    parts = content if isinstance(content, list) else []
+    assert not any(part.get("type") == "image_url" for part in parts), (
+        "no image data may be sent when no frame evidence exists"
+    )
+
+
+@pytest.mark.parametrize(
+    "content",
+    [
+        pytest.param(
+            '```json\n{"kind":"final","output":{"answer":"A"}}\n```',
+            id="markdown-fences",
+        ),
+        pytest.param(
+            '{"kind":"tool_calls","calls":[{"name":"open_url","arguments":{}}]}',
+            id="unknown-tool",
+        ),
+        pytest.param(
+            '{"kind":"final","output":{"answer":"A"},"model":"other"}',
+            id="broader-fields",
+        ),
+        pytest.param('{"kind":"final","output":{"answer":"Z"}}', id="undeclared-final-label"),
+    ],
+)
+@pytest.mark.asyncio
+async def test_formal_decide_next_rejects_invalid_decisions_with_format_error(
+    content: str,
+) -> None:
+    """Markdown, undeclared tools, extra fields, or bad labels must fail this test."""
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        del request
+        return httpx.Response(200, json={"choices": [{"message": {"content": content}}]})
+
+    with pytest.raises(AgentDecisionFormatError):
+        await make_formal_client(handler).decide_next(make_mcq_step_request())
+
+
+@pytest.mark.asyncio
+async def test_formal_decide_next_transport_failure_stays_measured_provider_error() -> None:
+    """A transport failure must keep its attempted bytes and never earn a format repair."""
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        del request
+        return httpx.Response(503, json={"error": "service unavailable"})
+
+    with pytest.raises(MeasuredProviderError) as excinfo:
+        await make_formal_client(handler).decide_next(make_mcq_step_request())
+    assert not isinstance(excinfo.value, AgentDecisionFormatError)
+    assert excinfo.value.input_bytes > 0
+
+
+@pytest.mark.asyncio
+async def test_agentic_variant_steers_with_decide_next_and_never_legacy_planner(
+    tmp_path,
+) -> None:
+    """An agentic run that still consults plan_tools must fail this test."""
+    media = FakeFormalMedia()
+    model = FakeFormalModel(ToolPlan(tools=("transcribe_audio",)))
+
+    outcome = await FormalBenchmarkEngine(media=media, model=model).run_case(
+        make_case(tmp_path),
+        variant="agentic",
+        work_dir=tmp_path / "agentic-decide",
+        direct_input_mode="frames_2fps",
+    )
+
+    assert model.plan_calls == 0, "the new agentic runtime must not consult plan_tools"
+    assert model.decision_calls >= 1, "the agentic runtime must steer through decide_next"
+    assert outcome.answer == "A"
+    assert outcome.correct is True
+    assert outcome.verifier_passed is True

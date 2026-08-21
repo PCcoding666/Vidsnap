@@ -121,6 +121,7 @@ def _event_usage(usage: ProviderUsage | None) -> EventUsage | None:
     if usage is None:
         return None
     return EventUsage(
+        model_calls=usage.model_calls,
         input_bytes=usage.input_bytes,
         input_tokens=usage.input_tokens,
         output_tokens=usage.output_tokens,

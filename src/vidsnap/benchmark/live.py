@@ -12,25 +12,70 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from dataclasses import field as dataclass_field
 from pathlib import Path
-from typing import Literal, Protocol
+from typing import Any, Protocol, cast
 
 import httpx
 from pydantic import Field
 
-from vidsnap.benchmark.formal import FormalCase, parse_mcq_answer
+from vidsnap.benchmark.adapters import (
+    BenchmarkRunProjector,
+    BenchmarkVariant,
+    DirectInputMode,
+    FormalTranscriptionAdapter,
+    MCQResult,
+    MCQTaskAdapter,
+)
+from vidsnap.benchmark.formal import FormalCase
 from vidsnap.config import QWEN_MODEL, TOKEN_PLAN_BASE_URL
-from vidsnap.contracts import AcquisitionTool, TerminalState, ToolPlan, VideoGoal
+from vidsnap.contracts import (
+    AcquisitionTool,
+    HarnessPolicy,
+    TerminalState,
+    ToolPlan,
+    VideoGoal,
+    VideoSource,
+    default_loop_spec,
+)
+from vidsnap.contracts.agent import AgentDecision, ProviderUsage
 from vidsnap.contracts.models import StrictModel
+from vidsnap.loop.run_bundle import RunBundle
 from vidsnap.providers.base import (
+    AgentDecisionFormatError,
+    AgentDecisionResponse,
+    AgentStepRequest,
     ProviderError,
     ProviderUnavailable,
     ToolPlanResponse,
 )
-from vidsnap.video.probe import ExtractedFrame, FFmpegError, MediaProbe
+from vidsnap.runtime import (
+    AgenticPolicy,
+    DirectPolicy,
+    FixedPolicy,
+    HarnessKernel,
+    RunContext,
+    default_plugin_registry,
+)
+from vidsnap.tasks.base import TaskAdapter
+from vidsnap.video.probe import ExtractedFrame, MediaProbe
 from vidsnap.video.sampling import AdaptiveSampler, FrameCandidate
 
-BenchmarkVariant = Literal["direct", "fixed", "agentic"]
-DirectInputMode = Literal["video", "frames_2fps"]
+__all__ = [
+    "DIRECT_FRAME_TRANSPORT_PROFILE",
+    "DIRECT_PROVIDER_MIN_PIXELS",
+    "BenchmarkProviderConfig",
+    "BenchmarkUsage",
+    "BenchmarkVariant",
+    "DirectInputMode",
+    "FormalBenchmarkEngine",
+    "FormalMediaPort",
+    "FormalModelPort",
+    "MCQModelResponse",
+    "MeasuredProviderError",
+    "QwenFormalClient",
+    "UnsupportedVideoInput",
+    "VariantOutcome",
+]
+
 DIRECT_PROVIDER_MIN_PIXELS = 4096
 DIRECT_FRAME_TRANSPORT_PROFILE: dict[str, int | str] = {
     "timeline": "complete",
@@ -105,6 +150,7 @@ class MCQModelResponse:
     input_tokens: int = 0
     output_tokens: int = 0
     input_bytes: int = 0
+    usage_reported: bool = False
 
 
 class QwenFormalClient:
@@ -154,10 +200,13 @@ class QwenFormalClient:
             "response_format": {"type": "json_object"},
         }
         response_payload = await self._post(payload)
-        content, input_tokens, output_tokens = self._measured_response_text(
-            response_payload,
-            payload,
-        )
+        try:
+            content, input_tokens, output_tokens, reported = self._response_usage(response_payload)
+        except ProviderError as error:
+            raise MeasuredProviderError(
+                str(error),
+                input_bytes=self._payload_size(payload),
+            ) from error
         try:
             plan = ToolPlan.model_validate(self._normalized_tool_plan(content))
         except (ValueError, json.JSONDecodeError) as error:
@@ -172,6 +221,7 @@ class QwenFormalClient:
             input_tokens=input_tokens,
             output_tokens=output_tokens,
             input_bytes=self._payload_size(payload),
+            usage_reported=reported,
         )
 
     @staticmethod
@@ -192,6 +242,134 @@ class QwenFormalClient:
             else:
                 return payload
         return {"tools": normalized}
+
+    async def decide_next(self, request: AgentStepRequest) -> AgentDecisionResponse:
+        """Return one strict decision from harness-supplied state on the fixed endpoint."""
+        question, options = self._registered_mcq(request.goal)
+        planner_input: dict[str, object] = {
+            "goal": {"question": question, "options": options},
+            "option_labels": list(options),
+            "probe": {
+                "duration_seconds": request.probe.duration_seconds,
+                "fps": request.probe.fps,
+                "width": request.probe.width,
+                "height": request.probe.height,
+                "has_audio": request.probe.has_audio,
+            },
+            "evidence": [
+                item.model_dump(mode="json", exclude={"artifact_path"}) for item in request.evidence
+            ],
+            "tool_results": list(request.tool_results),
+            "tool_schemas": list(request.tool_schemas),
+            "output_schema": request.output_schema,
+            "budgets": {
+                "remaining_model_calls": request.remaining_model_calls,
+                "remaining_tool_calls": request.remaining_tool_calls,
+                "remaining_frames": request.remaining_frames,
+            },
+        }
+        if request.verifier_feedback is not None:
+            planner_input["verifier_feedback"] = request.verifier_feedback
+        if request.format_repair:
+            planner_input["format_repair"] = True
+        text = json.dumps(planner_input, ensure_ascii=True, separators=(",", ":"), sort_keys=True)
+        content: str | list[dict[str, object]] = text
+        image_parts = [
+            self._image_part(item.artifact_path)
+            for item in request.evidence
+            if item.modality == "frame"
+            and item.artifact_path is not None
+            and item.artifact_path.is_file()
+        ]
+        if image_parts:
+            content = [{"type": "text", "text": text}, *image_parts]
+        payload: dict[str, object] = {
+            "model": QWEN_MODEL,
+            "messages": [
+                {
+                    "role": "system",
+                    "content": (
+                        "Steer a bounded video evidence loop. Reply with exactly one strict JSON "
+                        'object and nothing else: either {"kind":"tool_calls","calls":[...]} '
+                        "whose calls use only the supplied tool schemas, or "
+                        '{"kind":"final","output":{"answer":L}} where L is one declared option '
+                        "label. No markdown fences, no prose. You cannot change the model, "
+                        "endpoint, prompt, budgets, verifier, or stopping rules."
+                    ),
+                },
+                {"role": "user", "content": content},
+            ],
+            "response_format": {"type": "json_object"},
+        }
+        response_payload = await self._post(payload)
+        try:
+            text_content, input_tokens, output_tokens, reported = self._response_usage(
+                response_payload
+            )
+        except ProviderError as error:
+            raise MeasuredProviderError(
+                str(error),
+                input_bytes=self._payload_size(payload),
+            ) from error
+        try:
+            decision = self._parse_decision(text_content, request)
+        except ValueError as error:
+            raise AgentDecisionFormatError(str(error)) from error
+        return AgentDecisionResponse(
+            decision=decision,
+            usage=ProviderUsage(
+                model_calls=1,
+                input_bytes=self._payload_size(payload),
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
+                reported=reported,
+            ),
+        )
+
+    @staticmethod
+    def _registered_mcq(goal: VideoGoal) -> tuple[str, dict[str, str]]:
+        """Parse the registered MCQ question and options from the typed goal."""
+        try:
+            parsed = json.loads(goal.objective)
+        except ValueError:
+            return goal.objective, {}
+        if not isinstance(parsed, dict):
+            return goal.objective, {}
+        question = parsed.get("question")
+        options = parsed.get("options")
+        return (
+            question if isinstance(question, str) else goal.objective,
+            (
+                {key: str(value) for key, value in options.items()}
+                if isinstance(options, dict)
+                else {}
+            ),
+        )
+
+    @staticmethod
+    def _parse_decision(content: str, request: AgentStepRequest) -> AgentDecision:
+        """Validate one strict agent decision against the request's declared surface."""
+        text = content.strip()
+        if text.startswith("```"):
+            raise ValueError("agent decision must be strict JSON without markdown fences")
+        try:
+            decision = AgentDecision.model_validate(json.loads(text))
+        except (json.JSONDecodeError, ValueError) as error:
+            raise ValueError("agent decision must be a strict JSON AgentDecision") from error
+        if decision.kind == "tool_calls":
+            registered = {schema.get("name") for schema in request.tool_schemas}
+            for call in decision.calls:
+                if call.name not in registered:
+                    raise ValueError(f"tool {call.name!r} is not a registered tool schema")
+        else:
+            _, options = QwenFormalClient._registered_mcq(request.goal)
+            try:
+                result = MCQResult.model_validate(decision.output)
+            except ValueError as error:
+                raise ValueError("final output must be exactly {'answer': label}") from error
+            if result.answer not in options:
+                raise ValueError("final answer must be one declared option label")
+        return decision
 
     async def transcribe_audio(self, audio_bytes: bytes) -> MCQModelResponse:
         encoded = base64.b64encode(audio_bytes).decode("ascii")
@@ -216,15 +394,19 @@ class QwenFormalClient:
             ],
         }
         response_payload = await self._post(payload)
-        content, input_tokens, output_tokens = self._measured_response_text(
-            response_payload,
-            payload,
-        )
+        try:
+            content, input_tokens, output_tokens, reported = self._response_usage(response_payload)
+        except ProviderError as error:
+            raise MeasuredProviderError(
+                str(error),
+                input_bytes=self._payload_size(payload),
+            ) from error
         return MCQModelResponse(
             content,
             input_tokens,
             output_tokens,
             self._payload_size(payload),
+            usage_reported=reported,
         )
 
     async def answer_mcq(
@@ -273,15 +455,21 @@ class QwenFormalClient:
             ],
         }
         response_payload = await self._post(payload, has_complete_video=video_path is not None)
-        response_text, input_tokens, output_tokens = self._measured_response_text(
-            response_payload,
-            payload,
-        )
+        try:
+            response_text, input_tokens, output_tokens, reported = self._response_usage(
+                response_payload
+            )
+        except ProviderError as error:
+            raise MeasuredProviderError(
+                str(error),
+                input_bytes=self._payload_size(payload),
+            ) from error
         return MCQModelResponse(
             response_text,
             input_tokens,
             output_tokens,
             self._payload_size(payload),
+            usage_reported=reported,
         )
 
     async def _post(
@@ -324,18 +512,10 @@ class QwenFormalClient:
             ) from error
 
     @classmethod
-    def _measured_response_text(
-        cls,
-        response_payload: object,
-        request_payload: dict[str, object],
-    ) -> tuple[str, int, int]:
-        try:
-            return cls._response_text(response_payload)
-        except ProviderError as error:
-            raise MeasuredProviderError(
-                str(error),
-                input_bytes=cls._payload_size(request_payload),
-            ) from error
+    def _response_usage(cls, response_payload: object) -> tuple[str, int, int, bool]:
+        text, input_tokens, output_tokens = cls._response_text(response_payload)
+        usage = response_payload.get("usage") if isinstance(response_payload, dict) else None
+        return text, input_tokens, output_tokens, isinstance(usage, dict) and bool(usage)
 
     @staticmethod
     def _response_text(payload: object) -> tuple[str, int, int]:
@@ -411,6 +591,9 @@ class FormalModelPort(Protocol):
     async def plan_tools(self, probe: MediaProbe, goal: VideoGoal) -> ToolPlanResponse:
         """Choose only registered acquisition tools."""
 
+    async def decide_next(self, request: AgentStepRequest) -> AgentDecisionResponse:
+        """Return exactly one bounded decision from harness-supplied state."""
+
     async def transcribe_audio(self, audio_bytes: bytes) -> MCQModelResponse:
         """Transcribe audio with the same registered model."""
 
@@ -452,8 +635,15 @@ class FormalMediaPort(Protocol):
     ) -> list[ExtractedFrame]:
         """Extract a complete fixed-rate timeline in one local operation."""
 
-    async def extract_audio(self, source: Path, output_path: Path) -> Path:
-        """Extract local audio bytes."""
+    async def extract_audio(
+        self,
+        source: Path,
+        output_path: Path,
+        *,
+        start_seconds: float = 0.0,
+        end_seconds: float | None = None,
+    ) -> Path:
+        """Extract local audio bytes, optionally bounded by a time window."""
 
 
 class BenchmarkUsage(StrictModel):
@@ -483,36 +673,8 @@ class VariantOutcome(StrictModel):
     failure_reason: str | None = None
 
 
-@dataclass(slots=True)
-class _UsageAccumulator:
-    model_calls: int = 0
-    evidence_frames: int = 0
-    input_bytes: int = 0
-    input_tokens: int = 0
-    output_tokens: int = 0
-
-    def start_call(self) -> None:
-        self.model_calls += 1
-
-    def record_response(self, response: MCQModelResponse) -> None:
-        self.input_tokens += response.input_tokens
-        self.output_tokens += response.output_tokens
-        self.input_bytes += response.input_bytes
-
-    def record_plan(self, response: ToolPlanResponse) -> None:
-        self.input_tokens += response.input_tokens
-        self.output_tokens += response.output_tokens
-        self.input_bytes += response.input_bytes
-
-    def record_error(self, error: ProviderError) -> None:
-        if isinstance(error, MeasuredProviderError):
-            self.input_bytes += error.input_bytes
-            self.input_tokens += error.input_tokens
-            self.output_tokens += error.output_tokens
-
-
 class FormalBenchmarkEngine:
-    """Own probing, bounded acquisition, answer parsing, and verification."""
+    """Runs every registered variant through one shared bounded kernel."""
 
     def __init__(
         self,
@@ -537,258 +699,49 @@ class FormalBenchmarkEngine:
         work_dir: Path,
         direct_input_mode: DirectInputMode,
     ) -> VariantOutcome:
-        """Execute one variant without persisting a raw provider response."""
+        """Execute one variant as one truthful kernel run with one RunBundle."""
+        if variant == "direct" and direct_input_mode != "frames_2fps":
+            raise ValueError(
+                "direct benchmark input must be the registered complete frames_2fps sequence"
+            )
         started_at = time.monotonic()
         work_dir.mkdir(parents=True, exist_ok=False)
-        usage = _UsageAccumulator()
-        selected_tools: tuple[AcquisitionTool, ...] = ()
-        frames: tuple[ExtractedFrame, ...] = ()
-        transcript: str | None = None
-        video_path: Path | None = None
-        probe: MediaProbe | None = None
-        try:
-            probe = await self.media.probe(case.source)
-            if variant == "direct":
-                transcript = self._available_subtitle(case)
-                if direct_input_mode == "video":
-                    video_path = case.source
-                else:
-                    frames = await self._direct_frames(case, probe, work_dir)
-            else:
-                selected_tools = await self._selected_tools(case, variant, probe, usage)
-                if "transcribe_audio" in selected_tools:
-                    transcript = await self._transcript(case, probe, work_dir, usage)
-                if "sample_evidence" in selected_tools:
-                    frames = await self._adaptive_frames(case, probe, work_dir)
-
-            usage.evidence_frames = len(frames)
-            usage.start_call()
-            response = await self.model.answer_mcq(
-                case,
-                frames=frames,
-                transcript=transcript,
-                video_path=video_path,
-                frame_sequence_fps=(
-                    2 if variant == "direct" and direct_input_mode == "frames_2fps" else None
-                ),
-            )
-            usage.record_response(response)
-            answer = parse_mcq_answer(response.text, case.option_labels)
-            gates = self._verify(answer, frames, transcript, video_path, probe)
-            passed = all(gates.values())
-            return self._outcome(
-                case=case,
-                variant=variant,
-                direct_input_mode=direct_input_mode,
-                selected_tools=selected_tools,
-                answer=answer,
-                gates=gates,
-                passed=passed,
-                usage=usage,
-                started_at=started_at,
-            )
-        except UnsupportedVideoInput:
-            raise
-        except ProviderUnavailable:
-            return self._failure_outcome(
-                case,
-                variant,
-                direct_input_mode,
-                selected_tools,
-                usage,
-                started_at,
-                TerminalState.BLOCKED,
-                "provider unavailable",
-            )
-        except ProviderError as error:
-            usage.record_error(error)
-            return self._failure_outcome(
-                case,
-                variant,
-                direct_input_mode,
-                selected_tools,
-                usage,
-                started_at,
-                TerminalState.FAILED,
-                "benchmark case failed",
-            )
-        except (FFmpegError, OSError, ValueError):
-            return self._failure_outcome(
-                case,
-                variant,
-                direct_input_mode,
-                selected_tools,
-                usage,
-                started_at,
-                TerminalState.FAILED,
-                "benchmark case failed",
-            )
-
-    async def _selected_tools(
-        self,
-        case: FormalCase,
-        variant: BenchmarkVariant,
-        probe: MediaProbe,
-        usage: _UsageAccumulator,
-    ) -> tuple[AcquisitionTool, ...]:
-        if variant == "fixed":
-            return ("transcribe_audio", "sample_evidence")
-        goal = VideoGoal(objective=self._goal_text(case))
-        usage.start_call()
-        response = await self.model.plan_tools(probe, goal)
-        usage.record_plan(response)
-        return response.plan.tools
-
-    async def _transcript(
-        self,
-        case: FormalCase,
-        probe: MediaProbe,
-        work_dir: Path,
-        usage: _UsageAccumulator,
-    ) -> str | None:
-        available = self._available_subtitle(case)
-        if available is not None:
-            return available
-        if not probe.has_audio:
-            return None
-        audio_path = await self.media.extract_audio(case.source, work_dir / "audio.wav")
-        audio_bytes = audio_path.read_bytes()
-        usage.start_call()
-        response = await self.model.transcribe_audio(audio_bytes)
-        usage.record_response(response)
-        return response.text.strip() or None
-
-    async def _adaptive_frames(
-        self,
-        case: FormalCase,
-        probe: MediaProbe,
-        work_dir: Path,
-    ) -> tuple[ExtractedFrame, ...]:
-        candidates = await self.media.visual_candidates(case.source, probe)
-        selected = self.sampler.select(candidates, max_frames=self.max_evidence_frames)
-        return tuple(
-            await self.media.extract_frames(case.source, selected, work_dir / "adaptive-frames")
+        bundle = RunBundle.create(
+            work_dir / "run",
+            loop_spec=default_loop_spec(),
+            provider_url=TOKEN_PLAN_BASE_URL,
         )
-
-    async def _direct_frames(
-        self,
-        case: FormalCase,
-        probe: MediaProbe,
-        work_dir: Path,
-    ) -> tuple[ExtractedFrame, ...]:
-        del probe
-        return tuple(
-            await self.media.extract_timeline_frames(
-                case.source,
-                fps=2,
-                output_dir=work_dir / "direct-frames",
-            )
-        )
-
-    @staticmethod
-    def _available_subtitle(case: FormalCase) -> str | None:
-        if case.subtitle_path is None:
-            return None
-        text = case.subtitle_path.read_text(encoding="utf-8").strip()
-        return text or None
-
-    @staticmethod
-    def _goal_text(case: FormalCase) -> str:
-        return json.dumps(
-            {"question": case.question, "options": case.options},
-            ensure_ascii=True,
-            separators=(",", ":"),
-            sort_keys=True,
-        )
-
-    @staticmethod
-    def _verify(
-        answer: str | None,
-        frames: Sequence[ExtractedFrame],
-        transcript: str | None,
-        video_path: Path | None,
-        probe: MediaProbe,
-    ) -> dict[str, bool]:
-        evidence_exists = bool(frames or transcript or video_path)
-        timestamps_in_bounds = all(
-            0 <= frame.timestamp <= probe.duration_seconds for frame in frames
-        )
-        return {
-            "schema_valid": answer is not None,
-            "timestamps_in_bounds": timestamps_in_bounds,
-            "referenced_evidence_exists": evidence_exists,
-            "claims_are_supported": answer is not None and evidence_exists,
-            "required_sections_covered": True,
-        }
-
-    @staticmethod
-    def _outcome(
-        *,
-        case: FormalCase,
-        variant: BenchmarkVariant,
-        direct_input_mode: DirectInputMode,
-        selected_tools: tuple[AcquisitionTool, ...],
-        answer: str | None,
-        gates: dict[str, bool],
-        passed: bool,
-        usage: _UsageAccumulator,
-        started_at: float,
-    ) -> VariantOutcome:
-        return VariantOutcome(
-            case_id=case.case_id,
-            variant=variant,
-            terminal_state=TerminalState.SUCCEEDED if passed else TerminalState.PARTIAL,
-            answer=answer,
-            correct=answer == case.answer,
-            selected_tools=selected_tools,
-            direct_input_mode=direct_input_mode if variant == "direct" else None,
-            usage=BenchmarkUsage(
-                model_calls=usage.model_calls,
-                evidence_frames=usage.evidence_frames,
-                input_bytes=usage.input_bytes,
-                input_tokens=usage.input_tokens,
-                output_tokens=usage.output_tokens,
-                latency_seconds=time.monotonic() - started_at,
+        task_adapter = MCQTaskAdapter(case)
+        context: RunContext[MCQResult, FormalModelPort] = RunContext(
+            source=VideoSource(path=case.source, sha256=case.source_sha256),
+            policy=HarnessPolicy(
+                max_evidence_frames=self.max_evidence_frames,
+                tool_mode="agentic" if variant == "agentic" else "fixed",
             ),
-            verifier_gates=gates,
-            verifier_passed=passed,
-        )
-
-    @staticmethod
-    def _failure_outcome(
-        case: FormalCase,
-        variant: BenchmarkVariant,
-        direct_input_mode: DirectInputMode,
-        selected_tools: tuple[AcquisitionTool, ...],
-        usage: _UsageAccumulator,
-        started_at: float,
-        terminal_state: TerminalState,
-        reason: str,
-    ) -> VariantOutcome:
-        gates = {
-            "schema_valid": False,
-            "timestamps_in_bounds": False,
-            "referenced_evidence_exists": False,
-            "claims_are_supported": False,
-            "required_sections_covered": False,
-        }
-        return VariantOutcome(
-            case_id=case.case_id,
-            variant=variant,
-            terminal_state=terminal_state,
-            answer=None,
-            correct=False,
-            selected_tools=selected_tools,
-            direct_input_mode=direct_input_mode if variant == "direct" else None,
-            usage=BenchmarkUsage(
-                model_calls=usage.model_calls,
-                evidence_frames=usage.evidence_frames,
-                input_bytes=usage.input_bytes,
-                input_tokens=usage.input_tokens,
-                output_tokens=usage.output_tokens,
-                latency_seconds=time.monotonic() - started_at,
+            bundle=bundle,
+            task_adapter=cast(TaskAdapter[MCQResult, FormalModelPort], task_adapter),
+            task_model=self.model,
+            media=self.media,
+            sampler=self.sampler,
+            agent_model=self.model if variant == "agentic" else None,
+            recognizer=FormalTranscriptionAdapter(
+                cast(Any, self.model),
+                subtitle_text=task_adapter.registered_subtitle(),
             ),
-            verifier_gates=gates,
-            verifier_passed=False,
-            failure_reason=reason,
+            result_writer=bundle.write_result,
+        )
+        kernel: HarnessKernel[MCQResult, FormalModelPort]
+        if variant == "direct":
+            kernel = HarnessKernel(policy=DirectPolicy(), registry=default_plugin_registry())
+        elif variant == "fixed":
+            kernel = HarnessKernel(policy=FixedPolicy(), registry=default_plugin_registry())
+        else:
+            kernel = HarnessKernel(policy=AgenticPolicy(), registry=default_plugin_registry())
+        result = await kernel.run(context)
+        return BenchmarkRunProjector().to_outcome(
+            case,
+            variant=variant,
+            result=result,
+            direct_input_mode=direct_input_mode,
+            latency_seconds=time.monotonic() - started_at,
         )

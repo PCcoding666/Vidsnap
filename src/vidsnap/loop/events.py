@@ -24,6 +24,19 @@ class EventUsage(StrictModel):
     output_tokens: int = Field(default=0, ge=0)
     provider_reported: bool = True
 
+    def __add__(self, other: object) -> EventUsage:
+        if not isinstance(other, EventUsage):
+            raise TypeError("EventUsage can only be added to EventUsage")
+        return EventUsage(
+            model_calls=self.model_calls + other.model_calls,
+            tool_calls=self.tool_calls + other.tool_calls,
+            evidence_frames=self.evidence_frames + other.evidence_frames,
+            input_bytes=self.input_bytes + other.input_bytes,
+            input_tokens=self.input_tokens + other.input_tokens,
+            output_tokens=self.output_tokens + other.output_tokens,
+            provider_reported=self.provider_reported and other.provider_reported,
+        )
+
 
 class RunEvent(StrictModel):
     """One timestamped state transition or observation in a RunBundle."""

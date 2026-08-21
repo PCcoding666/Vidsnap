@@ -20,18 +20,15 @@ from pydantic import ValidationError
 from vidsnap.benchmark.formal import FormalCase
 from vidsnap.benchmark.live import (
     BenchmarkProviderConfig,
-    BenchmarkUsage,
     BenchmarkVariant,
     DirectInputMode,
     FormalBenchmarkEngine,
     QwenFormalClient,
-    UnsupportedVideoInput,
     VariantOutcome,
 )
 from vidsnap.benchmark.manifest import MVBENCH_TASK_SLUGS, REGISTERED_MANIFEST_SHA256
 from vidsnap.benchmark.reporting import build_benchmark_report
 from vidsnap.config import QWEN_MODEL
-from vidsnap.contracts import TerminalState
 from vidsnap.video.probe import FFmpegMediaPort
 
 Phase = Literal["smoke", "formal"]
@@ -256,32 +253,6 @@ def _terminal_summary(report: dict[str, object], report_path: Path) -> dict[str,
     }
 
 
-def _unsupported_outcome(
-    case: FormalCase,
-    *,
-    input_bytes: int,
-) -> VariantOutcome:
-    gates = {
-        "schema_valid": False,
-        "timestamps_in_bounds": False,
-        "referenced_evidence_exists": False,
-        "claims_are_supported": False,
-        "required_sections_covered": False,
-    }
-    return VariantOutcome(
-        case_id=case.case_id,
-        variant="direct",
-        terminal_state=TerminalState.FAILED,
-        answer=None,
-        correct=False,
-        direct_input_mode="video",
-        usage=BenchmarkUsage(model_calls=1, input_bytes=input_bytes),
-        verifier_gates=gates,
-        verifier_passed=False,
-        failure_reason="complete-video input unsupported for this case",
-    )
-
-
 async def _run_experiment(
     cases: list[FormalCase],
     *,
@@ -314,15 +285,12 @@ async def _run_experiment(
     for order_index, (_, case) in enumerate(indexed_cases):
         for variant in variant_orders[order_index % len(variant_orders)]:
             work_dir = output_dir / "artifacts" / f"{order_index:03d}" / variant
-            try:
-                outcome = await engine.run_case(
-                    case,
-                    variant=variant,
-                    work_dir=work_dir,
-                    direct_input_mode=direct_mode,
-                )
-            except UnsupportedVideoInput as error:
-                outcome = _unsupported_outcome(case, input_bytes=error.input_bytes)
+            outcome = await engine.run_case(
+                case,
+                variant=variant,
+                work_dir=work_dir,
+                direct_input_mode=direct_mode,
+            )
             outcomes.append(outcome)
 
     report = build_benchmark_report(
