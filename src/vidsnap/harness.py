@@ -21,6 +21,7 @@ from vidsnap.contracts import (
 from vidsnap.loop.run_bundle import RunBundle
 from vidsnap.loop.state_machine import BudgetExceeded, LoopController, LoopState
 from vidsnap.loop.verifier import VerificationReport, verify_claims
+from vidsnap.plugins.base import SpeechRecognizerAdapter
 from vidsnap.providers.asr import QwenAsrRecognizer, SpeechRecognizer
 from vidsnap.providers.base import (
     ModelResponse,
@@ -30,8 +31,13 @@ from vidsnap.providers.base import (
     VideoModelPort,
 )
 from vidsnap.providers.qwen import QwenCompatibleClient
+from vidsnap.runtime import FixedPolicy, HarnessKernel, default_plugin_registry
+from vidsnap.runtime.context import RunContext as KernelRunContext
+from vidsnap.runtime.kernel import KernelRunResult
 from vidsnap.skills import register_builtin_skills
 from vidsnap.skills.base import SkillRegistry
+from vidsnap.tasks.base import TaskVerification
+from vidsnap.tasks.video_analysis import VideoAnalysisTaskAdapter
 from vidsnap.video.ports import FFmpegPort
 from vidsnap.video.probe import ExtractedFrame, FFmpegMediaPort, MediaProbe
 from vidsnap.video.sampling import AdaptiveSampler, FrameCandidate
@@ -117,6 +123,8 @@ class VideoHarness:
     ) -> HarnessRunResult:
         """Run the approved loop to a truthful terminal state with one RunBundle."""
         effective_policy = policy or HarnessPolicy()
+        if effective_policy.tool_mode == "fixed":
+            return await self._run_fixed(source, goal, effective_policy)
         run_path = effective_policy.output_dir or (Path.cwd() / "run" / str(uuid.uuid4()))
         bundle = RunBundle.create(
             run_path,
@@ -172,6 +180,58 @@ class VideoHarness:
             result=context.model_response.result if context.model_response is not None else None,
             failure_reason=failure_reason,
             verification=context.verification,
+        )
+
+    async def _run_fixed(
+        self,
+        source: VideoSource,
+        goal: VideoGoal,
+        policy: HarnessPolicy,
+    ) -> HarnessRunResult:
+        """Run the kernel-backed fixed slice with exactly one owned RunBundle."""
+        run_path = policy.output_dir or (Path.cwd() / "run" / str(uuid.uuid4()))
+        bundle = RunBundle.create(
+            run_path,
+            loop_spec=self.loop_spec,
+            provider_url=TOKEN_PLAN_BASE_URL,
+        )
+        context: KernelRunContext[VideoAnalysisResult, VideoModelPort] = KernelRunContext(
+            source=source,
+            policy=policy,
+            bundle=bundle,
+            task_adapter=VideoAnalysisTaskAdapter(goal),
+            task_model=self.model,
+            media=self.media,
+            sampler=self.sampler,
+            recognizer=(
+                SpeechRecognizerAdapter(self.recognizer) if self.recognizer is not None else None
+            ),
+            result_writer=bundle.write_result,
+        )
+        kernel: HarnessKernel[VideoAnalysisResult, VideoModelPort] = HarnessKernel(
+            policy=FixedPolicy(),
+            registry=default_plugin_registry(),
+        )
+        kernel_result: KernelRunResult[VideoAnalysisResult] = await kernel.run(context)
+        return HarnessRunResult(
+            terminal_state=kernel_result.terminal_state,
+            run_path=run_path,
+            result=kernel_result.output,
+            failure_reason=kernel_result.failure_reason,
+            verification=self._legacy_verification_report(kernel_result.verification),
+        )
+
+    @staticmethod
+    def _legacy_verification_report(
+        verification: TaskVerification | None,
+    ) -> VerificationReport | None:
+        """Map the kernel's task verification onto the existing public report."""
+        if verification is None:
+            return None
+        return VerificationReport(
+            passed=verification.passed,
+            failed_gates=tuple(gate for gate, passed in verification.gates.items() if not passed),
+            targeted_resample_seconds=verification.targeted_windows,
         )
 
     async def _execute(self, context: _RunContext) -> None:
