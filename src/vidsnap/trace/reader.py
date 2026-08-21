@@ -22,7 +22,7 @@ _LANE_PREFIXES: tuple[tuple[str, TraceLane], ...] = (
     ("run", "input"),
     ("probe", "input"),
 )
-_USAGE_FIELDS = frozenset(EventUsage.model_fields)
+_USAGE_FIELDS = frozenset(EventUsage.__pydantic_fields__)
 
 
 def read_trace(path: Path) -> TraceDocument:
