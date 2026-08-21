@@ -15,6 +15,7 @@ from vidsnap.config import QWEN_MODEL, TOKEN_PLAN_BASE_URL
 from vidsnap.contracts import Evidence, ToolPlan, VideoAnalysisResult, VideoGoal
 from vidsnap.contracts.agent import AgentDecision, ProviderUsage
 from vidsnap.providers.base import (
+    AgentDecisionFormatError,
     AgentDecisionResponse,
     AgentStepRequest,
     ModelResponse,
@@ -216,7 +217,13 @@ class QwenCompatibleClient:
         input_bytes = len(
             json.dumps(request_payload, ensure_ascii=True, separators=(",", ":")).encode("utf-8")
         )
-        return self._parse_agent_decision(response.json(), input_bytes=input_bytes)
+        try:
+            payload = response.json()
+        except ValueError as error:
+            raise AgentDecisionFormatError(
+                "agent-decision response body was not valid JSON"
+            ) from error
+        return self._parse_agent_decision(payload, input_bytes=input_bytes)
 
     @staticmethod
     def _evidence_content(
@@ -303,20 +310,26 @@ class QwenCompatibleClient:
     @staticmethod
     def _parse_agent_decision(payload: object, *, input_bytes: int) -> AgentDecisionResponse:
         if not isinstance(payload, dict):
-            raise ProviderError("provider agent-decision response must be an object")
+            raise AgentDecisionFormatError("provider agent-decision response must be an object")
         try:
             content = payload["choices"][0]["message"]["content"]
             if not isinstance(content, str):
                 raise TypeError("choice content must be a string")
         except (IndexError, KeyError, TypeError) as error:
-            raise ProviderError("provider response did not contain an agent decision") from error
+            raise AgentDecisionFormatError(
+                "provider response did not contain an agent decision"
+            ) from error
         text = content.strip()
         if text.startswith("```"):
-            raise ProviderError("agent decision must be strict JSON without markdown fences")
+            raise AgentDecisionFormatError(
+                "agent decision must be strict JSON without markdown fences"
+            )
         try:
             decision = AgentDecision.model_validate(json.loads(text))
         except (json.JSONDecodeError, ValueError) as error:
-            raise ProviderError("agent decision must be a strict JSON AgentDecision") from error
+            raise AgentDecisionFormatError(
+                "agent decision must be a strict JSON AgentDecision"
+            ) from error
         usage_payload = payload.get("usage")
         if isinstance(usage_payload, dict) and usage_payload:
             usage = ProviderUsage(

@@ -10,6 +10,11 @@ from vidsnap.providers.base import AgentDecisionResponse, AgentStepRequest, Prov
 from vidsnap.providers.qwen import ProviderUnavailable, QwenCompatibleClient
 from vidsnap.video.probe import MediaProbe
 
+try:  # RED: Task 8 has not introduced this dedicated provider error yet.
+    from vidsnap.providers.base import AgentDecisionFormatError
+except ImportError:
+    AgentDecisionFormatError = None  # type: ignore[assignment,misc]
+
 
 @pytest.mark.asyncio
 async def test_qwen_client_blocks_without_local_key() -> None:
@@ -336,3 +341,88 @@ async def test_qwen_analyze_evidence_treats_empty_usage_as_unreported() -> None:
     assert response.usage_reported is False
     assert response.input_tokens == 0
     assert response.output_tokens == 0
+
+
+def test_agent_decision_format_error_is_a_dedicated_provider_error_subclass() -> None:
+    """Task 8: format failures need their own type; availability failures keep theirs."""
+    assert AgentDecisionFormatError is not None, (
+        "Task 8 must define AgentDecisionFormatError in vidsnap.providers.base"
+    )
+    assert issubclass(AgentDecisionFormatError, ProviderError)
+    assert AgentDecisionFormatError is not ProviderError
+    assert AgentDecisionFormatError is not ProviderUnavailable
+    assert not issubclass(ProviderUnavailable, AgentDecisionFormatError)
+
+
+@pytest.mark.parametrize(
+    "content",
+    [
+        pytest.param(
+            '```json\n{"kind": "final", "output": {"summary": "x"}}\n```',
+            id="markdown-fences",
+        ),
+        pytest.param('{"kind": "final", "output": ', id="invalid-json"),
+        pytest.param('{"kind": "bananas", "output": {}}', id="unknown-kind"),
+        pytest.param('{"kind": "tool_calls", "calls": "not-a-list"}', id="wrong-call-shape"),
+        pytest.param(
+            '{"kind": "final", "output": {"summary": "x"}, "model": "other"}',
+            id="schema-invalid-json",
+        ),
+    ],
+)
+def test_parse_agent_decision_raises_format_error_for_malformed_bodies(content: str) -> None:
+    """Syntactically or schema-invalid decision bodies raise the dedicated format error."""
+    assert AgentDecisionFormatError is not None, (
+        "Task 8 must define AgentDecisionFormatError in vidsnap.providers.base"
+    )
+    payload = {"choices": [{"message": {"content": content}}]}
+    with pytest.raises(AgentDecisionFormatError):
+        QwenCompatibleClient._parse_agent_decision(payload, input_bytes=1)
+
+
+@pytest.mark.asyncio
+async def test_qwen_decide_next_raises_format_error_for_malformed_body() -> None:
+    """A fenced provider body surfaces as AgentDecisionFormatError end to end."""
+    assert AgentDecisionFormatError is not None, (
+        "Task 8 must define AgentDecisionFormatError in vidsnap.providers.base"
+    )
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        del request
+        return httpx.Response(
+            200,
+            json={"choices": [{"message": {"content": "```json\n{}\n```"}}]},
+        )
+
+    client = QwenCompatibleClient(api_key="test", transport=httpx.MockTransport(handler))
+    with pytest.raises(AgentDecisionFormatError):
+        await client.decide_next(make_agent_request())
+
+
+@pytest.mark.asyncio
+async def test_qwen_decide_next_transport_failure_stays_plain_provider_error() -> None:
+    """HTTP failures remain ordinary ProviderError and never earn a format repair."""
+    assert AgentDecisionFormatError is not None, (
+        "Task 8 must define AgentDecisionFormatError in vidsnap.providers.base"
+    )
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        del request
+        return httpx.Response(503, json={"error": "service unavailable"})
+
+    client = QwenCompatibleClient(api_key="test", transport=httpx.MockTransport(handler))
+    with pytest.raises(ProviderError) as excinfo:
+        await client.decide_next(make_agent_request())
+    assert not isinstance(excinfo.value, AgentDecisionFormatError)
+    assert not isinstance(excinfo.value, ProviderUnavailable)
+
+
+@pytest.mark.asyncio
+async def test_qwen_decide_next_missing_key_is_not_a_format_error() -> None:
+    """Credential absence stays ProviderUnavailable, not a repairable format failure."""
+    assert AgentDecisionFormatError is not None, (
+        "Task 8 must define AgentDecisionFormatError in vidsnap.providers.base"
+    )
+    with pytest.raises(ProviderUnavailable) as excinfo:
+        await QwenCompatibleClient(api_key=None).decide_next(make_agent_request())
+    assert not isinstance(excinfo.value, AgentDecisionFormatError)

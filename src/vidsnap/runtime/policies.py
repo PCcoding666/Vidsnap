@@ -10,6 +10,7 @@ from vidsnap.contracts import TerminalState
 from vidsnap.contracts.models import StrictModel
 from vidsnap.plugins.builtin import default_tool_plugins
 from vidsnap.plugins.registry import PluginRegistry
+from vidsnap.providers.base import AgentDecisionFormatError
 from vidsnap.runtime.context import RunContext
 
 if TYPE_CHECKING:
@@ -66,7 +67,7 @@ class FixedPolicy(Generic[OutputT, ModelT]):
             if not kernel.repair_available(context):
                 context.terminal_state = TerminalState.PARTIAL
                 return
-            kernel.record_repair(context)
+            kernel.record_repair(context, verification)
             targeted_windows = verification.targeted_windows
             repair_round = True
 
@@ -100,3 +101,42 @@ def _valid_windows(windows: tuple[tuple[float, float], ...]) -> list[JsonValue]:
         if start >= 0 and end > start:
             valid.append({"start_seconds": start, "end_seconds": end})
     return valid[:_MAX_TOOL_WINDOWS]
+
+
+class AgenticPolicy(Generic[OutputT, ModelT]):
+    """An iterative loop where the agent model chooses each bounded next step."""
+
+    async def execute(
+        self,
+        context: RunContext[OutputT, ModelT],
+        kernel: HarnessKernel[OutputT, ModelT],
+    ) -> None:
+        """Probe once, then alternate agent decisions and their bounded execution."""
+        await kernel.run_probe(context)
+        format_repair = False
+        while context.terminal_state is None:
+            try:
+                response = await kernel.request_agent_decision(context, format_repair=format_repair)
+            except AgentDecisionFormatError:
+                if context.format_repair_used:
+                    raise
+                context.format_repair_used = True
+                format_repair = True
+                continue
+            format_repair = False
+            decision = response.decision
+            if decision.kind == "tool_calls":
+                for call in decision.calls:
+                    await kernel.run_tool(context, call.name, call.arguments)
+                continue
+            kernel.accept_agent_final(context, decision)
+            verification = kernel.verify(context)
+            if verification.passed:
+                context.terminal_state = TerminalState.SUCCEEDED
+                return
+            if not kernel.repair_available(context):
+                context.terminal_state = TerminalState.PARTIAL
+                return
+            context.verifier_feedback = kernel.record_repair(context, verification)
+            context.output = None
+            context.verification = None

@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
+import json
 import time
 import uuid
 from collections.abc import Callable, Mapping
@@ -13,13 +15,20 @@ from typing import TYPE_CHECKING, Generic, TypeVar
 from pydantic import JsonValue, ValidationError
 
 from vidsnap.contracts import TerminalState
+from vidsnap.contracts.agent import AgentDecision
 from vidsnap.contracts.loopspec import default_loop_spec
 from vidsnap.contracts.models import StrictModel
 from vidsnap.loop.events import EventStatus
 from vidsnap.loop.state_machine import BudgetExceeded
 from vidsnap.plugins.base import ToolExecutionContext, ToolResult
 from vidsnap.plugins.registry import PluginRegistry
-from vidsnap.providers.base import ProviderError, ProviderUnavailable
+from vidsnap.providers.base import (
+    AgentDecisionFormatError,
+    AgentDecisionResponse,
+    AgentStepRequest,
+    ProviderError,
+    ProviderUnavailable,
+)
 from vidsnap.runtime.context import RunContext
 from vidsnap.tasks.base import TaskVerification
 
@@ -175,6 +184,11 @@ class HarnessKernel(Generic[OutputT, ModelT]):
         except ValidationError as exc:
             raise ValueError(f"invalid arguments for tool '{name}': {exc}") from exc
 
+        fingerprint = _call_fingerprint(plugin.name, validated.model_dump(mode="json"))
+        if fingerprint in context.call_fingerprints:
+            raise ValueError(f"duplicate canonical call rejected for tool '{name}'")
+        context.call_fingerprints.add(fingerprint)
+
         context.tool_calls += 1
         span = context.trace.start("tool.call", phase=name, payload={"name": name})
         try:
@@ -247,6 +261,76 @@ class HarnessKernel(Generic[OutputT, ModelT]):
         )
         self._emit_budget(context)
 
+    async def request_agent_decision(
+        self, context: RunContext[OutputT, ModelT], *, format_repair: bool = False
+    ) -> AgentDecisionResponse:
+        """Ask the agent model for one bounded decision over everything captured so far."""
+        if context.probe is None:
+            raise RuntimeError("probe_media must run before agent decisions")
+        self._enforce_wall(context)
+        if context.model_calls >= context.policy.max_model_calls:
+            raise BudgetExceeded("model-call budget exceeded")
+        context.model_calls += 1
+        request = AgentStepRequest(
+            goal=context.task_adapter.goal,
+            probe=context.probe,
+            evidence=tuple(context.evidence),
+            tool_results=tuple(context.tool_result_summaries),
+            tool_schemas=self._registry.tool_schemas(),
+            output_schema=context.task_adapter.output_model.model_json_schema(),
+            remaining_model_calls=context.policy.max_model_calls - context.model_calls,
+            remaining_tool_calls=max(0, context.policy.max_tool_calls - context.tool_calls),
+            remaining_frames=self.remaining_frame_budget(context),
+            verifier_feedback=context.verifier_feedback,
+            format_repair=format_repair,
+        )
+        span = context.trace.start("model.request", phase="agent_decision")
+        if context.agent_model is None:
+            context.trace.finish(span, status="blocked")
+            self._emit_budget(context)
+            raise ProviderUnavailable("agentic runs require an agent model")
+        try:
+            response = await context.agent_model.decide_next(request)
+        except AgentDecisionFormatError:
+            context.trace.finish(span, status="failed")
+            context.bundle.append_event(
+                "agent.decision",
+                {"reason": "format_error"},
+                event_id=uuid.uuid4().hex,
+                event_type="agent.decision",
+                status="failed",
+            )
+            self._emit_budget(context)
+            raise
+        except BaseException:
+            context.trace.finish(span, status="failed")
+            self._emit_budget(context)
+            raise
+        context.trace.finish(span, status="completed", usage=response.usage)
+        # Feedback applies to exactly one successful request; format-error retries keep it.
+        context.verifier_feedback = None
+        context.bundle.append_event(
+            "agent.decision",
+            {
+                "kind": response.decision.kind,
+                "tool_calls": [call.name for call in response.decision.calls],
+            },
+            event_id=uuid.uuid4().hex,
+            event_type="agent.decision",
+            status="completed",
+        )
+        self._emit_budget(context)
+        return response
+
+    def accept_agent_final(
+        self, context: RunContext[OutputT, ModelT], decision: AgentDecision
+    ) -> OutputT:
+        """Parse one agent final answer through the task adapter's strict schema."""
+        if decision.output is None:
+            raise ValueError("final decisions require an output payload")
+        context.output = context.task_adapter.parse_final(decision.output)
+        return context.output
+
     def verify(self, context: RunContext[OutputT, ModelT]) -> TaskVerification:
         """Deterministically check the synthesized output and complete the phase."""
         if context.probe is None or context.output is None:
@@ -294,10 +378,22 @@ class HarnessKernel(Generic[OutputT, ModelT]):
             and context.iterations < context.policy.max_iterations
         )
 
-    def record_repair(self, context: RunContext[OutputT, ModelT]) -> None:
-        """Consume one repair round before a targeted re-acquisition."""
+    def record_repair(
+        self, context: RunContext[OutputT, ModelT], verification: TaskVerification
+    ) -> dict[str, JsonValue]:
+        """Consume one repair round and emit one structured repair.requested event."""
         self._enforce_wall(context)
         self._repair_rounds += 1
+        feedback = _repair_feedback(verification)
+        context.bundle.append_event(
+            "repair.requested",
+            dict(feedback),
+            event_id=uuid.uuid4().hex,
+            event_type="repair.requested",
+            status="completed",
+        )
+        self._emit_budget(context)
+        return feedback
 
     def _emit_budget(self, context: RunContext[OutputT, ModelT]) -> None:
         """Append one numeric budget.updated snapshot after a counter changed."""
@@ -339,12 +435,28 @@ class HarnessKernel(Generic[OutputT, ModelT]):
         return sum(1 for item in context.evidence if item.modality == "frame")
 
 
+def _repair_feedback(verification: TaskVerification) -> dict[str, JsonValue]:
+    """Reduce one failed verification to only failed gates and numeric windows."""
+    failed_gates: list[JsonValue] = [
+        gate for gate, passed in verification.gates.items() if not passed
+    ]
+    targeted_windows: list[JsonValue] = [
+        [start, end] for start, end in verification.targeted_windows
+    ]
+    return {"failed_gates": failed_gates, "targeted_windows": targeted_windows}
+
+
 def _trace_status(terminal_state: TerminalState) -> EventStatus:
     if terminal_state is TerminalState.BLOCKED:
         return "blocked"
     if terminal_state in (TerminalState.EXHAUSTED, TerminalState.FAILED):
         return "failed"
     return "completed"
+
+
+def _call_fingerprint(name: str, arguments: Mapping[str, JsonValue]) -> str:
+    canonical = json.dumps(dict(arguments), sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(f"{name}\x1f{canonical}".encode()).hexdigest()
 
 
 def _redact(payload: Mapping[str, JsonValue]) -> dict[str, JsonValue]:

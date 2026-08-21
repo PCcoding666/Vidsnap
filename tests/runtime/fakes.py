@@ -9,8 +9,11 @@ against in-memory, reproducible behavior.
 from __future__ import annotations
 
 import asyncio
+from collections import deque
 from collections.abc import Sequence
 from pathlib import Path
+
+from pydantic import JsonValue
 
 from vidsnap.contracts import (
     Claim,
@@ -20,12 +23,13 @@ from vidsnap.contracts import (
     VideoAnalysisResult,
     VideoGoal,
 )
-from vidsnap.contracts.agent import AgentDecision
+from vidsnap.contracts.agent import AgentDecision, ToolCallRequest
 from vidsnap.plugins.base import TranscriptionResponse
 from vidsnap.providers.base import (
     AgentDecisionResponse,
     AgentStepRequest,
     ModelResponse,
+    ToolPlanResponse,
 )
 from vidsnap.video.probe import ExtractedFrame, MediaProbe
 from vidsnap.video.sampling import FrameCandidate
@@ -235,3 +239,51 @@ class CancellingTranscriber(FakeTranscriber):
     ) -> TranscriptionResponse:
         del audio_bytes, mime_type
         raise asyncio.CancelledError()
+
+
+def tool_decision(name: str, **arguments: JsonValue) -> AgentDecision:
+    """Build one strict tool-call decision with bounded, typed arguments."""
+    return AgentDecision(
+        kind="tool_calls",
+        calls=(ToolCallRequest(name=name, arguments=dict(arguments)),),
+    )
+
+
+def final_decision(evidence_id: str) -> AgentDecision:
+    """Build one strict final-answer decision grounded in a single evidence item."""
+    return AgentDecision(
+        kind="final",
+        output={
+            "summary": "Grounded.",
+            "claims": [{"text": "Grounded.", "evidence": [{"evidence_id": evidence_id}]}],
+            "required_sections": {},
+        },
+    )
+
+
+class ScriptedAgentModel:
+    """Deterministic AgentModelPort that replays scripted decisions in exact order.
+
+    Every AgentStepRequest is recorded so tests can assert that later decisions
+    observed newly acquired evidence and redacted tool-result summaries. The
+    legacy one-shot plan_tools port is a tripwire: calling it fails the test.
+    """
+
+    def __init__(self, decisions: Sequence[AgentDecision]) -> None:
+        self.decisions: deque[AgentDecision] = deque(decisions)
+        self.requests: list[AgentStepRequest] = []
+        self.plan_tools_calls = 0
+
+    async def decide_next(self, request: AgentStepRequest) -> AgentDecisionResponse:
+        self.requests.append(request)
+        if not self.decisions:
+            raise AssertionError("ScriptedAgentModel received an unexpected decide_next call")
+        return AgentDecisionResponse(
+            decision=self.decisions.popleft(),
+            usage=ProviderUsage(reported=False),
+        )
+
+    async def plan_tools(self, probe: MediaProbe, goal: VideoGoal) -> ToolPlanResponse:
+        del probe, goal
+        self.plan_tools_calls += 1
+        raise AssertionError("agentic mode must not call the legacy one-shot plan_tools port")

@@ -21,6 +21,10 @@ class ProviderUnavailable(ProviderError):
     """Raised when a local credential or provider dependency is unavailable."""
 
 
+class AgentDecisionFormatError(ProviderError):
+    """Raised when a successful agent-decision response body is not a valid decision."""
+
+
 @dataclass(frozen=True, slots=True)
 class ModelResponse:
     """A parsed, structured model result plus usage reported by the provider."""

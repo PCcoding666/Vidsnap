@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 
+from pydantic import JsonValue
+
 from vidsnap.plugins.base import Plugin, ToolPlugin
 
 
@@ -69,6 +71,21 @@ class PluginRegistry:
             if plugin.name == name:
                 return plugin
         raise ValueError(f"no registered tool is named: {name}")
+
+    def tool_schemas(self) -> tuple[dict[str, JsonValue], ...]:
+        """Describe every resolved, model-visible tool for agent decision requests."""
+        if self._resolved is None:
+            raise ValueError("resolve() must succeed before schema lookup")
+        schemas: list[dict[str, JsonValue]] = []
+        for plugin in self._resolved:
+            if plugin.manifest.kind != "tool" or not isinstance(plugin, ToolPlugin):
+                continue
+            if not plugin.manifest.model_visible:
+                continue
+            schemas.append(
+                {"name": plugin.name, "arguments": plugin.input_model.model_json_schema()}
+            )
+        return tuple(schemas)
 
     def _check_tool_protocol_conformance(self) -> None:
         for plugin_id in sorted(self._plugins):

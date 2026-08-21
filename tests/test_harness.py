@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+from collections import deque
+from collections.abc import Sequence
 from pathlib import Path
 
 import pytest
@@ -11,13 +13,17 @@ from vidsnap.contracts import (
     Claim,
     EvidenceReference,
     HarnessPolicy,
+    ProviderUsage,
     ToolPlan,
     VideoAnalysisResult,
     VideoGoal,
     VideoSource,
 )
+from vidsnap.contracts.agent import AgentDecision, ToolCallRequest
 from vidsnap.harness import VideoHarness
 from vidsnap.providers.base import (
+    AgentDecisionResponse,
+    AgentStepRequest,
     ModelResponse,
     ProviderError,
     ProviderUnavailable,
@@ -31,6 +37,7 @@ class FakeMediaPort:
     def __init__(self, *, has_audio: bool = False) -> None:
         self.has_audio = has_audio
         self.visual_candidate_calls = 0
+        self.audio_calls: list[tuple[float, float | None]] = []
 
     async def probe(self, source: Path) -> MediaProbe:
         del source
@@ -71,8 +78,16 @@ class FakeMediaPort:
             )
         return frames
 
-    async def extract_audio(self, source: Path, output_path: Path) -> Path:
+    async def extract_audio(
+        self,
+        source: Path,
+        output_path: Path,
+        *,
+        start_seconds: float = 0.0,
+        end_seconds: float | None = None,
+    ) -> Path:
         del source
+        self.audio_calls.append((start_seconds, end_seconds))
         output_path.parent.mkdir(parents=True, exist_ok=True)
         output_path.write_bytes(b"test-audio")
         return output_path
@@ -93,6 +108,29 @@ class FakePlanner:
         assert probe.has_audio
         assert goal.objective == "What was said?"
         return ToolPlanResponse(plan=self.plan, input_tokens=11, output_tokens=3)
+
+
+class ScriptedAgentModel:
+    """Replays scripted agent decisions in order; legacy plan_tools is a tripwire."""
+
+    def __init__(self, decisions: Sequence[AgentDecision]) -> None:
+        self.decisions: deque[AgentDecision] = deque(decisions)
+        self.requests: list[AgentStepRequest] = []
+        self.plan_tools_calls = 0
+
+    async def decide_next(self, request: AgentStepRequest) -> AgentDecisionResponse:
+        self.requests.append(request)
+        if not self.decisions:
+            raise AssertionError("ScriptedAgentModel received an unexpected decide_next call")
+        return AgentDecisionResponse(
+            decision=self.decisions.popleft(),
+            usage=ProviderUsage(reported=False),
+        )
+
+    async def plan_tools(self, probe: MediaProbe, goal: VideoGoal) -> ToolPlanResponse:
+        del probe, goal
+        self.plan_tools_calls += 1
+        raise AssertionError("agentic mode must not call the legacy one-shot plan_tools port")
 
 
 class FakeModel:
@@ -224,30 +262,58 @@ async def test_harness_marks_model_call_budget_exhaustion_as_exhausted(tmp_path)
 async def test_agentic_harness_uses_only_planned_audio_acquisition(tmp_path) -> None:
     """Adding an implicit visual acquisition to an audio-only plan must fail this test."""
     media = FakeMediaPort(has_audio=True)
+    agent = ScriptedAgentModel(
+        [
+            AgentDecision(
+                kind="tool_calls",
+                calls=(ToolCallRequest(name="transcribe_audio", arguments={}),),
+            ),
+            AgentDecision(
+                kind="final",
+                output={
+                    "summary": "Grounded.",
+                    "claims": [
+                        {"text": "Grounded.", "evidence": [{"evidence_id": "transcript-001"}]}
+                    ],
+                    "required_sections": {},
+                },
+            ),
+        ]
+    )
+    source_path = tmp_path / "input.mp4"
+    source_path.write_bytes(b"deterministic-local-video-bytes")
     result = await VideoHarness(
         media=media,
         model=FakeModel(),
         recognizer=FakeRecognizer(),
-        planner=FakePlanner(ToolPlan(tools=("transcribe_audio",))),
+        planner=agent,
     ).run(
-        VideoSource(path=tmp_path / "input.mp4"),
+        VideoSource(path=source_path),
         VideoGoal(objective="What was said?"),
         HarnessPolicy(tool_mode="agentic", output_dir=tmp_path / "agentic-run"),
     )
 
+    assert agent.plan_tools_calls == 0, "legacy one-shot plan_tools must never be used"
+    assert media.audio_calls == [(0.0, 10.0)]
+    assert media.visual_candidate_calls == 0
+    assert result.terminal_state.value == "SUCCEEDED"
     events = [
         json.loads(line)
         for line in (tmp_path / "agentic-run" / "events.jsonl").read_text().splitlines()
     ]
-    tool_plan_event = next(event for event in events if event["phase"] == "tool_plan")
-    assert tool_plan_event["payload"] == {
-        "input_tokens": 11,
-        "mode": "agentic",
-        "output_tokens": 3,
-        "selected_tools": ["transcribe_audio"],
-    }
-    assert media.visual_candidate_calls == 0
-    assert result.terminal_state.value == "SUCCEEDED"
+    completed_tools = [
+        event["payload"]["name"]
+        for event in events
+        if event.get("event_type") == "tool.call.completed"
+    ]
+    assert completed_tools == ["transcribe_audio"]
+    assert result.result is not None
+    referenced = [
+        reference.evidence_id for claim in result.result.claims for reference in claim.evidence
+    ]
+    assert referenced == ["transcript-001"]
+    assert result.verification is not None
+    assert result.verification.passed is True
 
 
 @pytest.mark.asyncio
