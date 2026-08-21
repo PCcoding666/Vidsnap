@@ -31,6 +31,15 @@ def test_policy_cannot_expand_the_approved_resource_envelope() -> None:
         HarnessPolicy(max_model_calls=13)
 
 
+def test_policy_bounds_model_visible_tool_calls() -> None:
+    assert HarnessPolicy().max_tool_calls == 6
+    assert HarnessPolicy(max_tool_calls=0).max_tool_calls == 0
+    with pytest.raises(ValueError):
+        HarnessPolicy(max_tool_calls=7)
+    with pytest.raises(ValueError):
+        HarnessPolicy(max_tool_calls=-1)
+
+
 def test_models_reject_unknown_input_and_emit_the_versioned_result_schema() -> None:
     with pytest.raises(ValueError):
         VideoGoal(objective="Summarize the demonstration", arbitrary_prompt="ignored")

@@ -4,10 +4,25 @@ from __future__ import annotations
 
 import json
 from datetime import datetime, timezone
+from typing import Literal
 
 from pydantic import Field, JsonValue, model_validator
 
 from vidsnap.contracts.models import StrictModel
+
+EventStatus = Literal["started", "completed", "failed", "blocked", "skipped"]
+
+
+class EventUsage(StrictModel):
+    """Safe, structured usage counters attached to a completed or failed event."""
+
+    model_calls: int = Field(default=0, ge=0)
+    tool_calls: int = Field(default=0, ge=0)
+    evidence_frames: int = Field(default=0, ge=0)
+    input_bytes: int = Field(default=0, ge=0)
+    input_tokens: int = Field(default=0, ge=0)
+    output_tokens: int = Field(default=0, ge=0)
+    provider_reported: bool = True
 
 
 class RunEvent(StrictModel):
@@ -17,6 +32,16 @@ class RunEvent(StrictModel):
     phase: str = Field(min_length=1, max_length=128)
     payload: dict[str, JsonValue] = Field(default_factory=dict)
     occurred_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    event_id: str | None = Field(default=None, min_length=1, max_length=64)
+    event_type: str | None = Field(default=None, min_length=1, max_length=128)
+    turn: int | None = Field(default=None, ge=1)
+    step: int | None = Field(default=None, ge=1)
+    parent_event_id: str | None = Field(default=None, min_length=1, max_length=64)
+    correlation_id: str | None = Field(default=None, min_length=1, max_length=64)
+    monotonic_offset_ms: int | None = Field(default=None, ge=0)
+    status: EventStatus | None = None
+    usage: EventUsage | None = None
+    duration_ms: int | None = Field(default=None, ge=0)
 
     @model_validator(mode="after")
     def require_utc_timestamp(self) -> RunEvent:

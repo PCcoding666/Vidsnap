@@ -18,7 +18,7 @@ from pydantic import JsonValue
 
 from vidsnap import __version__
 from vidsnap.contracts import Evidence, LoopSpec, TerminalState, VideoAnalysisResult
-from vidsnap.loop.events import RunEvent
+from vidsnap.loop.events import EventStatus, EventUsage, RunEvent
 
 _SENSITIVE_KEY_PARTS = ("api_key", "authorization", "credential", "password", "secret", "token")
 _SAFE_USAGE_COUNTERS = {
@@ -119,6 +119,7 @@ class RunBundle:
         (path / "events.jsonl").touch()
         manifest: dict[str, object] = {
             "api_version": "vidsnap.run/v1",
+            "trace_schema": "vidsnap.trace/v1",
             "run_id": str(uuid.uuid4()),
             "created_at": _utc_now(),
             "finalized_at": None,
@@ -138,7 +139,22 @@ class RunBundle:
         bundle._write_manifest()
         return bundle
 
-    def append_event(self, phase: str, payload: dict[str, JsonValue] | None = None) -> RunEvent:
+    def append_event(
+        self,
+        phase: str,
+        payload: dict[str, JsonValue] | None = None,
+        *,
+        event_id: str | None = None,
+        event_type: str | None = None,
+        turn: int | None = None,
+        step: int | None = None,
+        parent_event_id: str | None = None,
+        correlation_id: str | None = None,
+        monotonic_offset_ms: int | None = None,
+        status: EventStatus | None = None,
+        usage: EventUsage | None = None,
+        duration_ms: int | None = None,
+    ) -> RunEvent:
         """Append a redacted JSONL event and return its typed representation."""
         self._ensure_open()
         self._event_sequence += 1
@@ -148,6 +164,16 @@ class RunBundle:
             sequence=self._event_sequence,
             phase=phase,
             payload=redacted_payload,
+            event_id=event_id,
+            event_type=event_type,
+            turn=turn,
+            step=step,
+            parent_event_id=parent_event_id,
+            correlation_id=correlation_id,
+            monotonic_offset_ms=monotonic_offset_ms,
+            status=status,
+            usage=usage,
+            duration_ms=duration_ms,
         )
         with (self.path / "events.jsonl").open("a", encoding="utf-8") as handle:
             handle.write(event.to_json())

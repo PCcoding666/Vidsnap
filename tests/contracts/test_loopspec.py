@@ -24,6 +24,7 @@ def test_default_loop_spec_is_versioned_bounded_and_stable() -> None:
     assert spec.budgets.max_model_calls == 12
     assert spec.budgets.max_evidence_frames == 96
     assert spec.budgets.max_wall_seconds == 900
+    assert spec.budgets.max_tool_calls == 6
     assert spec.verification_gates == (
         "schema_valid",
         "timestamps_in_bounds",

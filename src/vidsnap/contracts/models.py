@@ -46,6 +46,7 @@ class HarnessPolicy(StrictModel):
 
     max_iterations: int = Field(default=3, ge=1, le=3)
     max_model_calls: int = Field(default=12, ge=0, le=12)
+    max_tool_calls: int = Field(default=6, ge=0, le=6)
     max_evidence_frames: int = Field(default=96, ge=1, le=96)
     max_wall_seconds: int = Field(default=900, ge=1, le=900)
     output_dir: Path | None = None
