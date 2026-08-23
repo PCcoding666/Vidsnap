@@ -69,7 +69,18 @@ def test_project_state_tracks_stack_001_as_current_task_contract() -> None:
 
     for field in REQUIRED_CONTRACT_FIELDS:
         assert field in block
-    assert "Status: `READY_FOR_REVIEW`" in block
+    assert "Status: `VERIFIED`" in block
+    assert "Status: `READY_FOR_REVIEW`" not in block
+
+    assert "13a49b3b" in state
+    assert "32645998762" in state
+    assert "32645998504" in state
+    assert "333 passed" in state
+    assert "MERGESTATE CLEAN" in state.upper()
+    assert "COPILOT" in state.upper()
+    assert "quota" in state.lower()
+    assert "copilot review approved" not in state.lower()
+    assert "copilot approval" not in state.lower()
 
     assert "#7" in state and "d4ac1e96" in state and "merged" in state
     assert "#8" in state and "887c25aa" in state

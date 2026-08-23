@@ -1,10 +1,10 @@
 # VidSnap Project State
 
-This page is the single source of truth for project state: the current main objective, task cards, state transitions, and repository settings awaiting user authorization. Pull-request facts below combine the read-only 2026-08-23 snapshot recorded in the approved implementation plan (`docs/superpowers/plans/2026-08-23-ai-native-development-protocol.md`) with later 2026-08-23 facts: the PR #7/#8/#9 facts were verified by the main agent on 2026-08-23 through read-only GitHub queries, and the PR #10 facts (real URL, base/head branches, both GitHub Actions runs, and mergeState) were reported from live GitHub state on 2026-08-23. The Active Stacked Pull Requests table now records the integration-progress facts of the user-authorized STACK-001 sequence: PRs #7, #8, and #9 are merged and PR #10 remains open. PRs #7, #8, and #9 were not modified during GOV-001; the branch push and the Draft PR #10 creation were GOV-001-authorized release actions. No provider query was performed and none is required for this task.
+This page is the single source of truth for project state: the current main objective, task cards, state transitions, and repository settings awaiting user authorization. Pull-request facts below combine the read-only 2026-08-23 snapshot recorded in the approved implementation plan (`docs/superpowers/plans/2026-08-23-ai-native-development-protocol.md`) with later 2026-08-23 facts: the PR #7/#8/#9 facts were verified by the main agent on 2026-08-23 through read-only GitHub queries, the PR #10 facts (real URL, base/head branches, both GitHub Actions runs, and mergeState) were reported from live GitHub state on 2026-08-23, and the later 2026-08-23 STACK-001 verification facts for PR #10 (head `13a49b3b`, push run `32645998762` and `pull_request` run `32645998504` both success, and the combined `vidsnap_slim` + #10 merge-tree local gate with 333 passed) were also recorded from live state. The Active Stacked Pull Requests table now records the integration-progress facts of the user-authorized STACK-001 sequence: PRs #7, #8, and #9 are merged and PR #10 remains open, Ready, and eligible for the already user-authorized normal merge. PRs #7, #8, and #9 were not modified during GOV-001; the branch push and the Draft PR #10 creation were GOV-001-authorized release actions. No provider query was performed and none is required for this task.
 
 ## Current Main Objective
 
-STACK-001 — execute the user-authorized sequential integration of PRs #7, #8, #9, and #10 into `vidsnap_slim`. At most one main objective may be active at a time; STACK-001 is that objective, currently `READY_FOR_REVIEW`. GOV-001 is preserved below as a historical `VERIFIED` task and its recorded facts are not rewritten. All other work remains `PROPOSED`, `BLOCKED`, or already `VERIFIED` or `RELEASED`.
+STACK-001 — execute the user-authorized sequential integration of PRs #7, #8, #9, and #10 into `vidsnap_slim`. At most one main objective may be active at a time; STACK-001 is that objective, currently `VERIFIED`. GOV-001 is preserved below as a historical `VERIFIED` task and its recorded facts are not rewritten. All other work remains `PROPOSED`, `BLOCKED`, or already `VERIFIED` or `RELEASED`.
 
 ## Task Contract: GOV-001
 
@@ -49,11 +49,14 @@ STACK-001 Progress Evidence (recorded 2026-08-23 from verified live GitHub facts
 - PR #8 merged into `vidsnap_slim` as a normal merge commit `887c25aa` after review fixes, with latest-head CI success before the merge.
 - PR #9 merged into `vidsnap_slim` as a normal merge commit `04546ad9` after four reviewed fixes, with latest-head CI success before the merge.
 - All three source branches and their worktrees remain; no squash, rebase, force-push, or branch deletion occurred.
-- PR #10 is OPEN and Ready (no longer Draft), retargeted to base `vidsnap_slim` with head `codex/ai-native-development-loop` at `16d4e160`, mergeState CLEAN, not yet merged. Its latest post-retarget CI run and Codex review are still pending, so this task does not yet claim `VERIFIED` or `RELEASED`.
+- PR #10 is OPEN and Ready (no longer Draft), retargeted to base `vidsnap_slim` with head `codex/ai-native-development-loop` at `13a49b3b`, mergeState CLEAN, not yet merged. On head `13a49b3b` the GitHub push CI run https://github.com/PCcoding666/Vidsnap/actions/runs/32645998762 completed success and the `pull_request` CI run https://github.com/PCcoding666/Vidsnap/actions/runs/32645998504 completed success (both recorded 2026-08-23).
+- Combined local gate, run 2026-08-23 on the actual `vidsnap_slim` + PR #10 merge tree, all green: `python -m pytest -q` (333 passed) plus `ruff format --check`, `ruff check`, `mypy src`, sdist/wheel build, `vidsnap conformance`, secret scan, and git diff check.
+- Copilot could not review PR #10 due to quota; that absence is recorded for truthfulness and does not constitute any approval from Copilot. Codex independently reviewed the actual PR #10 diff and found no blocking issue.
+- PR #10 is therefore eligible for the already user-authorized normal merge into `vidsnap_slim`; the merge itself is not part of this state update and has not happened. `RELEASED` is not claimed.
 
-Status: `READY_FOR_REVIEW`
+Status: `VERIFIED`
 
-Last transition: 2026-08-23 — `IN_PROGRESS` → `READY_FOR_REVIEW`, because PRs #7, #8, and #9 are integrated into `vidsnap_slim` via normal merge commits `d4ac1e96`, `887c25aa`, and `04546ad9`, PR #10 is correctly retargeted to `vidsnap_slim`, marked Ready, and shows mergeState CLEAN, and each completed step passed its full gates (latest-head CI success before each merge). The latest post-retarget PR #10 CI run and Codex review are still pending, so `VERIFIED` is not yet claimed.
+Last transition: 2026-08-23 — `READY_FOR_REVIEW` → `VERIFIED`, because PR #10 at head `13a49b3b` passed both classes of GitHub CI (push run `32645998762` and `pull_request` run `32645998504`, both success), the combined `vidsnap_slim` + #10 merge-tree local gate passed with 333 tests plus format/lint/mypy/build/conformance/secret-scan/diff checks, and Codex independently reviewed the actual diff with no blocking issue; Copilot could not review due to quota, which is recorded and does not constitute any approval from Copilot. PR #10 remains OPEN and Ready with mergeState CLEAN and is eligible for the already user-authorized normal merge; this transition does not merge #10 and does not claim `RELEASED`.
 
 ## Allowed States
 
@@ -78,9 +81,9 @@ Integration-progress snapshot recorded 2026-08-23 from verified live GitHub fact
 | #7 | MERGED | `vidsnap_slim` ← `codex/video-harness-core` | merged via normal merge commit `d4ac1e96` (recorded 2026-08-23) |
 | #8 | MERGED | `vidsnap_slim` ← `codex/agentic-benchmark` | merged via normal merge commit `887c25aa` after review fixes and latest-head CI success (recorded 2026-08-23) |
 | #9 | MERGED | `vidsnap_slim` ← `codex/plugin-video-harness-implementation` | merged via normal merge commit `04546ad9` after four reviewed fixes and latest-head CI success (recorded 2026-08-23) |
-| #10 | OPEN (Ready, not Draft) | `vidsnap_slim` ← `codex/ai-native-development-loop` at `16d4e160` | retargeted to `vidsnap_slim`; mergeState CLEAN; latest post-retarget CI pending (recorded 2026-08-23) |
+| #10 | OPEN (Ready, not Draft) | `vidsnap_slim` ← `codex/ai-native-development-loop` at `13a49b3b` | push run `32645998762` and `pull_request` run `32645998504` both success on head `13a49b3b`; mergeState CLEAN; eligible for the already user-authorized normal merge, source branch and worktree kept (recorded 2026-08-23) |
 
-Integration order: #7 → #8 → #9 → #10, each as a normal merge commit into `vidsnap_slim`, performed only after that PR's latest-head CI succeeds. #7, #8, and #9 are integrated in order; #10 is the remaining step and stays OPEN until its latest-head CI succeeds, review passes, and the user decides. Source branches and worktrees are kept; no squash, rebase, force-push, or branch deletion.
+Integration order: #7 → #8 → #9 → #10, each as a normal merge commit into `vidsnap_slim`, performed only after that PR's latest-head CI succeeds. #7, #8, and #9 are integrated in order; #10 is the remaining step: latest-head CI on `13a49b3b` succeeded and Codex review found no blocking issue, so it is eligible for the already user-authorized normal merge and stays OPEN until that merge happens. Source branches and worktrees are kept; no squash, rebase, force-push, or branch deletion.
 
 ## Repository Settings Requiring User Authorization
 
