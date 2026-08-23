@@ -314,6 +314,11 @@ class HarnessKernel(Generic[OutputT, ModelT]):
         self._enforce_wall(context)
         if context.model_calls >= context.policy.max_model_calls:
             raise BudgetExceeded("model-call budget exceeded")
+        if context.agent_model is None:
+            span = context.trace.start("model.request", phase="agent_decision")
+            context.trace.finish(span, status="blocked")
+            self._emit_budget(context)
+            raise ProviderUnavailable("agentic runs require an agent model")
         context.model_calls += 1
         request = AgentStepRequest(
             goal=context.task_adapter.goal,
@@ -329,10 +334,6 @@ class HarnessKernel(Generic[OutputT, ModelT]):
             format_repair=format_repair,
         )
         span = context.trace.start("model.request", phase="agent_decision")
-        if context.agent_model is None:
-            context.trace.finish(span, status="blocked")
-            self._emit_budget(context)
-            raise ProviderUnavailable("agentic runs require an agent model")
         try:
             response = await context.agent_model.decide_next(request)
         except AgentDecisionFormatError as error:

@@ -477,6 +477,16 @@ async def test_agentic_run_without_planner_returns_blocked_without_raising(
     assert completed_tool_names(events) == []
     assert events_of_type(events, "agent.decision") == []
 
+    budget_events = events_of_type(events, "budget.updated")
+    assert budget_events, "the blocked run must still emit at least one budget.updated event"
+    for event in budget_events:
+        payload = event["payload"]
+        assert isinstance(payload, dict)
+        assert payload["model_calls"] == 0, (
+            "no agent provider call ever occurred, so every budget.updated "
+            "snapshot must record model_calls == 0"
+        )
+
     assert len(list(output_dir.rglob("manifest.json"))) == 1, (
         "exactly one finalized manifest may exist for the run"
     )

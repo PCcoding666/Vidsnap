@@ -77,13 +77,17 @@ def _collect_thumbnails(run_dir: Path) -> dict[str, str]:
         root = run_dir / root_name
         if not root.is_dir():
             continue
-        try:
-            candidates = sorted(path for path in root.rglob("*") if path.is_file())
-        except OSError:
-            continue
-        for candidate in candidates:
-            if len(thumbnails) >= _MAX_THUMBNAILS:
-                return thumbnails
+        candidates = iter(root.rglob("*"))
+        while True:
+            # rglob is consumed lazily so the bound stops directory listing too.
+            try:
+                candidate = next(candidates)
+            except StopIteration:
+                break
+            except OSError:
+                break
+            if not candidate.is_file():
+                continue
             mime_type = _THUMBNAIL_MIME_TYPES.get(candidate.suffix.lower())
             if mime_type is None:
                 continue
@@ -103,6 +107,8 @@ def _collect_thumbnails(run_dir: Path) -> dict[str, str]:
                 continue
             name = candidate.relative_to(run_dir).as_posix()
             thumbnails[name] = f"data:{mime_type};base64," + base64.b64encode(raw).decode("ascii")
+            if len(thumbnails) >= _MAX_THUMBNAILS:
+                return thumbnails
     return thumbnails
 
 

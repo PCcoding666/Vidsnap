@@ -264,3 +264,17 @@ def test_discovery_loads_manifest_only_plugin(monkeypatch: pytest.MonkeyPatch) -
     assert loaded == ["vidsnap.policy.guard"]
     assert [plugin.manifest.id for plugin in discovered] == ["vidsnap.policy.guard"]
     assert discovered[0].manifest.kind == "policy"
+
+
+def test_tool_schemas_match_agent_step_request_shape() -> None:
+    registry = PluginRegistry(allowed_ids={"vidsnap.tool.sample"})
+    plugin = FakePlugin("vidsnap.tool.sample")
+    registry.register(plugin)
+    registry.resolve()
+
+    schemas = registry.tool_schemas()
+
+    assert schemas == (
+        {"name": plugin.name, "input_schema": plugin.input_model.model_json_schema()},
+    )
+    assert "arguments" not in schemas[0]

@@ -291,3 +291,37 @@ def test_thumbnails_respect_extension_size_and_count_limits(
     assert html.count("data:image/") == 8
     assert "notes.txt" not in html
     assert base64.b64encode(oversized).decode("ascii")[:32] not in html
+
+
+def test_thumbnail_collection_stops_at_the_bound_without_listing_a_ninth_file(
+    tmp_path: Path,
+    run_with_evidence: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    artifacts_root = run_with_evidence / "artifacts"
+    frames = [artifacts_root / "turn-1" / f"frame-{index:02d}.png" for index in range(8)]
+    for frame in frames:
+        frame.write_bytes(b"\x89PNG" + frame.name.encode("ascii"))
+
+    real_rglob = Path.rglob
+
+    def guarded_rglob(self: Path, pattern: str) -> Any:
+        if self != artifacts_root:
+            return real_rglob(self, pattern)
+
+        def yields() -> Any:
+            yield from frames
+            raise AssertionError(
+                "thumbnail collection must stop at the bound; a ninth directory entry was requested"
+            )
+
+        return yields()
+
+    monkeypatch.setattr(Path, "rglob", guarded_rglob)
+
+    output = export_trace(run_with_evidence, tmp_path / "thumbs.html", include_thumbnails=True)
+    html = output.read_text(encoding="utf-8")
+
+    assert html.count("data:image/") == 8
+    for frame in frames:
+        assert base64.b64encode(frame.read_bytes()).decode("ascii") in html

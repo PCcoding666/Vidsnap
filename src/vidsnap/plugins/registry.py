@@ -83,7 +83,7 @@ class PluginRegistry:
             if not plugin.manifest.model_visible:
                 continue
             schemas.append(
-                {"name": plugin.name, "arguments": plugin.input_model.model_json_schema()}
+                {"name": plugin.name, "input_schema": plugin.input_model.model_json_schema()}
             )
         return tuple(schemas)
 
