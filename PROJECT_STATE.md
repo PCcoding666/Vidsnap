@@ -4,7 +4,7 @@ This page is the single source of truth for project state: the current main obje
 
 ## Current Main Objective
 
-GOV-001 — establish the AI-native development protocol as the durable, testable collaboration loop for VidSnap. At most one main objective may be active at a time; GOV-001 is that objective, currently the single `READY_FOR_REVIEW` objective. All other work remains `PROPOSED`, `BLOCKED`, or already `VERIFIED` or `RELEASED`.
+GOV-001 — establish the AI-native development protocol as the durable, testable collaboration loop for VidSnap. At most one main objective may be active at a time; GOV-001 is that objective, currently the single `VERIFIED` objective. All other work remains `PROPOSED`, `BLOCKED`, or already `VERIFIED` or `RELEASED`.
 
 ## Task Contract: GOV-001
 
@@ -13,15 +13,15 @@ GOV-001 — establish the AI-native development protocol as the durable, testabl
 - Acceptance evidence: `PROJECT_STATE.md` exists with the main objective, all six task-contract fields, the seven allowed states, and a last-transition reason; `AGENTS.md` and `CONTRIBUTING.md` protocol additions are consistent with the design spec and preserve every existing rule; the issue form requires all six Task Contract fields and the PR template carries Task ID plus acceptance evidence; `ci.yml` triggers CI for pull requests against any base while existing push behavior is unchanged; `SECURITY.md` lists every forbidden artifact and `.github/dependabot.yml` covers pip and GitHub Actions weekly; the single stacked Draft PR passes the full existing CI; PRs #7, #8, and #9 remain unchanged and unmerged. The earlier bootstrap limitation — that the new `pull_request` event behavior could only be verified after integration — was refuted on 2026-08-23: the `pull_request` event actually fired on Draft PR #10 and its run completed success at SHA `ce53a8ee73646520985d960e987565cf3840e4bf` (see GOV-001 Progress Evidence).
 - Authority / data / secret boundaries: Only the user authorizes repository settings and decides merge. Qoder CLI writes tests and repository files only in this worktree on `codex/ai-native-development-loop`. Codex reviews diffs and independently reruns gates. Model keys only come from local environment variables, are read only by the authorized local provider runtime, and are never printed, logged, persisted, or committed. Forbidden artifacts: credentials, media/video, datasets, RunBundles, benchmark results, cookies, `.env` files, raw provider requests, raw provider responses.
 - Owner / executor / reviewer: Owner and final merge authority: the user. Executor: Qoder CLI (Qwen3.8-Max or Kimi-K3). Reviewer: Codex. Independent verifier: CI. The executor never self-certifies completion; completion is decided by Codex review plus independent CI results and confirmed by the user's merge decision.
-- Next human gate: after this state update is committed and pushed, the new latest SHA on Draft PR #10 will receive fresh push and `pull_request` CI runs; await those remote CI results on the new SHA, then Codex independently verifies them. The user still decides whether to merge; this task does not merge #10.
+- Next human gate: the user reviews GOV-001 and decides whether to merge Draft PR #10. No role merges automatically; this task never merges #10.
 
-Status: `READY_FOR_REVIEW`
+Status: `VERIFIED`
 
-Last transition: 2026-08-23 — `IN_PROGRESS` → `READY_FOR_REVIEW`, because all three TDD batches are committed, the full local gate is green, and the single stacked Draft PR #10 is really open; fresh remote CI on the latest SHA after this state update remains awaited.
+Last transition: 2026-08-23 — `READY_FOR_REVIEW` → `VERIFIED`, because Codex review passed and both classes of CI on the latest implementation/review SHA `bc0bab5f4a569fede752963c2f36e9d7f8b44bf3` completed success: the push run (https://github.com/PCcoding666/Vidsnap/actions/runs/32636035016) and the `pull_request` run (https://github.com/PCcoding666/Vidsnap/actions/runs/32636037253). Draft PR #10 remains OPEN Draft with mergeState CLEAN; PRs #7, #8, and #9 remain OPEN with unchanged base/head/draft status. The user still decides whether to merge; this task never merges #10.
 
 ## GOV-001 Progress Evidence
 
-Recorded 2026-08-23. The facts below justify the `IN_PROGRESS` → `READY_FOR_REVIEW` transition recorded above.
+Recorded 2026-08-23. The facts below justify the `READY_FOR_REVIEW` → `VERIFIED` transition recorded above.
 
 - Batch A — commit `9dbf524e` (`docs: establish repository development protocol`): canonical state page and protocol instructions; committed after Codex focused review.
 - Batch B — commit `d875cd2e` (`docs: add task and pull request contracts`): Task Contract issue form and pull-request template; committed after Codex focused review.
@@ -30,7 +30,8 @@ Recorded 2026-08-23. The facts below justify the `IN_PROGRESS` → `READY_FOR_RE
 - Draft PR #10 (https://github.com/PCcoding666/Vidsnap/pull/10) is really open: state OPEN Draft, base `codex/plugin-video-harness-implementation`, head `codex/ai-native-development-loop`.
 - Push CI on SHA `ce53a8ee73646520985d960e987565cf3840e4bf` succeeded: run https://github.com/PCcoding666/Vidsnap/actions/runs/32635349354.
 - The `pull_request` event actually fired on the same SHA and its run completed success: run https://github.com/PCcoding666/Vidsnap/actions/runs/32635385487 (conclusion success, updated 2026-08-23T11:02:40Z). This refutes the earlier bootstrap limitation that the new `pull_request` behavior could only be verified after integration; the old "not observable before integration" claim is removed.
-- The commit and push of this state update will produce a new latest SHA on Draft PR #10; the CI facts above belong to SHA `ce53a8ee73646520985d960e987565cf3840e4bf`, and fresh push and `pull_request` checks on the new SHA must pass before `VERIFIED`.
+- Latest implementation/review SHA `bc0bab5f4a569fede752963c2f36e9d7f8b44bf3` on Draft PR #10 is independently verified: the push run https://github.com/PCcoding666/Vidsnap/actions/runs/32636035016 completed success and the `pull_request` run https://github.com/PCcoding666/Vidsnap/actions/runs/32636037253 completed success (both recorded 2026-08-23); PR #10 mergeState is CLEAN.
+- This metadata-only `VERIFIED` state commit changes no production code or tests; it must still keep GitHub checks green, and the latest check details are tracked on PR #10 itself rather than by committing further run-ID updates here.
 - Still true: PRs #7, #8, and #9 remain unchanged and unmerged, and this task does not merge #10.
 
 ## Allowed States
@@ -56,7 +57,7 @@ Read-only 2026-08-23 snapshot. Do not merge, modify, or close any of these PRs i
 | #7 | OPEN (not Draft) | `vidsnap_slim` ← `codex/video-harness-core` | success (recorded 2026-08-23) |
 | #8 | OPEN Draft | `codex/video-harness-core` ← `codex/agentic-benchmark` | success (recorded 2026-08-23) |
 | #9 | OPEN Draft | `codex/agentic-benchmark` ← `codex/plugin-video-harness-implementation` | success (recorded 2026-08-23) |
-| #10 | OPEN Draft | `codex/plugin-video-harness-implementation` ← `codex/ai-native-development-loop` | push and `pull_request` success at `ce53a8ee`; mergeState CLEAN (recorded 2026-08-23) |
+| #10 | OPEN Draft | `codex/plugin-video-harness-implementation` ← `codex/ai-native-development-loop` | push and `pull_request` success at `bc0bab5f`; mergeState CLEAN (recorded 2026-08-23) |
 
 Do not merge #7, #8, or #9. This task does not merge #10 either; merging #10 remains the user's decision.
 
