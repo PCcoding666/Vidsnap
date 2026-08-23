@@ -103,3 +103,64 @@ def test_pull_request_template_preserves_evidence_and_human_gates() -> None:
     assert "unless explicitly authorized" in template
     assert "outside the repository" in template
     assert "not committed" in template
+
+
+def test_ci_runs_for_pull_requests_against_any_base() -> None:
+    workflow = _read(".github/workflows/ci.yml")
+    push = workflow.split("  push:", 1)[1].split("  pull_request:", 1)[0]
+    pull_request = workflow.split("  pull_request:", 1)[1].split("\n\npermissions:", 1)[0]
+
+    assert "vidsnap_slim" in push
+    assert '"codex/**"' in push
+    assert "branches:" not in pull_request
+
+
+def test_ci_keeps_minimal_permissions_and_all_quality_gates() -> None:
+    workflow = _read(".github/workflows/ci.yml")
+
+    assert "permissions:\n  contents: read" in workflow
+    for gate in (
+        "ruff format --check src tests scripts",
+        "ruff check .",
+        "mypy src",
+        "python -m pytest -q",
+        "python -m build",
+        "Wheel smoke test",
+        "vidsnap conformance",
+        "scripts/secret_scan.py",
+        "git diff --check",
+    ):
+        assert gate in workflow
+
+
+def test_security_policy_names_private_reporting_and_forbidden_artifacts() -> None:
+    policy = _read("SECURITY.md").lower()
+    for required in (
+        "credential",
+        "video",
+        "dataset",
+        "runbundle",
+        "benchmark result",
+        ".env",
+        "cookie",
+        "raw provider request",
+        "raw provider response",
+    ):
+        assert required in policy
+    assert "github" in policy
+    assert "private" in policy
+    assert "@" not in policy
+    assert "never read" not in policy
+    assert "local-first" in policy
+    assert "never logged" in policy
+    assert "private security contact" in policy
+    assert "minimal public issue" in policy
+    assert "vulnerability details" in policy
+
+
+def test_dependabot_covers_python_and_github_actions_weekly() -> None:
+    config = _read(".github/dependabot.yml")
+
+    assert 'package-ecosystem: "pip"' in config
+    assert 'package-ecosystem: "github-actions"' in config
+    assert config.count('interval: "weekly"') == 2

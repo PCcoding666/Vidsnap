@@ -4,7 +4,6 @@ on:
   push:
     branches: [vidsnap_slim, "codex/**"]
   pull_request:
-    branches: [vidsnap_slim]
 
 permissions:
   contents: read
