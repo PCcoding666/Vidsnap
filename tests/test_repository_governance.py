@@ -28,7 +28,7 @@ def test_project_state_defines_the_approved_task_contract() -> None:
         "Next human gate:",
     ):
         assert field in state
-    for status in (
+    allowed_statuses = (
         "PROPOSED",
         "APPROVED",
         "IN_PROGRESS",
@@ -36,9 +36,13 @@ def test_project_state_defines_the_approved_task_contract() -> None:
         "VERIFIED",
         "BLOCKED",
         "RELEASED",
-    ):
+    )
+    for status in allowed_statuses:
         assert f"`{status}`" in state
-    assert state.count("Status: `IN_PROGRESS`") == 1
+    status_lines = [line for line in state.splitlines() if line.startswith("Status: `")]
+    assert len(status_lines) == 1
+    current_status = status_lines[0].split("`")[1]
+    assert current_status in allowed_statuses
     for pull_request in ("#7", "#8", "#9"):
         assert pull_request in state
     assert "Do not merge" in state
@@ -50,7 +54,10 @@ def test_protocol_docs_record_batch_a_review_corrections() -> None:
     assert "no live GitHub or provider query was performed" not in state
     assert "verified by the main agent on 2026-08-23" in state
     assert "read-only GitHub queries" in state
-    assert "no GitHub state was modified" in state
+    assert "no GitHub state was modified" not in state
+    assert "PRs #7, #8, and #9 were not modified" in state
+    assert "GOV-001-authorized release actions" in state
+    assert "https://github.com/PCcoding666/Vidsnap/pull/10" in state
     assert "already closed" not in state
 
     contributing = _read("CONTRIBUTING.md")

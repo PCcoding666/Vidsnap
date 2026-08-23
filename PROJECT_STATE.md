@@ -1,33 +1,37 @@
 # VidSnap Project State
 
-This page is the single source of truth for project state: the current main objective, task cards, state transitions, and repository settings awaiting user authorization. Pull-request facts below are the read-only 2026-08-23 snapshot recorded in the approved implementation plan (`docs/superpowers/plans/2026-08-23-ai-native-development-protocol.md`); the PR #7/#8/#9 facts were verified by the main agent on 2026-08-23 through read-only GitHub queries, and no GitHub state was modified. No provider query was performed and none is required for this task.
+This page is the single source of truth for project state: the current main objective, task cards, state transitions, and repository settings awaiting user authorization. Pull-request facts below combine the read-only 2026-08-23 snapshot recorded in the approved implementation plan (`docs/superpowers/plans/2026-08-23-ai-native-development-protocol.md`) with later 2026-08-23 facts: the PR #7/#8/#9 facts were verified by the main agent on 2026-08-23 through read-only GitHub queries, and the PR #10 facts (real URL, base/head branches, both GitHub Actions runs, and mergeState) were reported from live GitHub state on 2026-08-23. PRs #7, #8, and #9 were not modified; the branch push and the Draft PR #10 creation were GOV-001-authorized release actions. No provider query was performed and none is required for this task.
 
 ## Current Main Objective
 
-GOV-001 — establish the AI-native development protocol as the durable, testable collaboration loop for VidSnap. Exactly one main objective may be `IN_PROGRESS` at a time; GOV-001 is that objective. All other work remains `PROPOSED`, `BLOCKED`, or already `VERIFIED` or `RELEASED`.
+GOV-001 — establish the AI-native development protocol as the durable, testable collaboration loop for VidSnap. At most one main objective may be active at a time; GOV-001 is that objective, currently the single `READY_FOR_REVIEW` objective. All other work remains `PROPOSED`, `BLOCKED`, or already `VERIFIED` or `RELEASED`.
 
 ## Task Contract: GOV-001
 
 - Objective: Make the approved repo-native development protocol (`docs/superpowers/specs/2026-08-23-ai-native-development-protocol-design.md`) durable and testable: this canonical state page, protocol instructions in `AGENTS.md` and `CONTRIBUTING.md`, Task Contract issue and pull-request templates, base-agnostic pull-request CI triggering, and minimal security-maintenance files (`SECURITY.md`, `.github/dependabot.yml`).
 - Non-goals: Do not modify or merge PRs #7, #8, or #9. No live benchmark and no new evaluation conclusions. No committing credentials, media, datasets, RunBundles, benchmark results, cookies, `.env` files, or raw provider requests/responses. No presenting infrastructure verification (CI, secret scan, build gates) as Harness performance conclusions. No users, authentication, databases, queues, frontend, or SaaS state. No GitHub ruleset, security-scan switch, or default-branch changes without separate user authorization. No action pinning, Python version matrix, or release workflow.
-- Acceptance evidence: `PROJECT_STATE.md` exists with the main objective, all six task-contract fields, the seven allowed states, and a last-transition reason; `AGENTS.md` and `CONTRIBUTING.md` protocol additions are consistent with the design spec and preserve every existing rule; the issue form requires all six Task Contract fields and the PR template carries Task ID plus acceptance evidence; `ci.yml` triggers CI for pull requests against any base while existing push behavior is unchanged; `SECURITY.md` lists every forbidden artifact and `.github/dependabot.yml` covers pip and GitHub Actions weekly; the single stacked Draft PR passes the full existing CI; PRs #7, #8, and #9 remain unchanged and unmerged. Limitation: remote demonstration of the new pull_request event behavior cannot be claimed before integration — the bootstrap Draft PR may receive `offline-quality` only from its branch push because its base branch still has the old `pull_request` filter, and this limitation must be recorded rather than hidden.
+- Acceptance evidence: `PROJECT_STATE.md` exists with the main objective, all six task-contract fields, the seven allowed states, and a last-transition reason; `AGENTS.md` and `CONTRIBUTING.md` protocol additions are consistent with the design spec and preserve every existing rule; the issue form requires all six Task Contract fields and the PR template carries Task ID plus acceptance evidence; `ci.yml` triggers CI for pull requests against any base while existing push behavior is unchanged; `SECURITY.md` lists every forbidden artifact and `.github/dependabot.yml` covers pip and GitHub Actions weekly; the single stacked Draft PR passes the full existing CI; PRs #7, #8, and #9 remain unchanged and unmerged. The earlier bootstrap limitation — that the new `pull_request` event behavior could only be verified after integration — was refuted on 2026-08-23: the `pull_request` event actually fired on Draft PR #10 and its run completed success at SHA `ce53a8ee73646520985d960e987565cf3840e4bf` (see GOV-001 Progress Evidence).
 - Authority / data / secret boundaries: Only the user authorizes repository settings and decides merge. Qoder CLI writes tests and repository files only in this worktree on `codex/ai-native-development-loop`. Codex reviews diffs and independently reruns gates. Model keys only come from local environment variables, are read only by the authorized local provider runtime, and are never printed, logged, persisted, or committed. Forbidden artifacts: credentials, media/video, datasets, RunBundles, benchmark results, cookies, `.env` files, raw provider requests, raw provider responses.
 - Owner / executor / reviewer: Owner and final merge authority: the user. Executor: Qoder CLI (Qwen3.8-Max or Kimi-K3). Reviewer: Codex. Independent verifier: CI. The executor never self-certifies completion; completion is decided by Codex review plus independent CI results and confirmed by the user's merge decision.
-- Next human gate: publish the single stacked Draft PR for GOV-001 against `codex/plugin-video-harness-implementation`, then record the real PR URL on this page and await remote CI. The Draft PR is not yet created; do not record a URL or claim any `pull_request` event behavior until it actually happens.
+- Next human gate: after this state update is committed and pushed, the new latest SHA on Draft PR #10 will receive fresh push and `pull_request` CI runs; await those remote CI results on the new SHA, then Codex independently verifies them. The user still decides whether to merge; this task does not merge #10.
 
-Status: `IN_PROGRESS`
+Status: `READY_FOR_REVIEW`
 
-Last transition: 2026-08-23 — `APPROVED` → `IN_PROGRESS`, because the user approved the design spec and implementation plan and dispatched Batch A implementation to Qoder CLI.
+Last transition: 2026-08-23 — `IN_PROGRESS` → `READY_FOR_REVIEW`, because all three TDD batches are committed, the full local gate is green, and the single stacked Draft PR #10 is really open; fresh remote CI on the latest SHA after this state update remains awaited.
 
 ## GOV-001 Progress Evidence
 
-Recorded 2026-08-23. GOV-001 remains the single `IN_PROGRESS` objective; nothing below changes its status.
+Recorded 2026-08-23. The facts below justify the `IN_PROGRESS` → `READY_FOR_REVIEW` transition recorded above.
 
 - Batch A — commit `9dbf524e` (`docs: establish repository development protocol`): canonical state page and protocol instructions; committed after Codex focused review.
 - Batch B — commit `d875cd2e` (`docs: add task and pull request contracts`): Task Contract issue form and pull-request template; committed after Codex focused review.
 - Batch C — commit `18becd97` (`ci: add repository governance safeguards`): base-agnostic pull-request CI triggering plus `SECURITY.md` and `.github/dependabot.yml`; committed after Codex focused review.
 - Full local gate, run 2026-08-23 in this worktree, all green: `ruff format --check src tests scripts`, `ruff check .`, `mypy src` (60 source files), `python -m pytest -q` (328 passed), sdist/wheel build, `vidsnap conformance`, secret scan, and git diff check.
-- Not yet done and not claimed: the stacked Draft PR is not published, no real PR URL exists to record, remote CI on the new `pull_request` event is not observed, and PRs #7, #8, and #9 remain unchanged and unmerged.
+- Draft PR #10 (https://github.com/PCcoding666/Vidsnap/pull/10) is really open: state OPEN Draft, base `codex/plugin-video-harness-implementation`, head `codex/ai-native-development-loop`.
+- Push CI on SHA `ce53a8ee73646520985d960e987565cf3840e4bf` succeeded: run https://github.com/PCcoding666/Vidsnap/actions/runs/32635349354.
+- The `pull_request` event actually fired on the same SHA and its run completed success: run https://github.com/PCcoding666/Vidsnap/actions/runs/32635385487 (conclusion success, updated 2026-08-23T11:02:40Z). This refutes the earlier bootstrap limitation that the new `pull_request` behavior could only be verified after integration; the old "not observable before integration" claim is removed.
+- The commit and push of this state update will produce a new latest SHA on Draft PR #10; the CI facts above belong to SHA `ce53a8ee73646520985d960e987565cf3840e4bf`, and fresh push and `pull_request` checks on the new SHA must pass before `VERIFIED`.
+- Still true: PRs #7, #8, and #9 remain unchanged and unmerged, and this task does not merge #10.
 
 ## Allowed States
 
@@ -52,8 +56,9 @@ Read-only 2026-08-23 snapshot. Do not merge, modify, or close any of these PRs i
 | #7 | OPEN (not Draft) | `vidsnap_slim` ← `codex/video-harness-core` | success (recorded 2026-08-23) |
 | #8 | OPEN Draft | `codex/video-harness-core` ← `codex/agentic-benchmark` | success (recorded 2026-08-23) |
 | #9 | OPEN Draft | `codex/agentic-benchmark` ← `codex/plugin-video-harness-implementation` | success (recorded 2026-08-23) |
+| #10 | OPEN Draft | `codex/plugin-video-harness-implementation` ← `codex/ai-native-development-loop` | push and `pull_request` success at `ce53a8ee`; mergeState CLEAN (recorded 2026-08-23) |
 
-Do not merge #7, #8, or #9.
+Do not merge #7, #8, or #9. This task does not merge #10 either; merging #10 remains the user's decision.
 
 ## Repository Settings Requiring User Authorization
 
