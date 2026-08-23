@@ -69,7 +69,8 @@ def test_project_state_tracks_stack_001_as_current_task_contract() -> None:
 
     for field in REQUIRED_CONTRACT_FIELDS:
         assert field in block
-    assert "Status: `VERIFIED`" in block
+    assert "Status: `RELEASED`" in block
+    assert "Status: `VERIFIED`" not in block
     assert "Status: `READY_FOR_REVIEW`" not in block
 
     assert "13a49b3b" in state
@@ -85,8 +86,14 @@ def test_project_state_tracks_stack_001_as_current_task_contract() -> None:
     assert "#7" in state and "d4ac1e96" in state and "merged" in state
     assert "#8" in state and "887c25aa" in state
     assert "#9" in state and "04546ad9" in state
+    assert "9ffca61f" in state
     pr_rows = [line for line in state.splitlines() if line.lstrip().startswith("| #")]
-    for number, merge_commit in (("#7", "d4ac1e96"), ("#8", "887c25aa"), ("#9", "04546ad9")):
+    for number, merge_commit in (
+        ("#7", "d4ac1e96"),
+        ("#8", "887c25aa"),
+        ("#9", "04546ad9"),
+        ("#10", "9ffca61f"),
+    ):
         rows = [line for line in pr_rows if line.lstrip().startswith(f"| {number} ")]
         assert rows, f"missing snapshot row for PR {number}"
         assert "MERGED" in rows[0].upper()
@@ -94,10 +101,32 @@ def test_project_state_tracks_stack_001_as_current_task_contract() -> None:
     pr_10_rows = [line for line in pr_rows if line.lstrip().startswith("| #10 ")]
     assert pr_10_rows, "missing snapshot row for PR #10"
     pr_10_row = pr_10_rows[0].upper()
-    assert "OPEN" in pr_10_row
-    assert "READY" in pr_10_row
-    assert "MERGED" not in pr_10_row
+    assert "MERGED" in pr_10_row
+    assert "NORMAL MERGE COMMIT" in pr_10_row
+    assert "9FFCA61F" in pr_10_row
     assert "VIDSNAP_SLIM" in pr_10_row
+    assert "OPEN" not in pr_10_row
+
+    lowered = state.lower()
+    assert "#7, #8, #9, and #10" in state
+    assert "source branches" in lowered
+    assert "worktree" in lowered
+    assert "kept" in lowered
+    assert "no squash" in lowered
+    assert "no rebase" in lowered
+    assert "no force-push" in lowered
+    assert "no branch deletion" in lowered
+    assert "four merge commits" in lowered
+
+    normalized_transition = lowered.replace("—", "->").replace("→", "->").replace("`", "")
+    assert "verified -> released" in normalized_transition
+    assert "ready_for_review -> verified" not in normalized_transition.split("last transition")[-1]
+
+    assert "no live benchmark" in lowered
+    assert "no provider" in lowered
+    assert "no default-branch" in lowered
+    assert "no ruleset" in lowered
+    assert "no security-setting" in lowered
 
 
 def test_protocol_docs_record_batch_a_review_corrections() -> None:
