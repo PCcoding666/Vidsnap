@@ -59,3 +59,47 @@ def test_protocol_docs_record_batch_a_review_corrections() -> None:
     assert "human contributors may implement directly" in contributing
     assert "Task Contract" in contributing
     assert "user merge gate" in contributing
+
+
+def test_task_issue_form_requires_every_contract_field() -> None:
+    form = _read(".github/ISSUE_TEMPLATE/task.yml")
+    field_ids = (
+        "objective",
+        "non_goals",
+        "acceptance_evidence",
+        "boundaries",
+        "roles",
+        "next_human_gate",
+    )
+    for index, field_id in enumerate(field_ids):
+        block = form.split(f"id: {field_id}", 1)[1]
+        if index + 1 < len(field_ids):
+            block = block.split(f"id: {field_ids[index + 1]}", 1)[0]
+        assert "required: true" in block
+    assert 'labels: ["task-contract"]' not in form
+    assert "blank_issues_enabled: false" in _read(".github/ISSUE_TEMPLATE/config.yml")
+
+
+def test_pull_request_template_preserves_evidence_and_human_gates() -> None:
+    template = _read(".github/PULL_REQUEST_TEMPLATE.md")
+    for required in (
+        "## Task Contract",
+        "Task ID",
+        "## Acceptance Evidence",
+        "## Authority and Data Boundaries",
+        "## Verification",
+        "No live benchmark",
+        "does not authorize merge",
+    ):
+        assert required in template
+    for ci_gate in (
+        "mypy src",
+        "python -m build",
+        "vidsnap conformance",
+        "scripts/secret_scan.py",
+        "git diff --check",
+    ):
+        assert ci_gate in template
+    assert "unless explicitly authorized" in template
+    assert "outside the repository" in template
+    assert "not committed" in template
