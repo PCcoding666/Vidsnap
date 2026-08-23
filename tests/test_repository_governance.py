@@ -69,7 +69,24 @@ def test_project_state_tracks_stack_001_as_current_task_contract() -> None:
 
     for field in REQUIRED_CONTRACT_FIELDS:
         assert field in block
-    assert "Status: `IN_PROGRESS`" in block
+    assert "Status: `READY_FOR_REVIEW`" in block
+
+    assert "#7" in state and "d4ac1e96" in state and "merged" in state
+    assert "#8" in state and "887c25aa" in state
+    assert "#9" in state and "04546ad9" in state
+    pr_rows = [line for line in state.splitlines() if line.lstrip().startswith("| #")]
+    for number, merge_commit in (("#7", "d4ac1e96"), ("#8", "887c25aa"), ("#9", "04546ad9")):
+        rows = [line for line in pr_rows if line.lstrip().startswith(f"| {number} ")]
+        assert rows, f"missing snapshot row for PR {number}"
+        assert "MERGED" in rows[0].upper()
+        assert merge_commit in rows[0]
+    pr_10_rows = [line for line in pr_rows if line.lstrip().startswith("| #10 ")]
+    assert pr_10_rows, "missing snapshot row for PR #10"
+    pr_10_row = pr_10_rows[0].upper()
+    assert "OPEN" in pr_10_row
+    assert "READY" in pr_10_row
+    assert "MERGED" not in pr_10_row
+    assert "VIDSNAP_SLIM" in pr_10_row
 
 
 def test_protocol_docs_record_batch_a_review_corrections() -> None:

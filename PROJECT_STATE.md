@@ -1,10 +1,10 @@
 # VidSnap Project State
 
-This page is the single source of truth for project state: the current main objective, task cards, state transitions, and repository settings awaiting user authorization. Pull-request facts below combine the read-only 2026-08-23 snapshot recorded in the approved implementation plan (`docs/superpowers/plans/2026-08-23-ai-native-development-protocol.md`) with later 2026-08-23 facts: the PR #7/#8/#9 facts were verified by the main agent on 2026-08-23 through read-only GitHub queries, and the PR #10 facts (real URL, base/head branches, both GitHub Actions runs, and mergeState) were reported from live GitHub state on 2026-08-23. PRs #7, #8, and #9 were not modified; the branch push and the Draft PR #10 creation were GOV-001-authorized release actions. No provider query was performed and none is required for this task.
+This page is the single source of truth for project state: the current main objective, task cards, state transitions, and repository settings awaiting user authorization. Pull-request facts below combine the read-only 2026-08-23 snapshot recorded in the approved implementation plan (`docs/superpowers/plans/2026-08-23-ai-native-development-protocol.md`) with later 2026-08-23 facts: the PR #7/#8/#9 facts were verified by the main agent on 2026-08-23 through read-only GitHub queries, and the PR #10 facts (real URL, base/head branches, both GitHub Actions runs, and mergeState) were reported from live GitHub state on 2026-08-23. The Active Stacked Pull Requests table now records the integration-progress facts of the user-authorized STACK-001 sequence: PRs #7, #8, and #9 are merged and PR #10 remains open. PRs #7, #8, and #9 were not modified during GOV-001; the branch push and the Draft PR #10 creation were GOV-001-authorized release actions. No provider query was performed and none is required for this task.
 
 ## Current Main Objective
 
-STACK-001 — execute the user-authorized sequential integration of PRs #7, #8, #9, and #10 into `vidsnap_slim`. At most one main objective may be active at a time; STACK-001 is that objective, currently `IN_PROGRESS`. GOV-001 is preserved below as a historical `VERIFIED` task and its recorded facts are not rewritten. All other work remains `PROPOSED`, `BLOCKED`, or already `VERIFIED` or `RELEASED`.
+STACK-001 — execute the user-authorized sequential integration of PRs #7, #8, #9, and #10 into `vidsnap_slim`. At most one main objective may be active at a time; STACK-001 is that objective, currently `READY_FOR_REVIEW`. GOV-001 is preserved below as a historical `VERIFIED` task and its recorded facts are not rewritten. All other work remains `PROPOSED`, `BLOCKED`, or already `VERIFIED` or `RELEASED`.
 
 ## Task Contract: GOV-001
 
@@ -43,9 +43,17 @@ Recorded 2026-08-23. The facts below justify the `READY_FOR_REVIEW` → `VERIFIE
 - Owner / executor / reviewer: Owner and final authority: the user. GitHub metadata and merge operations: Codex, under the 2026-08-23 user authorization. Code/file implementation worker (only if a conflict or fix is needed): Qoder CLI. Independent verifier: CI. Only the user decides anything outside this authorized sequence.
 - Next human gate: none for the already authorized normal sequence. Stop and request direction on unexpected conflict, failing CI that requires scope expansion, or any unexpected diff.
 
-Status: `IN_PROGRESS`
+STACK-001 Progress Evidence (recorded 2026-08-23 from verified live GitHub facts):
 
-Last transition: 2026-08-23 — `APPROVED` → `IN_PROGRESS`, because the user explicitly approved the sequential integration of PRs #7, #8, #9, and #10 into `vidsnap_slim` on 2026-08-23 and authorized work to begin; no merge has happened yet.
+- PR #7 merged into `vidsnap_slim` as a normal merge commit `d4ac1e96`.
+- PR #8 merged into `vidsnap_slim` as a normal merge commit `887c25aa` after review fixes, with latest-head CI success before the merge.
+- PR #9 merged into `vidsnap_slim` as a normal merge commit `04546ad9` after four reviewed fixes, with latest-head CI success before the merge.
+- All three source branches and their worktrees remain; no squash, rebase, force-push, or branch deletion occurred.
+- PR #10 is OPEN and Ready (no longer Draft), retargeted to base `vidsnap_slim` with head `codex/ai-native-development-loop` at `16d4e160`, mergeState CLEAN, not yet merged. Its latest post-retarget CI run and Codex review are still pending, so this task does not yet claim `VERIFIED` or `RELEASED`.
+
+Status: `READY_FOR_REVIEW`
+
+Last transition: 2026-08-23 — `IN_PROGRESS` → `READY_FOR_REVIEW`, because PRs #7, #8, and #9 are integrated into `vidsnap_slim` via normal merge commits `d4ac1e96`, `887c25aa`, and `04546ad9`, PR #10 is correctly retargeted to `vidsnap_slim`, marked Ready, and shows mergeState CLEAN, and each completed step passed its full gates (latest-head CI success before each merge). The latest post-retarget PR #10 CI run and Codex review are still pending, so `VERIFIED` is not yet claimed.
 
 ## Allowed States
 
@@ -63,16 +71,16 @@ Every transition is written back to this page with its reason.
 
 ## Active Stacked Pull Requests
 
-Pre-integration snapshot recorded 2026-08-23. The historical GOV-001-era instruction "Do not merge #7, #8, or #9" (and the note that merging #10 remained the user's undecided decision) is superseded for STACK-001: on 2026-08-23 the user explicitly authorized the sequential integration of #7, #8, #9, and #10 into `vidsnap_slim`, as recorded in Task Contract: STACK-001. As of this snapshot nothing has merged yet; every row below still reflects the pre-integration state.
+Integration-progress snapshot recorded 2026-08-23 from verified live GitHub facts. The historical GOV-001-era instruction "Do not merge #7, #8, or #9" (and the note that merging #10 remained the user's undecided decision) is superseded for STACK-001: on 2026-08-23 the user explicitly authorized the sequential integration of #7, #8, #9, and #10 into `vidsnap_slim`, as recorded in Task Contract: STACK-001. PRs #7, #8, and #9 have now merged; only #10 remains open.
 
 | PR | State | Base ← Head | Latest recorded CI |
 | --- | --- | --- | --- |
-| #7 | OPEN (not Draft) | `vidsnap_slim` ← `codex/video-harness-core` | success (recorded 2026-08-23) |
-| #8 | OPEN Draft | `codex/video-harness-core` ← `codex/agentic-benchmark` | success (recorded 2026-08-23); retarget to `vidsnap_slim` only after #7 merges |
-| #9 | OPEN Draft | `codex/agentic-benchmark` ← `codex/plugin-video-harness-implementation` | success (recorded 2026-08-23); retarget to `vidsnap_slim` only after #8 merges |
-| #10 | OPEN Draft | `codex/plugin-video-harness-implementation` ← `codex/ai-native-development-loop` | push and `pull_request` success at `bc0bab5f`; mergeState CLEAN (recorded 2026-08-23); retarget to `vidsnap_slim` only after #9 merges |
+| #7 | MERGED | `vidsnap_slim` ← `codex/video-harness-core` | merged via normal merge commit `d4ac1e96` (recorded 2026-08-23) |
+| #8 | MERGED | `vidsnap_slim` ← `codex/agentic-benchmark` | merged via normal merge commit `887c25aa` after review fixes and latest-head CI success (recorded 2026-08-23) |
+| #9 | MERGED | `vidsnap_slim` ← `codex/plugin-video-harness-implementation` | merged via normal merge commit `04546ad9` after four reviewed fixes and latest-head CI success (recorded 2026-08-23) |
+| #10 | OPEN (Ready, not Draft) | `vidsnap_slim` ← `codex/ai-native-development-loop` at `16d4e160` | retargeted to `vidsnap_slim`; mergeState CLEAN; latest post-retarget CI pending (recorded 2026-08-23) |
 
-Integration order: #7 → #8 → #9 → #10, each as a normal merge commit into `vidsnap_slim`, performed only after that PR's latest-head CI succeeds. Source branches and worktrees are kept; no squash, rebase, force-push, or branch deletion.
+Integration order: #7 → #8 → #9 → #10, each as a normal merge commit into `vidsnap_slim`, performed only after that PR's latest-head CI succeeds. #7, #8, and #9 are integrated in order; #10 is the remaining step and stays OPEN until its latest-head CI succeeds, review passes, and the user decides. Source branches and worktrees are kept; no squash, rebase, force-push, or branch deletion.
 
 ## Repository Settings Requiring User Authorization
 
