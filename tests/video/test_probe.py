@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import json
 import shutil
+import subprocess
 
 import pytest
 
@@ -32,6 +34,42 @@ async def test_ffmpeg_port_probes_and_extracts_adaptive_evidence(tmp_path) -> No
     assert len(selected) <= 2 < int(probe.duration_seconds * 2) + 1
     assert all(frame.path.exists() for frame in extracted)
     assert all(0 <= frame.timestamp <= probe.duration_seconds for frame in extracted)
+
+
+@pytest.mark.asyncio
+async def test_ffmpeg_port_extracts_complete_timeline_in_one_batch(tmp_path) -> None:
+    """Direct fallback must cover 2 fps without spawning one FFmpeg per frame."""
+    source = tmp_path / "synthetic.mp4"
+    make_synthetic_video(source)
+    media = FFmpegMediaPort()
+
+    extracted = await media.extract_timeline_frames(
+        source,
+        fps=2,
+        output_dir=tmp_path / "timeline",
+    )
+
+    assert len(extracted) == 4
+    assert [frame.timestamp for frame in extracted] == [0.0, 0.5, 1.0, 1.5]
+    assert all(frame.path.exists() for frame in extracted)
+    metadata = json.loads(
+        subprocess.run(
+            [
+                "ffprobe",
+                "-v",
+                "error",
+                "-show_entries",
+                "stream=height",
+                "-of",
+                "json",
+                str(extracted[0].path),
+            ],
+            capture_output=True,
+            check=True,
+            text=True,
+        ).stdout
+    )
+    assert metadata["streams"][0]["height"] == 96
 
 
 def test_high_motion_windows_are_local_and_merged() -> None:

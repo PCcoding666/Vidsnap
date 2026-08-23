@@ -27,5 +27,14 @@ class FFmpegPort(Protocol):
     ) -> list[ExtractedFrame]:
         """Extract only selected local evidence frames."""
 
+    async def extract_timeline_frames(
+        self,
+        source: Path,
+        *,
+        fps: int,
+        output_dir: Path,
+    ) -> list[ExtractedFrame]:
+        """Extract a complete fixed-rate timeline in one local operation."""
+
     async def extract_audio(self, source: Path, output_path: Path) -> Path:
         """Extract local mono WAV audio for an in-memory ASR port."""

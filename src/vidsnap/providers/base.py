@@ -6,7 +6,8 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Protocol
 
-from vidsnap.contracts import Evidence, VideoAnalysisResult, VideoGoal
+from vidsnap.contracts import Evidence, ToolPlan, VideoAnalysisResult, VideoGoal
+from vidsnap.video.probe import MediaProbe
 
 
 class ProviderError(RuntimeError):
@@ -24,6 +25,23 @@ class ModelResponse:
     result: VideoAnalysisResult
     input_tokens: int = 0
     output_tokens: int = 0
+
+
+@dataclass(frozen=True, slots=True)
+class ToolPlanResponse:
+    """A validated acquisition plan plus provider-reported usage."""
+
+    plan: ToolPlan
+    input_tokens: int = 0
+    output_tokens: int = 0
+    input_bytes: int = 0
+
+
+class ToolPlanningPort(Protocol):
+    """The only model operation allowed to choose acquisition tools."""
+
+    async def plan_tools(self, probe: MediaProbe, goal: VideoGoal) -> ToolPlanResponse:
+        """Choose a bounded subset of the two acquisition tools."""
 
 
 class VideoModelPort(Protocol):

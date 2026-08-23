@@ -57,3 +57,23 @@ def test_temporary_run_bundle_is_cleaned_up_at_context_exit(tmp_path) -> None:
         assert run_path.exists()
 
     assert not run_path.exists()
+
+
+def test_run_bundle_preserves_numeric_usage_counts_but_redacts_credentials(tmp_path) -> None:
+    """Removing usage counters or exposing a credential-like token must fail this test."""
+    bundle = RunBundle.create(
+        tmp_path / "run",
+        loop_spec=default_loop_spec(),
+        provider_url="https://host/v1",
+    )
+
+    event = bundle.append_event(
+        "usage",
+        {"input_tokens": 11, "output_tokens": 3, "api_token": "must-not-appear"},
+    )
+
+    assert event.payload == {
+        "input_tokens": 11,
+        "output_tokens": 3,
+        "api_token": "***REDACTED***",
+    }

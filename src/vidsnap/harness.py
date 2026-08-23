@@ -12,6 +12,7 @@ from vidsnap.contracts import (
     Evidence,
     HarnessPolicy,
     TerminalState,
+    ToolPlan,
     VideoAnalysisResult,
     VideoGoal,
     VideoSource,
@@ -21,7 +22,13 @@ from vidsnap.loop.run_bundle import RunBundle
 from vidsnap.loop.state_machine import BudgetExceeded, LoopController, LoopState
 from vidsnap.loop.verifier import VerificationReport, verify_claims
 from vidsnap.providers.asr import QwenAsrRecognizer, SpeechRecognizer
-from vidsnap.providers.base import ModelResponse, ProviderError, ProviderUnavailable, VideoModelPort
+from vidsnap.providers.base import (
+    ModelResponse,
+    ProviderError,
+    ProviderUnavailable,
+    ToolPlanningPort,
+    VideoModelPort,
+)
 from vidsnap.providers.qwen import QwenCompatibleClient
 from vidsnap.skills import register_builtin_skills
 from vidsnap.skills.base import SkillRegistry
@@ -57,6 +64,7 @@ class _RunContext:
     model: VideoModelPort
     recognizer: SpeechRecognizer | None
     sampler: AdaptiveSampler
+    planner: ToolPlanningPort | None
     probe: MediaProbe | None = None
     evidence: list[Evidence] = field(default_factory=list)
     selected_frames: list[FrameCandidate] = field(default_factory=list)
@@ -65,6 +73,7 @@ class _RunContext:
     verification: VerificationReport | None = None
     targeted_windows: tuple[tuple[float, float], ...] = ()
     repair_pending: bool = False
+    tool_plan: ToolPlan | None = None
 
 
 class VideoHarness:
@@ -78,14 +87,23 @@ class VideoHarness:
         model: VideoModelPort | None = None,
         recognizer: SpeechRecognizer | None = None,
         sampler: AdaptiveSampler | None = None,
+        planner: ToolPlanningPort | None = None,
     ) -> None:
         self.config = config or HarnessConfig.from_env()
         self.media = media or FFmpegMediaPort()
-        self.model = model or QwenCompatibleClient(
-            api_key=self.config.api_key,
-            model_concurrency=self.config.model_concurrency,
-            timeout_seconds=self.config.request_timeout_seconds,
-        )
+        self.model: VideoModelPort
+        self.planner: ToolPlanningPort | None
+        if model is None:
+            default_client = QwenCompatibleClient(
+                api_key=self.config.api_key,
+                model_concurrency=self.config.model_concurrency,
+                timeout_seconds=self.config.request_timeout_seconds,
+            )
+            self.model = default_client
+            self.planner = planner or default_client
+        else:
+            self.model = model
+            self.planner = planner
         self.recognizer = recognizer or QwenAsrRecognizer(api_key=self.config.api_key)
         self.sampler = sampler or AdaptiveSampler()
         self.loop_spec = default_loop_spec()
@@ -118,6 +136,7 @@ class VideoHarness:
             model=self.model,
             recognizer=self.recognizer,
             sampler=self.sampler,
+            planner=self.planner,
         )
         failure_reason: str | None = None
         try:
@@ -162,17 +181,25 @@ class VideoHarness:
                 context.controller.record_iteration()
                 await self.skills.run("probe_media", context)
             elif state is LoopState.PLAN:
-                context.bundle.append_event(
-                    "plan",
-                    {"skill_allow_list": list(self.loop_spec.allowed_skills)},
-                )
+                if context.policy.tool_mode == "agentic":
+                    await self._plan_acquisition(context)
+                else:
+                    context.bundle.append_event(
+                        "plan",
+                        {"skill_allow_list": list(self.loop_spec.allowed_skills)},
+                    )
                 context.controller.transition(LoopState.GATHER)
             elif state is LoopState.GATHER:
                 if context.repair_pending:
                     context.controller.record_iteration()
                     context.repair_pending = False
-                await self.skills.run("transcribe_audio", context)
-                await self.skills.run("sample_evidence", context)
+                selected_tools = (
+                    set(context.tool_plan.tools) if context.tool_plan is not None else None
+                )
+                if selected_tools is None or "transcribe_audio" in selected_tools:
+                    await self.skills.run("transcribe_audio", context)
+                if selected_tools is None or "sample_evidence" in selected_tools:
+                    await self.skills.run("sample_evidence", context)
                 if context.controller.terminal_state is None:
                     context.controller.transition(LoopState.UNDERSTAND)
             elif state is LoopState.UNDERSTAND:
@@ -214,6 +241,24 @@ class VideoHarness:
             },
         )
         context.controller.transition(LoopState.PLAN)
+
+    async def _plan_acquisition(self, context: _RunContext) -> None:
+        if context.probe is None:
+            raise RuntimeError("probe_media must run before tool planning")
+        if context.planner is None:
+            raise ProviderUnavailable("agentic tool planning is not configured")
+        context.controller.record_model_call()
+        response = await context.planner.plan_tools(context.probe, context.goal)
+        context.tool_plan = response.plan
+        context.bundle.append_event(
+            "tool_plan",
+            {
+                "mode": "agentic",
+                "selected_tools": list(response.plan.tools),
+                "input_tokens": response.input_tokens,
+                "output_tokens": response.output_tokens,
+            },
+        )
 
     async def _transcribe_audio(self, context: _RunContext) -> None:
         if context.probe is None or not context.probe.has_audio or context.recognizer is None:
@@ -290,9 +335,10 @@ class VideoHarness:
         if context.probe is None:
             raise RuntimeError("probe_media must run before inspect_evidence")
         if not context.extracted_frames:
-            context.controller.terminate(
-                TerminalState.PARTIAL if context.evidence else TerminalState.NO_OP
-            )
+            if context.evidence:
+                context.bundle.append_event("inspect_evidence", {"captured": 0})
+            else:
+                context.controller.terminate(TerminalState.NO_OP)
             return
         for frame in context.extracted_frames:
             evidence = Evidence(

@@ -11,8 +11,10 @@ from vidsnap.contracts.models import (
     VideoGoal,
     VideoSource,
 )
+from vidsnap.contracts.tool_plan import AcquisitionTool, ToolMode, ToolPlan
 
 __all__ = [
+    "AcquisitionTool",
     "Claim",
     "Evidence",
     "EvidenceReference",
@@ -20,6 +22,8 @@ __all__ = [
     "LoopBudgets",
     "LoopSpec",
     "TerminalState",
+    "ToolMode",
+    "ToolPlan",
     "VideoAnalysisResult",
     "VideoGoal",
     "VideoSource",
