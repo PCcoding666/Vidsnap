@@ -1,0 +1,43 @@
+{
+  "$id": "vidsnap.video-analysis/v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "claims": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "confidence": {
+            "maximum": 1,
+            "minimum": 0,
+            "type": ["number", "null"]
+          },
+          "evidence": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "evidence_id": {"minLength": 1, "type": "string"}
+              },
+              "required": ["evidence_id"],
+              "type": "object"
+            },
+            "minItems": 1,
+            "type": "array"
+          },
+          "text": {"minLength": 1, "type": "string"}
+        },
+        "required": ["text", "evidence"],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "required_sections": {
+      "additionalProperties": {"type": "string"},
+      "type": "object"
+    },
+    "summary": {"minLength": 1, "type": "string"}
+  },
+  "required": ["summary", "claims", "required_sections"],
+  "title": "VidSnap Video Analysis Result v1",
+  "type": "object"
+}

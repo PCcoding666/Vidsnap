@@ -1,0 +1,59 @@
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
+
+[project]
+name = "vidsnap-harness"
+version = "0.1.0"
+description = "A local-first, evidence-grounded harness for video analysis agents."
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "httpx>=0.27,<1",
+    "pydantic>=2.7,<3",
+    "typer>=0.12,<1",
+]
+
+[project.optional-dependencies]
+server = [
+    "fastapi>=0.110,<1",
+    "uvicorn>=0.29,<1",
+]
+providers = []
+dev = [
+    "build>=1.2,<2",
+    "mypy>=1.10,<2",
+    "pytest>=8,<9",
+    "pytest-asyncio>=0.23,<1",
+    "ruff>=0.5,<1",
+]
+
+[project.scripts]
+vidsnap = "vidsnap.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/vidsnap"]
+
+[tool.hatch.build.targets.wheel.force-include]
+"src/vidsnap/contracts/schemas/video_analysis.v1.json" = "vidsnap/contracts/schemas/video_analysis.v1.json"
+"src/vidsnap/prompts/planner.json" = "vidsnap/prompts/planner.json"
+"src/vidsnap/prompts/evidence.json" = "vidsnap/prompts/evidence.json"
+"src/vidsnap/prompts/synthesizer.json" = "vidsnap/prompts/synthesizer.json"
+"src/vidsnap/prompts/verifier.json" = "vidsnap/prompts/verifier.json"
+"src/vidsnap/prompts/repair.json" = "vidsnap/prompts/repair.json"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_default_fixture_loop_scope = "function"
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP"]
+
+[tool.mypy]
+python_version = "3.10"
+strict = true
+files = ["src"]

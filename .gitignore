@@ -12,9 +12,15 @@
 *-key.json
 *-service-account.json
 
+# Public, versioned package schemas are source assets rather than credentials.
+!src/vidsnap/contracts/schemas/video_analysis.v1.json
+!src/vidsnap/prompts/*.json
+
 # Virtual environments
 venv/
 .venv/
+.mypy_cache/
+.ruff_cache/
 backend/venv/
 
 # Python
@@ -83,6 +89,8 @@ backend/youtube_cookies.txt
 # 运行时产物：ExtractFrames 截帧等
 backend/storage/
 storage/
+run/
+benchmark-results/
 
 # 个人工作笔记 / 生成产物（含隐私，勿提交）
 note_output.md
