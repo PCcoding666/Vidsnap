@@ -1,6 +1,10 @@
 """Typed local-provider ports; credentials never cross the API boundary."""
 
 from vidsnap.providers.base import (
+    AgentDecisionFormatError,
+    AgentDecisionResponse,
+    AgentModelPort,
+    AgentStepRequest,
     ModelResponse,
     ProviderError,
     ProviderUnavailable,
@@ -10,6 +14,10 @@ from vidsnap.providers.base import (
 from vidsnap.providers.qwen import QwenCompatibleClient
 
 __all__ = [
+    "AgentDecisionFormatError",
+    "AgentDecisionResponse",
+    "AgentModelPort",
+    "AgentStepRequest",
     "ModelResponse",
     "ProviderError",
     "ProviderUnavailable",

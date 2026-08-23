@@ -46,6 +46,7 @@ class HarnessPolicy(StrictModel):
 
     max_iterations: int = Field(default=3, ge=1, le=3)
     max_model_calls: int = Field(default=12, ge=0, le=12)
+    max_tool_calls: int = Field(default=6, ge=0, le=6)
     max_evidence_frames: int = Field(default=96, ge=1, le=96)
     max_wall_seconds: int = Field(default=900, ge=1, le=900)
     output_dir: Path | None = None
@@ -60,6 +61,8 @@ class EvidenceReference(StrictModel):
 
 EvidenceModality = Literal["frame", "transcript", "ocr", "audio", "scene"]
 
+EvidenceBudgetClass = Literal["direct_baseline", "model_selected"]
+
 
 class Evidence(StrictModel):
     """A timestamped observation that may support one or more claims."""
@@ -71,6 +74,7 @@ class Evidence(StrictModel):
     content: str | None = Field(default=None, max_length=100_000)
     artifact_path: Path | None = None
     captured_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    budget_class: EvidenceBudgetClass = "model_selected"
 
     @model_validator(mode="after")
     def validate_time_range_and_timezone(self) -> Evidence:

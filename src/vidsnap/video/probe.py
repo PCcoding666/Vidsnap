@@ -245,21 +245,38 @@ class FFmpegMediaPort:
             for index, path in enumerate(frame_paths)
         ]
 
-    async def extract_audio(self, source: Path, output_path: Path) -> Path:
-        """Extract 16 kHz mono WAV audio locally for a SpeechRecognizer port."""
+    async def extract_audio(
+        self,
+        source: Path,
+        output_path: Path,
+        *,
+        start_seconds: float = 0.0,
+        end_seconds: float | None = None,
+    ) -> Path:
+        """Extract 16 kHz mono WAV audio locally, optionally bounded by a window."""
+        if start_seconds < 0:
+            raise ValueError("start_seconds must be non-negative")
+        if end_seconds is not None and end_seconds <= start_seconds:
+            raise ValueError("end_seconds must be greater than start_seconds")
         output_path.parent.mkdir(parents=True, exist_ok=True)
-        await self._run(
-            "ffmpeg",
-            "-y",
-            "-i",
-            str(source),
-            "-vn",
-            "-ar",
-            "16000",
-            "-ac",
-            "1",
-            str(output_path),
+        command = ["ffmpeg", "-y"]
+        if start_seconds > 0:
+            command.extend(["-ss", f"{start_seconds:.6f}"])
+        if end_seconds is not None:
+            command.extend(["-to", f"{end_seconds:.6f}"])
+        command.extend(
+            [
+                "-i",
+                str(source),
+                "-vn",
+                "-ar",
+                "16000",
+                "-ac",
+                "1",
+                str(output_path),
+            ]
         )
+        await self._run(*command)
         if not output_path.exists():
             raise FFmpegError("ffmpeg reported success without writing audio")
         return output_path

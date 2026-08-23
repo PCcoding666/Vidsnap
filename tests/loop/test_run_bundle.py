@@ -59,6 +59,44 @@ def test_temporary_run_bundle_is_cleaned_up_at_context_exit(tmp_path) -> None:
     assert not run_path.exists()
 
 
+def test_run_manifest_declares_trace_schema_without_changing_run_version(tmp_path) -> None:
+    bundle = RunBundle.create(
+        tmp_path / "run", loop_spec=default_loop_spec(), provider_url="https://host/v1"
+    )
+    manifest = json.loads((bundle.path / "manifest.json").read_text())
+    assert manifest["api_version"] == "vidsnap.run/v1"
+    assert manifest["trace_schema"] == "vidsnap.trace/v1"
+
+
+def test_append_event_accepts_trace_fields_and_still_redacts(tmp_path) -> None:
+    bundle = RunBundle.create(
+        tmp_path / "run", loop_spec=default_loop_spec(), provider_url="https://host/v1"
+    )
+
+    event = bundle.append_event(
+        "tool.call",
+        {"name": "sample_evidence", "api_key": "must-not-appear"},
+        event_id="evt-1",
+        event_type="tool.call.started",
+        turn=1,
+        step=2,
+        correlation_id="corr-1",
+        monotonic_offset_ms=120,
+        status="started",
+    )
+
+    assert event.event_type == "tool.call.started"
+    assert event.correlation_id == "corr-1"
+    assert event.status == "started"
+    assert event.payload == {
+        "name": "sample_evidence",
+        "api_key": "***REDACTED***",
+    }
+    legacy_event = bundle.append_event("probe", {"duration_seconds": 3.0})
+    assert legacy_event.event_type is None
+    assert legacy_event.status is None
+
+
 def test_run_bundle_preserves_numeric_usage_counts_but_redacts_credentials(tmp_path) -> None:
     """Removing usage counters or exposing a credential-like token must fail this test."""
     bundle = RunBundle.create(

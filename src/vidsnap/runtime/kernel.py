@@ -1,0 +1,556 @@
+"""Bounded execution kernel that enforces policy budgets before any work."""
+
+from __future__ import annotations
+
+import asyncio
+import hashlib
+import json
+import time
+import uuid
+from collections.abc import Callable, Mapping
+from dataclasses import dataclass
+from pathlib import Path
+from typing import TYPE_CHECKING, Generic, TypeVar
+
+from pydantic import JsonValue, ValidationError
+
+from vidsnap.contracts import Evidence, TerminalState
+from vidsnap.contracts.agent import AgentDecision, ProviderUsage
+from vidsnap.contracts.loopspec import default_loop_spec
+from vidsnap.contracts.models import StrictModel
+from vidsnap.loop.events import EventStatus
+from vidsnap.loop.state_machine import BudgetExceeded
+from vidsnap.plugins.base import ToolExecutionContext, ToolResult
+from vidsnap.plugins.registry import PluginRegistry
+from vidsnap.providers.base import (
+    AgentDecisionFormatError,
+    AgentDecisionResponse,
+    AgentStepRequest,
+    ProviderError,
+    ProviderUnavailable,
+)
+from vidsnap.runtime.context import RunContext
+from vidsnap.tasks.base import TaskVerification
+
+if TYPE_CHECKING:
+    from vidsnap.runtime.policies import ExecutionPolicy
+
+OutputT = TypeVar("OutputT", bound=StrictModel)
+ModelT = TypeVar("ModelT")
+
+_SENSITIVE_KEY_PARTS = ("api_key", "authorization", "credential", "password", "secret", "token")
+_DIRECT_BASELINE_FPS = 2
+
+
+@dataclass(slots=True)
+class KernelRunResult(Generic[OutputT]):
+    """Truthful terminal output from one bounded kernel invocation."""
+
+    terminal_state: TerminalState
+    run_path: Path
+    output: OutputT | None = None
+    failure_reason: str | None = None
+    verification: TaskVerification | None = None
+
+
+class HarnessKernel(Generic[OutputT, ModelT]):
+    """Execute one policy against a frozen plugin registry under enforced budgets."""
+
+    def __init__(
+        self,
+        *,
+        policy: ExecutionPolicy[OutputT, ModelT],
+        registry: PluginRegistry,
+        clock: Callable[[], float] = time.monotonic,
+    ) -> None:
+        self._policy = policy
+        self._registry = registry
+        self._registry.resolve()
+        self._clock = clock
+        self._max_repair_rounds = default_loop_spec().max_repair_rounds
+        self._repair_rounds = 0
+        self._started_at: float | None = None
+
+    async def run(self, context: RunContext[OutputT, ModelT]) -> KernelRunResult[OutputT]:
+        """Drive one run to a truthful terminal state with exactly one finalization."""
+        self._repair_rounds = 0
+        self._started_at = self._clock()
+        run_span = context.trace.start(
+            "run",
+            phase="run",
+            payload={"policy": type(self._policy).__name__},
+        )
+        failure_reason: str | None = None
+        terminal_state: TerminalState | None = None
+        try:
+            await self._policy.execute(context, self)
+        except asyncio.CancelledError:
+            terminal_state = TerminalState.FAILED
+            failure_reason = "cancelled"
+        except BudgetExceeded as exc:
+            terminal_state = TerminalState.EXHAUSTED
+            failure_reason = str(exc)
+        except ProviderUnavailable:
+            terminal_state = TerminalState.BLOCKED
+            failure_reason = "provider unavailable"
+        except ProviderError:
+            terminal_state = TerminalState.FAILED
+            failure_reason = "provider error"
+        except Exception:
+            terminal_state = TerminalState.FAILED
+            failure_reason = "unexpected kernel error"
+
+        if terminal_state is None:
+            terminal_state = context.terminal_state
+        if terminal_state is None:
+            terminal_state = TerminalState.FAILED
+            failure_reason = failure_reason or "policy exited without a terminal state"
+        context.terminal_state = terminal_state
+
+        if context.output is not None and context.result_writer is not None:
+            try:
+                context.result_writer(context.output)
+            except Exception:
+                terminal_state = TerminalState.FAILED
+                failure_reason = failure_reason or "result persistence failed"
+                context.terminal_state = terminal_state
+
+        self._complete_phase(
+            context,
+            "terminal",
+            {"terminal_state": terminal_state.value, "reason": failure_reason or "completed"},
+        )
+        context.trace.finish(
+            run_span,
+            status=_trace_status(terminal_state),
+            payload={"terminal_state": terminal_state.value},
+        )
+        context.bundle.finalize(terminal_state)
+        return KernelRunResult(
+            terminal_state=terminal_state,
+            run_path=context.bundle.path,
+            output=context.output,
+            failure_reason=failure_reason,
+            verification=context.verification,
+        )
+
+    async def run_probe(self, context: RunContext[OutputT, ModelT]) -> None:
+        """Probe the local media once and complete the probe_media phase."""
+        self._enforce_wall(context)
+        span = context.trace.start("probe", phase="probe_media")
+        try:
+            probe = await context.media.probe(context.source.path)
+        except BaseException:
+            context.trace.finish(span, status="failed")
+            raise
+        context.probe = probe
+        context.trace.finish(
+            span,
+            status="completed",
+            payload={
+                "duration_seconds": probe.duration_seconds,
+                "fps": probe.fps,
+                "width": probe.width,
+                "height": probe.height,
+                "has_audio": probe.has_audio,
+            },
+        )
+        self._complete_phase(
+            context,
+            "probe_media",
+            {
+                "duration_seconds": probe.duration_seconds,
+                "fps": probe.fps,
+                "width": probe.width,
+                "height": probe.height,
+                "has_audio": probe.has_audio,
+            },
+        )
+
+    async def prepare_direct_baseline(self, context: RunContext[OutputT, ModelT]) -> None:
+        """Extract one complete fps=2 timeline as uncapped direct-baseline evidence."""
+        probe = context.probe
+        if probe is None:
+            raise RuntimeError("probe_media must run before direct baseline preparation")
+        self._enforce_wall(context)
+        frames = await context.media.extract_timeline_frames(
+            context.source.path,
+            fps=_DIRECT_BASELINE_FPS,
+            output_dir=context.next_artifact_dir() / "timeline",
+        )
+        for frame in frames:
+            context.add(
+                Evidence(
+                    id=context.next_id("frame"),
+                    start_seconds=frame.timestamp,
+                    end_seconds=frame.timestamp,
+                    modality="frame",
+                    artifact_path=frame.path,
+                    budget_class="direct_baseline",
+                )
+            )
+        subtitle = _registered_subtitle(context.task_adapter)
+        if subtitle is not None:
+            context.add(
+                Evidence(
+                    id=context.next_id("transcript"),
+                    start_seconds=0.0,
+                    end_seconds=probe.duration_seconds,
+                    modality="transcript",
+                    content=subtitle,
+                    budget_class="direct_baseline",
+                )
+            )
+        self._complete_phase(
+            context,
+            "prepare_direct_baseline",
+            {"frame_count": len(frames), "transcript": subtitle is not None},
+        )
+        self._emit_budget(context)
+
+    async def run_tool(
+        self,
+        context: RunContext[OutputT, ModelT],
+        name: str,
+        arguments: Mapping[str, JsonValue] | None = None,
+    ) -> ToolResult:
+        """Execute one frozen, model-visible tool under strict input validation."""
+        if context.probe is None:
+            raise RuntimeError("probe_media must run before tool execution")
+        self._enforce_wall(context)
+        if context.tool_calls >= context.policy.max_tool_calls:
+            raise BudgetExceeded("tool-call budget exceeded")
+        plugin = self._registry.tool_by_name(name)
+        try:
+            validated = plugin.input_model.model_validate(dict(arguments or {}))
+        except ValidationError as exc:
+            raise ValueError(f"invalid arguments for tool '{name}': {exc}") from exc
+
+        fingerprint = _call_fingerprint(plugin.name, validated.model_dump(mode="json"))
+        if fingerprint in context.call_fingerprints:
+            raise ValueError(f"duplicate canonical call rejected for tool '{name}'")
+        context.call_fingerprints.add(fingerprint)
+
+        context.tool_calls += 1
+        span = context.trace.start("tool.call", phase=name, payload={"name": name})
+        try:
+            execution = ToolExecutionContext(
+                source_path=context.source.path,
+                probe=context.probe,
+                artifact_root=context.next_artifact_dir(),
+                media=context.media,
+                recognizer=context.recognizer,
+                sampler=context.sampler,
+                evidence_sink=context,
+            )
+            result = await plugin.execute(validated, execution)
+        except BaseException as error:
+            context.trace.finish(
+                span, status="failed", payload={"name": name}, usage=_error_usage(error)
+            )
+            self._emit_budget(context)
+            raise
+        if self._frame_count(context) > context.policy.max_evidence_frames:
+            context.trace.finish(span, status="failed", payload={"name": name})
+            self._emit_budget(context)
+            raise BudgetExceeded("evidence-frame budget exceeded")
+        context.trace.finish(span, status=result.status, payload={"name": name}, usage=result.usage)
+        evidence_ids: list[JsonValue] = []
+        evidence_ids.extend(result.evidence_ids)
+        context.tool_result_summaries.append(
+            {
+                "tool": name,
+                "status": result.status,
+                "evidence_ids": evidence_ids,
+                "summary": _redact(result.summary),
+            }
+        )
+        self._complete_phase(context, name, {"status": result.status, **_redact(result.summary)})
+        self._emit_budget(context)
+        return result
+
+    async def synthesize(self, context: RunContext[OutputT, ModelT]) -> None:
+        """Run exactly one task model call over captured evidence, if any exists."""
+        if context.probe is None:
+            raise RuntimeError("probe_media must run before synthesis")
+        if not context.evidence:
+            context.terminal_state = TerminalState.NO_OP
+            self._complete_phase(context, "synthesize_result", {"status": "skipped"})
+            return
+        self._enforce_wall(context)
+        if context.model_calls >= context.policy.max_model_calls:
+            raise BudgetExceeded("model-call budget exceeded")
+        context.model_calls += 1
+        span = context.trace.start(
+            "model.request",
+            phase="synthesize_result",
+            payload={"task": type(context.task_adapter).__name__},
+        )
+        try:
+            output, usage = await context.task_adapter.request_final(
+                context.task_model,
+                context.evidence,
+                context.probe,
+            )
+        except BaseException as error:
+            context.trace.finish(span, status="failed", usage=_error_usage(error))
+            self._emit_budget(context)
+            raise
+        context.trace.finish(span, status="completed", usage=usage)
+        context.output = output
+        self._complete_phase(
+            context,
+            "synthesize_result",
+            {"input_tokens": usage.input_tokens, "output_tokens": usage.output_tokens},
+        )
+        self._emit_budget(context)
+
+    async def request_agent_decision(
+        self, context: RunContext[OutputT, ModelT], *, format_repair: bool = False
+    ) -> AgentDecisionResponse:
+        """Ask the agent model for one bounded decision over everything captured so far."""
+        if context.probe is None:
+            raise RuntimeError("probe_media must run before agent decisions")
+        self._enforce_wall(context)
+        if context.model_calls >= context.policy.max_model_calls:
+            raise BudgetExceeded("model-call budget exceeded")
+        if context.agent_model is None:
+            span = context.trace.start("model.request", phase="agent_decision")
+            context.trace.finish(span, status="blocked")
+            self._emit_budget(context)
+            raise ProviderUnavailable("agentic runs require an agent model")
+        context.model_calls += 1
+        request = AgentStepRequest(
+            goal=context.task_adapter.goal,
+            probe=context.probe,
+            evidence=tuple(context.evidence),
+            tool_results=tuple(context.tool_result_summaries),
+            tool_schemas=self._registry.tool_schemas(),
+            output_schema=context.task_adapter.output_model.model_json_schema(),
+            remaining_model_calls=context.policy.max_model_calls - context.model_calls,
+            remaining_tool_calls=max(0, context.policy.max_tool_calls - context.tool_calls),
+            remaining_frames=self.remaining_frame_budget(context),
+            verifier_feedback=context.verifier_feedback,
+            format_repair=format_repair,
+        )
+        span = context.trace.start("model.request", phase="agent_decision")
+        try:
+            response = await context.agent_model.decide_next(request)
+        except AgentDecisionFormatError as error:
+            context.trace.finish(span, status="failed", usage=_error_usage(error))
+            context.bundle.append_event(
+                "agent.decision",
+                {"reason": "format_error"},
+                event_id=uuid.uuid4().hex,
+                event_type="agent.decision",
+                status="failed",
+            )
+            self._emit_budget(context)
+            raise
+        except BaseException as error:
+            context.trace.finish(span, status="failed", usage=_error_usage(error))
+            self._emit_budget(context)
+            raise
+        context.trace.finish(span, status="completed", usage=response.usage)
+        # Feedback applies to exactly one successful request; format-error retries keep it.
+        context.verifier_feedback = None
+        context.bundle.append_event(
+            "agent.decision",
+            {
+                "kind": response.decision.kind,
+                "tool_calls": [call.name for call in response.decision.calls],
+            },
+            event_id=uuid.uuid4().hex,
+            event_type="agent.decision",
+            status="completed",
+        )
+        self._emit_budget(context)
+        return response
+
+    def accept_agent_final(
+        self, context: RunContext[OutputT, ModelT], decision: AgentDecision
+    ) -> OutputT:
+        """Parse one agent final answer through the task adapter's strict schema."""
+        if decision.output is None:
+            raise ValueError("final decisions require an output payload")
+        context.output = context.task_adapter.parse_final(decision.output)
+        return context.output
+
+    def verify(self, context: RunContext[OutputT, ModelT]) -> TaskVerification:
+        """Deterministically check the synthesized output and complete the phase."""
+        if context.probe is None or context.output is None:
+            raise RuntimeError("verification requires a probe and a synthesized output")
+        verification = context.task_adapter.verify(context.output, context.evidence, context.probe)
+        context.verification = verification
+        failed_gates: list[JsonValue] = []
+        failed_gates.extend(gate for gate, passed in verification.gates.items() if not passed)
+        context.bundle.append_event(
+            "verify_claims",
+            {"passed": verification.passed, "failed_gates": failed_gates},
+            event_id=uuid.uuid4().hex,
+            event_type="verifier.completed",
+            status="completed",
+        )
+        self._complete_phase(
+            context,
+            "verify_claims",
+            {"passed": verification.passed, "failed_gates": failed_gates},
+        )
+        return verification
+
+    def record_iteration(self, context: RunContext[OutputT, ModelT]) -> None:
+        """Record one acquisition iteration or exhaust before exceeding its budget."""
+        self._enforce_wall(context)
+        if context.iterations >= context.policy.max_iterations:
+            raise BudgetExceeded("iteration budget exceeded")
+        context.iterations += 1
+        self._emit_budget(context)
+
+    def ensure_frame_headroom(self, context: RunContext[OutputT, ModelT]) -> None:
+        """Refuse further frame acquisition once the evidence-frame cap is reached."""
+        self._enforce_wall(context)
+        if self._frame_count(context) >= context.policy.max_evidence_frames:
+            raise BudgetExceeded("evidence-frame budget exceeded")
+
+    def remaining_frame_budget(self, context: RunContext[OutputT, ModelT]) -> int:
+        """Return how many more evidence frames this run may retain."""
+        return max(0, context.policy.max_evidence_frames - self._frame_count(context))
+
+    def repair_available(self, context: RunContext[OutputT, ModelT]) -> bool:
+        """Report whether one more bounded repair round is permitted."""
+        return (
+            self._repair_rounds < self._max_repair_rounds
+            and context.iterations < context.policy.max_iterations
+        )
+
+    def record_repair(
+        self, context: RunContext[OutputT, ModelT], verification: TaskVerification
+    ) -> dict[str, JsonValue]:
+        """Consume one repair round and emit one structured repair.requested event."""
+        self._enforce_wall(context)
+        self._repair_rounds += 1
+        feedback = _repair_feedback(verification)
+        context.bundle.append_event(
+            "repair.requested",
+            dict(feedback),
+            event_id=uuid.uuid4().hex,
+            event_type="repair.requested",
+            status="completed",
+        )
+        self._emit_budget(context)
+        return feedback
+
+    def _emit_budget(self, context: RunContext[OutputT, ModelT]) -> None:
+        """Append one numeric budget.updated snapshot after a counter changed."""
+        context.bundle.append_event(
+            "budget",
+            {
+                "iterations": context.iterations,
+                "tool_calls": context.tool_calls,
+                "model_calls": context.model_calls,
+                "evidence_frames": self._frame_count(context),
+            },
+            event_id=uuid.uuid4().hex,
+            event_type="budget.updated",
+            status="completed",
+        )
+
+    def _complete_phase(
+        self,
+        context: RunContext[OutputT, ModelT],
+        phase: str,
+        payload: Mapping[str, JsonValue] | None = None,
+    ) -> None:
+        context.bundle.append_event(
+            phase,
+            dict(payload or {}),
+            event_id=uuid.uuid4().hex,
+            event_type="phase.completed",
+            status="completed",
+        )
+
+    def _enforce_wall(self, context: RunContext[OutputT, ModelT]) -> None:
+        if self._started_at is None:
+            raise RuntimeError("kernel budgets are only enforced inside run()")
+        if self._clock() - self._started_at > context.policy.max_wall_seconds:
+            raise BudgetExceeded("wall-clock budget exceeded")
+
+    @staticmethod
+    def _frame_count(context: RunContext[OutputT, ModelT]) -> int:
+        return sum(1 for item in context.evidence if item.modality == "frame")
+
+
+def _registered_subtitle(adapter: object) -> str | None:
+    """Read one task adapter's optional registered subtitle without invoking ASR."""
+    getter = getattr(adapter, "registered_subtitle", None)
+    if not callable(getter):
+        return None
+    subtitle = getter()
+    if not isinstance(subtitle, str):
+        return None
+    return subtitle or None
+
+
+def _error_usage(error: BaseException) -> ProviderUsage | None:
+    """Map safe aggregate counters from one failed provider attempt into usage."""
+    counters: dict[str, int] = {}
+    for attribute in ("input_bytes", "input_tokens", "output_tokens"):
+        value = getattr(error, attribute, None)
+        if value is None:
+            counters[attribute] = 0
+            continue
+        if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+            return None
+        counters[attribute] = value
+    if not any(counters.values()):
+        return None
+    return ProviderUsage(
+        model_calls=1,
+        input_bytes=counters["input_bytes"],
+        input_tokens=counters["input_tokens"],
+        output_tokens=counters["output_tokens"],
+        reported=False,
+    )
+
+
+def _repair_feedback(verification: TaskVerification) -> dict[str, JsonValue]:
+    """Reduce one failed verification to only failed gates and numeric windows."""
+    failed_gates: list[JsonValue] = [
+        gate for gate, passed in verification.gates.items() if not passed
+    ]
+    targeted_windows: list[JsonValue] = [
+        [start, end] for start, end in verification.targeted_windows
+    ]
+    return {"failed_gates": failed_gates, "targeted_windows": targeted_windows}
+
+
+def _trace_status(terminal_state: TerminalState) -> EventStatus:
+    if terminal_state is TerminalState.BLOCKED:
+        return "blocked"
+    if terminal_state in (TerminalState.EXHAUSTED, TerminalState.FAILED):
+        return "failed"
+    return "completed"
+
+
+def _call_fingerprint(name: str, arguments: Mapping[str, JsonValue]) -> str:
+    canonical = json.dumps(dict(arguments), sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(f"{name}\x1f{canonical}".encode()).hexdigest()
+
+
+def _redact(payload: Mapping[str, JsonValue]) -> dict[str, JsonValue]:
+    return {
+        key: (
+            "***REDACTED***"
+            if any(part in key.lower() for part in _SENSITIVE_KEY_PARTS)
+            else _redact_value(value)
+        )
+        for key, value in payload.items()
+    }
+
+
+def _redact_value(value: JsonValue) -> JsonValue:
+    if isinstance(value, dict):
+        return _redact(value)
+    if isinstance(value, list):
+        return [_redact_value(item) for item in value]
+    return value

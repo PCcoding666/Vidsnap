@@ -12,7 +12,11 @@ def register_builtin_skills(
     loop_spec: LoopSpec,
     handlers: Mapping[str, SkillHandler],
 ) -> SkillRegistry:
-    """Build a complete registry and reject missing or extra built-in handlers."""
+    """Build a complete registry and reject missing or extra built-in handlers.
+
+    Deprecated for one release: retained for existing callers while new code
+    assembles Tool Plugins through PluginRegistry instead.
+    """
     if set(handlers) != set(loop_spec.allowed_skills):
         raise ValueError("built-in handlers must match the LoopSpec allow-list exactly")
     registry = SkillRegistry(loop_spec)

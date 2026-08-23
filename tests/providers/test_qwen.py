@@ -5,9 +5,15 @@ import json
 import httpx
 import pytest
 
-from vidsnap.contracts import Evidence, VideoGoal
+from vidsnap.contracts import Evidence, VideoAnalysisResult, VideoGoal
+from vidsnap.providers.base import AgentDecisionResponse, AgentStepRequest, ProviderError
 from vidsnap.providers.qwen import ProviderUnavailable, QwenCompatibleClient
 from vidsnap.video.probe import MediaProbe
+
+try:  # RED: Task 8 has not introduced this dedicated provider error yet.
+    from vidsnap.providers.base import AgentDecisionFormatError
+except ImportError:
+    AgentDecisionFormatError = None  # type: ignore[assignment,misc]
 
 
 @pytest.mark.asyncio
@@ -157,3 +163,268 @@ async def test_qwen_tool_planner_uses_fixed_model_and_strict_plan() -> None:
     assert response.input_tokens == 19
     assert response.output_tokens == 4
     assert response.input_bytes > 0
+
+
+def make_agent_request() -> AgentStepRequest:
+    return AgentStepRequest(
+        goal=VideoGoal(objective="What happens?"),
+        probe=MediaProbe(duration_seconds=10, fps=24, width=640, height=360, has_audio=False),
+        evidence=(),
+        tool_results=(),
+        tool_schemas=(
+            {"name": "transcribe_audio", "input_schema": {"type": "object"}},
+            {"name": "sample_evidence", "input_schema": {"type": "object"}},
+        ),
+        output_schema=VideoAnalysisResult.model_json_schema(),
+        remaining_model_calls=12,
+        remaining_tool_calls=6,
+        remaining_frames=96,
+    )
+
+
+@pytest.mark.asyncio
+async def test_qwen_decision_blocks_without_local_key() -> None:
+    with pytest.raises(ProviderUnavailable):
+        await QwenCompatibleClient(api_key=None).decide_next(make_agent_request())
+
+
+@pytest.mark.asyncio
+async def test_qwen_decision_uses_fixed_model_and_exact_tool_schemas() -> None:
+    captured: dict[str, object] = {}
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        captured.update(json.loads(request.content))
+        decision = {
+            "kind": "tool_calls",
+            "calls": [{"name": "sample_evidence", "arguments": {"max_frames": 4}}],
+        }
+        return httpx.Response(
+            200,
+            json={
+                "choices": [{"message": {"content": json.dumps(decision)}}],
+                "usage": {"prompt_tokens": 7, "completion_tokens": 3},
+            },
+        )
+
+    client = QwenCompatibleClient(api_key="test", transport=httpx.MockTransport(handler))
+    response = await client.decide_next(make_agent_request())
+
+    assert captured["model"] == "qwen3.8-max"
+    planner_input = json.loads(captured["messages"][1]["content"])
+    assert {schema["name"] for schema in planner_input["tool_schemas"]} == {
+        "transcribe_audio",
+        "sample_evidence",
+    }
+    assert planner_input["budgets"] == {
+        "remaining_model_calls": 12,
+        "remaining_tool_calls": 6,
+        "remaining_frames": 96,
+    }
+    assert isinstance(response, AgentDecisionResponse)
+    assert response.decision.calls[0].name == "sample_evidence"
+    assert response.usage.input_tokens == 7
+    assert response.usage.output_tokens == 3
+    assert response.usage.reported is True
+
+
+def test_missing_provider_usage_is_not_reported_as_measured_zero() -> None:
+    decision = {"kind": "final", "output": {"summary": "x", "claims": [], "required_sections": {}}}
+    payload = {"choices": [{"message": {"content": json.dumps(decision)}}]}
+    response = QwenCompatibleClient._parse_agent_decision(payload, input_bytes=11)
+    assert response.usage.reported is False
+
+
+def test_missing_provider_usage_preserves_locally_measured_input_bytes() -> None:
+    decision = {"kind": "final", "output": {"summary": "x", "claims": [], "required_sections": {}}}
+    payload = {"choices": [{"message": {"content": json.dumps(decision)}}]}
+    response = QwenCompatibleClient._parse_agent_decision(payload, input_bytes=2048)
+    assert response.usage.reported is False
+    assert response.usage.model_calls == 1
+    assert response.usage.input_bytes == 2048
+    assert response.usage.input_tokens == 0
+    assert response.usage.output_tokens == 0
+
+
+def test_empty_provider_usage_is_unreported_not_measured_zero() -> None:
+    decision = {"kind": "final", "output": {"summary": "x", "claims": [], "required_sections": {}}}
+    payload = {
+        "choices": [{"message": {"content": json.dumps(decision)}}],
+        "usage": {},
+    }
+    response = QwenCompatibleClient._parse_agent_decision(payload, input_bytes=33)
+    assert response.usage.reported is False
+    assert response.usage.input_bytes == 33
+    assert response.usage.input_tokens == 0
+    assert response.usage.output_tokens == 0
+
+
+@pytest.mark.asyncio
+async def test_qwen_tool_planner_treats_empty_usage_as_unreported() -> None:
+    async def handler(request: httpx.Request) -> httpx.Response:
+        del request
+        return httpx.Response(
+            200,
+            json={
+                "choices": [{"message": {"content": '{"tools":["transcribe_audio"]}'}}],
+                "usage": {},
+            },
+        )
+
+    response = await QwenCompatibleClient(
+        api_key="test",
+        transport=httpx.MockTransport(handler),
+    ).plan_tools(
+        MediaProbe(duration_seconds=12, fps=24, width=640, height=360, has_audio=True),
+        VideoGoal(objective="What did the speaker say?"),
+    )
+    assert response.usage_reported is False
+    assert response.input_bytes > 0
+    assert response.input_tokens == 0
+    assert response.output_tokens == 0
+
+
+def test_reported_provider_usage_is_preserved_in_agent_decision() -> None:
+    decision = {"kind": "final", "output": {"summary": "x", "claims": [], "required_sections": {}}}
+    payload = {
+        "choices": [{"message": {"content": json.dumps(decision)}}],
+        "usage": {"prompt_tokens": 5, "completion_tokens": 2},
+    }
+    response = QwenCompatibleClient._parse_agent_decision(payload, input_bytes=11)
+    assert response.usage.reported is True
+    assert response.usage.model_calls == 1
+    assert response.usage.input_tokens == 5
+    assert response.usage.output_tokens == 2
+    assert response.usage.input_bytes == 11
+
+
+@pytest.mark.parametrize(
+    "content",
+    [
+        '```json\n{"kind": "final", "output": {"summary": "x"}}\n```',
+        "I will call sample_evidence next.",
+        '{"kind": "final", "output": {"summary": "x"}, "model": "other"}',
+        '{"kind": "tool_calls", "calls": [{"name": "open_url", "arguments": {}}], "output": {}}',
+    ],
+)
+def test_agent_decision_rejects_markdown_natural_language_and_extra_fields(content: str) -> None:
+    payload = {"choices": [{"message": {"content": content}}]}
+    with pytest.raises(ProviderError):
+        QwenCompatibleClient._parse_agent_decision(payload, input_bytes=1)
+
+
+@pytest.mark.asyncio
+async def test_qwen_analyze_evidence_flags_usage_reported_only_when_present() -> None:
+    async def handler(request: httpx.Request) -> httpx.Response:
+        del request
+        return httpx.Response(
+            200,
+            json={"choices": [{"message": {"content": '{"summary":"ok","claims":[]}'}}]},
+        )
+
+    client = QwenCompatibleClient(api_key="test", transport=httpx.MockTransport(handler))
+    response = await client.analyze_evidence([], VideoGoal(objective="Summarize"))
+    assert response.usage_reported is False
+
+
+@pytest.mark.asyncio
+async def test_qwen_analyze_evidence_treats_empty_usage_as_unreported() -> None:
+    async def handler(request: httpx.Request) -> httpx.Response:
+        del request
+        return httpx.Response(
+            200,
+            json={
+                "choices": [{"message": {"content": '{"summary":"ok","claims":[]}'}}],
+                "usage": {},
+            },
+        )
+
+    client = QwenCompatibleClient(api_key="test", transport=httpx.MockTransport(handler))
+    response = await client.analyze_evidence([], VideoGoal(objective="Summarize"))
+    assert response.usage_reported is False
+    assert response.input_tokens == 0
+    assert response.output_tokens == 0
+
+
+def test_agent_decision_format_error_is_a_dedicated_provider_error_subclass() -> None:
+    """Task 8: format failures need their own type; availability failures keep theirs."""
+    assert AgentDecisionFormatError is not None, (
+        "Task 8 must define AgentDecisionFormatError in vidsnap.providers.base"
+    )
+    assert issubclass(AgentDecisionFormatError, ProviderError)
+    assert AgentDecisionFormatError is not ProviderError
+    assert AgentDecisionFormatError is not ProviderUnavailable
+    assert not issubclass(ProviderUnavailable, AgentDecisionFormatError)
+
+
+@pytest.mark.parametrize(
+    "content",
+    [
+        pytest.param(
+            '```json\n{"kind": "final", "output": {"summary": "x"}}\n```',
+            id="markdown-fences",
+        ),
+        pytest.param('{"kind": "final", "output": ', id="invalid-json"),
+        pytest.param('{"kind": "bananas", "output": {}}', id="unknown-kind"),
+        pytest.param('{"kind": "tool_calls", "calls": "not-a-list"}', id="wrong-call-shape"),
+        pytest.param(
+            '{"kind": "final", "output": {"summary": "x"}, "model": "other"}',
+            id="schema-invalid-json",
+        ),
+    ],
+)
+def test_parse_agent_decision_raises_format_error_for_malformed_bodies(content: str) -> None:
+    """Syntactically or schema-invalid decision bodies raise the dedicated format error."""
+    assert AgentDecisionFormatError is not None, (
+        "Task 8 must define AgentDecisionFormatError in vidsnap.providers.base"
+    )
+    payload = {"choices": [{"message": {"content": content}}]}
+    with pytest.raises(AgentDecisionFormatError):
+        QwenCompatibleClient._parse_agent_decision(payload, input_bytes=1)
+
+
+@pytest.mark.asyncio
+async def test_qwen_decide_next_raises_format_error_for_malformed_body() -> None:
+    """A fenced provider body surfaces as AgentDecisionFormatError end to end."""
+    assert AgentDecisionFormatError is not None, (
+        "Task 8 must define AgentDecisionFormatError in vidsnap.providers.base"
+    )
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        del request
+        return httpx.Response(
+            200,
+            json={"choices": [{"message": {"content": "```json\n{}\n```"}}]},
+        )
+
+    client = QwenCompatibleClient(api_key="test", transport=httpx.MockTransport(handler))
+    with pytest.raises(AgentDecisionFormatError):
+        await client.decide_next(make_agent_request())
+
+
+@pytest.mark.asyncio
+async def test_qwen_decide_next_transport_failure_stays_plain_provider_error() -> None:
+    """HTTP failures remain ordinary ProviderError and never earn a format repair."""
+    assert AgentDecisionFormatError is not None, (
+        "Task 8 must define AgentDecisionFormatError in vidsnap.providers.base"
+    )
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        del request
+        return httpx.Response(503, json={"error": "service unavailable"})
+
+    client = QwenCompatibleClient(api_key="test", transport=httpx.MockTransport(handler))
+    with pytest.raises(ProviderError) as excinfo:
+        await client.decide_next(make_agent_request())
+    assert not isinstance(excinfo.value, AgentDecisionFormatError)
+    assert not isinstance(excinfo.value, ProviderUnavailable)
+
+
+@pytest.mark.asyncio
+async def test_qwen_decide_next_missing_key_is_not_a_format_error() -> None:
+    """Credential absence stays ProviderUnavailable, not a repairable format failure."""
+    assert AgentDecisionFormatError is not None, (
+        "Task 8 must define AgentDecisionFormatError in vidsnap.providers.base"
+    )
+    with pytest.raises(ProviderUnavailable) as excinfo:
+        await QwenCompatibleClient(api_key=None).decide_next(make_agent_request())
+    assert not isinstance(excinfo.value, AgentDecisionFormatError)
