@@ -4,7 +4,7 @@ This page is the single source of truth for project state: the current main obje
 
 ## Current Main Objective
 
-GOV-001 — establish the AI-native development protocol as the durable, testable collaboration loop for VidSnap. At most one main objective may be active at a time; GOV-001 is that objective, currently the single `VERIFIED` objective. All other work remains `PROPOSED`, `BLOCKED`, or already `VERIFIED` or `RELEASED`.
+STACK-001 — execute the user-authorized sequential integration of PRs #7, #8, #9, and #10 into `vidsnap_slim`. At most one main objective may be active at a time; STACK-001 is that objective, currently `IN_PROGRESS`. GOV-001 is preserved below as a historical `VERIFIED` task and its recorded facts are not rewritten. All other work remains `PROPOSED`, `BLOCKED`, or already `VERIFIED` or `RELEASED`.
 
 ## Task Contract: GOV-001
 
@@ -34,6 +34,19 @@ Recorded 2026-08-23. The facts below justify the `READY_FOR_REVIEW` → `VERIFIE
 - This metadata-only `VERIFIED` state commit changes no production code or tests; it must still keep GitHub checks green, and the latest check details are tracked on PR #10 itself rather than by committing further run-ID updates here.
 - Still true: PRs #7, #8, and #9 remain unchanged and unmerged, and this task does not merge #10.
 
+## Task Contract: STACK-001
+
+- Objective: Execute the sequential integration of PRs #7, #8, #9, and #10 into `vidsnap_slim`, in that order, using normal merge commits to preserve stacked ancestry. Retarget #8, #9, and #10 to `vidsnap_slim` only after their predecessor merges; mark Draft PRs ready for review only when their turn arrives; require latest-head CI success before each merge.
+- Non-goals: No squash, no rebase, no force-push, no branch deletion; source branches and worktrees are kept. No live benchmark, no provider call, no credential access. No default-branch rename, no ruleset change, no security-setting change, and no unrelated code change. No claiming any PR has merged before it actually has.
+- Acceptance evidence: On 2026-08-23 the user explicitly approved the sequential integration of PRs #7, #8, #9, and #10 into `vidsnap_slim`. Each step is a normal merge commit performed only after that PR's latest-head CI succeeds; retargeting of #8, #9, and #10 and draft-ready changes happen only in sequence as each turn arrives; when the sequence completes, `vidsnap_slim` history shows the four merge commits in order and this page's Active Stacked Pull Requests snapshot is updated with the merged facts.
+- Authority / data / secret boundaries: Codex may perform GitHub metadata operations (retargeting base branches, marking Draft PRs ready) and the merge operations under this authorization. Qoder is the only code/file implementation worker if a conflict or fix is needed. CI is the independent verifier and its results are never rewritten or bypassed. No credential access and no provider API calls at any point. Forbidden artifacts remain forbidden: credentials, media/video, datasets, RunBundles, benchmark results, cookies, `.env` files, raw provider requests, raw provider responses.
+- Owner / executor / reviewer: Owner and final authority: the user. GitHub metadata and merge operations: Codex, under the 2026-08-23 user authorization. Code/file implementation worker (only if a conflict or fix is needed): Qoder CLI. Independent verifier: CI. Only the user decides anything outside this authorized sequence.
+- Next human gate: none for the already authorized normal sequence. Stop and request direction on unexpected conflict, failing CI that requires scope expansion, or any unexpected diff.
+
+Status: `IN_PROGRESS`
+
+Last transition: 2026-08-23 — `APPROVED` → `IN_PROGRESS`, because the user explicitly approved the sequential integration of PRs #7, #8, #9, and #10 into `vidsnap_slim` on 2026-08-23 and authorized work to begin; no merge has happened yet.
+
 ## Allowed States
 
 Seven states only; no other values are permitted:
@@ -50,16 +63,16 @@ Every transition is written back to this page with its reason.
 
 ## Active Stacked Pull Requests
 
-Read-only 2026-08-23 snapshot. Do not merge, modify, or close any of these PRs in this task; they remain exactly as recorded until the user files a separate task card.
+Pre-integration snapshot recorded 2026-08-23. The historical GOV-001-era instruction "Do not merge #7, #8, or #9" (and the note that merging #10 remained the user's undecided decision) is superseded for STACK-001: on 2026-08-23 the user explicitly authorized the sequential integration of #7, #8, #9, and #10 into `vidsnap_slim`, as recorded in Task Contract: STACK-001. As of this snapshot nothing has merged yet; every row below still reflects the pre-integration state.
 
 | PR | State | Base ← Head | Latest recorded CI |
 | --- | --- | --- | --- |
 | #7 | OPEN (not Draft) | `vidsnap_slim` ← `codex/video-harness-core` | success (recorded 2026-08-23) |
-| #8 | OPEN Draft | `codex/video-harness-core` ← `codex/agentic-benchmark` | success (recorded 2026-08-23) |
-| #9 | OPEN Draft | `codex/agentic-benchmark` ← `codex/plugin-video-harness-implementation` | success (recorded 2026-08-23) |
-| #10 | OPEN Draft | `codex/plugin-video-harness-implementation` ← `codex/ai-native-development-loop` | push and `pull_request` success at `bc0bab5f`; mergeState CLEAN (recorded 2026-08-23) |
+| #8 | OPEN Draft | `codex/video-harness-core` ← `codex/agentic-benchmark` | success (recorded 2026-08-23); retarget to `vidsnap_slim` only after #7 merges |
+| #9 | OPEN Draft | `codex/agentic-benchmark` ← `codex/plugin-video-harness-implementation` | success (recorded 2026-08-23); retarget to `vidsnap_slim` only after #8 merges |
+| #10 | OPEN Draft | `codex/plugin-video-harness-implementation` ← `codex/ai-native-development-loop` | push and `pull_request` success at `bc0bab5f`; mergeState CLEAN (recorded 2026-08-23); retarget to `vidsnap_slim` only after #9 merges |
 
-Do not merge #7, #8, or #9. This task does not merge #10 either; merging #10 remains the user's decision.
+Integration order: #7 → #8 → #9 → #10, each as a normal merge commit into `vidsnap_slim`, performed only after that PR's latest-head CI succeeds. Source branches and worktrees are kept; no squash, rebase, force-push, or branch deletion.
 
 ## Repository Settings Requiring User Authorization
 

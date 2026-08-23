@@ -2,9 +2,38 @@ from pathlib import Path
 
 ROOT = Path(__file__).parents[1]
 
+ALLOWED_STATUSES = (
+    "PROPOSED",
+    "APPROVED",
+    "IN_PROGRESS",
+    "READY_FOR_REVIEW",
+    "VERIFIED",
+    "BLOCKED",
+    "RELEASED",
+)
+
+REQUIRED_CONTRACT_FIELDS = (
+    "Objective:",
+    "Non-goals:",
+    "Acceptance evidence:",
+    "Authority / data / secret boundaries:",
+    "Owner / executor / reviewer:",
+    "Next human gate:",
+)
+
 
 def _read(relative: str) -> str:
     return (ROOT / relative).read_text(encoding="utf-8")
+
+
+def _task_contract_block(state: str, task_id: str) -> str:
+    heading = f"## Task Contract: {task_id}"
+    assert heading in state
+    block = state.split(heading, 1)[1]
+    next_heading = block.find("\n## ")
+    if next_heading != -1:
+        block = block[:next_heading]
+    return block
 
 
 def test_project_state_defines_the_approved_task_contract() -> None:
@@ -19,33 +48,28 @@ def test_project_state_defines_the_approved_task_contract() -> None:
         "## Repository Settings Requiring User Authorization",
     ):
         assert heading in state
-    for field in (
-        "Objective:",
-        "Non-goals:",
-        "Acceptance evidence:",
-        "Authority / data / secret boundaries:",
-        "Owner / executor / reviewer:",
-        "Next human gate:",
-    ):
+    for field in REQUIRED_CONTRACT_FIELDS:
         assert field in state
-    allowed_statuses = (
-        "PROPOSED",
-        "APPROVED",
-        "IN_PROGRESS",
-        "READY_FOR_REVIEW",
-        "VERIFIED",
-        "BLOCKED",
-        "RELEASED",
-    )
-    for status in allowed_statuses:
+    for status in ALLOWED_STATUSES:
         assert f"`{status}`" in state
     status_lines = [line for line in state.splitlines() if line.startswith("Status: `")]
-    assert len(status_lines) == 1
-    current_status = status_lines[0].split("`")[1]
-    assert current_status in allowed_statuses
+    assert status_lines
+    for line in status_lines:
+        assert line.split("`")[1] in ALLOWED_STATUSES
+    in_progress = [line for line in status_lines if line.split("`")[1] == "IN_PROGRESS"]
+    assert len(in_progress) <= 1
     for pull_request in ("#7", "#8", "#9"):
         assert pull_request in state
     assert "Do not merge" in state
+
+
+def test_project_state_tracks_stack_001_as_current_task_contract() -> None:
+    state = _read("PROJECT_STATE.md")
+    block = _task_contract_block(state, "STACK-001")
+
+    for field in REQUIRED_CONTRACT_FIELDS:
+        assert field in block
+    assert "Status: `IN_PROGRESS`" in block
 
 
 def test_protocol_docs_record_batch_a_review_corrections() -> None:
