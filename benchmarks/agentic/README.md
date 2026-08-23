@@ -37,26 +37,29 @@ edit cannot be used for another run without an explicit reviewed code change.
 
 ## Registered composition
 
-The smoke manifest contains six cases across both datasets and covers short,
-medium, and long duration; audio and no-audio; and visual, speech, and temporal
-requirements. The formal manifest contains exactly 54 cases: 36 Video-MME and
-18 MVBench, with the same strata represented. The MVBench slice contains six
-cases each from Action Antonym, Action Sequence, and Action Prediction. It must
-cover at least three task families with four cases per family.
+The smoke manifest contains six cases across both datasets and only short
+videos, while still covering audio and no-audio media and visual, speech, and
+temporal requirements. A smoke report is marked `short_video_only`: it
+validates compatibility and measured usage but cannot authorize the 54-case
+full-duration formal experiment. The registered formal composition remains
+exactly 54 cases: 36 Video-MME and 18 MVBench across short/medium/long
+durations, with the same audio and requirement coverage. The MVBench slice
+contains six cases each from Action Antonym, Action Sequence, and Action
+Prediction. It must cover at least three task families with four cases per
+family. Formal execution requires separate future authorization and a valid
+gate; it has not run and is not authorized.
 
-Direct first attempts complete-video input. If the endpoint rejects that media
-type during smoke, the runner records the compatibility limitation and uses the
-complete timeline sampled at exactly 2 fps. The fallback is sent through the
+Direct always submits the complete timeline sampled at exactly 2 fps through the
 provider's official `video` frame-list content shape, not as unrelated image
-parts or sparse adaptive evidence. To reduce request-size pressure, every
-Direct fallback frame uses the fixed transport profile: 96 pixels high, JPEG,
-FFmpeg qscale 20, and provider `min_pixels=4096` so the endpoint does not upscale
-the low-resolution frame list to its larger default minimum. This transport
+parts or sparse adaptive evidence. It is not a complete-video-first attempt;
+2 fps is the sole registered Direct input mode. Every Direct frame uses the
+registered low-resolution transport profile: 96 pixels high, JPEG, FFmpeg
+qscale 20, and provider `min_pixels=4096` so the endpoint does not upscale the
+low-resolution frame list to its larger default minimum. This transport
 resolution is reported as a limitation; no timeline frame is omitted. The
 endpoint may still enforce a lower frame-count limit, which is a smoke-gate
-failure rather than permission to sample sparsely.
-The formal run reuses the smoke
-mode. Fixed always invokes `transcribe_audio` then `sample_evidence`, skipping
+failure rather than permission to sample sparsely. The formal run, when
+authorized, reuses the smoke mode. Fixed always invokes `transcribe_audio` then `sample_evidence`, skipping
 only unavailable physical evidence. Agentic receives a strict JSON tool plan
 and can select only those two acquisition tools. A supplied dataset subtitle is
 local evidence and does not invoke another model; audio transcription without a
@@ -107,13 +110,18 @@ Run smoke through the non-printing Hermes launcher:
 ```
 
 Review `smoke-results/report.json`. It contains measured usage and a 54-case
-projection with no guessed currency conversion. Only a `SMOKE_SUCCEEDED` report
-with the registered model, six-case manifest hash, complete per-variant usage,
-and measured projection can unlock formal execution. The formal report records
-the smoke report SHA-256 and carries its projection forward for auditability.
-It also atomically writes `smoke-gate.json` in the external formal output
-directory before provider initialization, so an interrupted run retains its
-authorization provenance:
+projection with no guessed currency conversion. The report is marked
+`short_video_only`; even a `SMOKE_SUCCEEDED` report with the registered model,
+six-case manifest hash, complete per-variant usage, and measured projection
+cannot authorize formal execution, and the runner rejects a `short_video_only`
+report at the formal gate. The 54-case full-duration formal experiment requires
+separate future authorization and a valid gate. The following formal commands
+are registered for that future authorized run only and must not be run now: the
+current smoke report does not authorize them. Under such authorization, the
+formal report records the smoke report SHA-256 and carries its projection
+forward for auditability. It also atomically writes `smoke-gate.json` in the
+external formal output directory before provider initialization, so an
+interrupted run retains its authorization provenance:
 
 ```bash
 .venv/bin/python scripts/run_agentic_benchmark.py \
