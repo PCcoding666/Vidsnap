@@ -1,0 +1,9 @@
+{
+  "id": "e04",
+  "start_seconds": 4.5,
+  "end_seconds": 6.0,
+  "modality": "ocr",
+  "content": "On-screen caption reads 'Step 1: Inspect metadata'.",
+  "captured_at": "2026-01-01T00:00:00Z",
+  "budget_class": "direct_baseline"
+}

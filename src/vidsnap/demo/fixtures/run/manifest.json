@@ -1,0 +1,79 @@
+{
+  "api_version": "vidsnap.run/v1",
+  "code_version": "0.1.0",
+  "created_at": "2026-01-01T00:00:00Z",
+  "files": {
+    "events.jsonl": {
+      "bytes": 8190,
+      "sha256": "e979ab6e6d336df5136aa274e968e7882aaf9d3dafbb0de978d68393e5fbb501"
+    },
+    "evidence/e01.json": {
+      "bytes": 228,
+      "sha256": "5d8ec0f807810733bcdf6a0851b23fb5a3612a257b910dd344b475110aac1880"
+    },
+    "evidence/e02.json": {
+      "bytes": 236,
+      "sha256": "f00781d39537c56e4819b333996219f7213111f50b8b7ed64b9fa0bd057d1af6"
+    },
+    "evidence/e03.json": {
+      "bytes": 254,
+      "sha256": "369e75581d80f08c0ddccf1324078068395cd85d9083449b4d88babe9a110676"
+    },
+    "evidence/e04.json": {
+      "bytes": 231,
+      "sha256": "d29cc947308c09524558ed26538e9404570d936f272c69ec0a71b2c1c53ba874"
+    },
+    "evidence/e05.json": {
+      "bytes": 230,
+      "sha256": "b7d23fae48e98c75affcd9951e4edc543c3cd505d391143bfc5e3f01483fdd72"
+    },
+    "evidence/e06.json": {
+      "bytes": 240,
+      "sha256": "9e9de7482a3d9d873403f41f00c5b26f6177c26220bda719e5737b2e65ff4f23"
+    },
+    "evidence/e07.json": {
+      "bytes": 240,
+      "sha256": "be0db6316f985eae769c4e6870a2d6a37d8e47454b66dc4d9882e4ea0fc6fd42"
+    },
+    "evidence/e08.json": {
+      "bytes": 230,
+      "sha256": "0b28470ea9f25bbf8921c06e5962ea91e22a3aeca9390174b64e506047f1b377"
+    },
+    "evidence/e09.json": {
+      "bytes": 240,
+      "sha256": "ddaf83faf41de984336a98e347a4c06c1aefa6e74efee3aea9f3b81685781639"
+    },
+    "evidence/e10.json": {
+      "bytes": 226,
+      "sha256": "c1b9692e27726fc2e79d26ed4d1139b9e70d04f5a5c09fabaf98e501918ff6e8"
+    },
+    "evidence/e11.json": {
+      "bytes": 217,
+      "sha256": "f5351d656f140400060d3d29d1d61d8a9a2b9c83a9fdeb2ab7be781aeb79617c"
+    },
+    "result.json": {
+      "bytes": 1872,
+      "sha256": "8600618e43b9a741f7ffc660d8669fce8af0f96223c46c6922372a56697dab40"
+    }
+  },
+  "finalized_at": "2026-01-01T00:00:05.700000Z",
+  "loop_spec": {
+    "api_version": "vidsnap.loop/v1",
+    "id": "grounded-video-understanding",
+    "sha256": "c7c5bf799d876e22a88c47251f869e8090899c43d16e3c3ecc2243c0d504424e"
+  },
+  "resources": {
+    "max_evidence_frames": 96,
+    "max_iterations": 3,
+    "max_model_calls": 12,
+    "max_tool_calls": 6,
+    "max_wall_seconds": 900
+  },
+  "run_id": "00000000-0000-4000-8000-000000000001",
+  "terminal_state": "SUCCEEDED",
+  "trace_schema": "vidsnap.trace/v1",
+  "verification": {
+    "failed_gates": [],
+    "passed": true
+  }
+}

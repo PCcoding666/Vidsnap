@@ -288,7 +288,96 @@ half, with the real install (`python -m pip install -e '.[server,dev]'`),
 
 ### Commit
 
-Pending: Phase 1 commit — held until the main agent commits.
+`591e3012 docs: reposition VidSnap for open source developers` — committed on
+branch `codex/opensource-v0.1`. The final full clean gate had passed before
+the commit.
+
+### Status
+
+`VERIFIED`
+
+## Phase 2 — Zero-Key Offline Demo
+
+### Goal
+
+Zero-key offline packaged synthetic replay: `vidsnap demo` replays a packaged
+synthetic fixture run into a fresh output directory with no key, account,
+network request, model call, GPU, or private media.
+
+### Changes
+
+- `vidsnap demo` CLI command (`--output-dir`, default `vidsnap-demo/`); it
+  calls the replay, converts `FileExistsError`/`ValueError` to a safe stdout
+  refusal with exit code 2, and on success prints the replay headings, exact
+  counts, and resolved final artifact and trace paths.
+- `src/vidsnap/demo/`: replay validator and report (`DemoReplayReport`,
+  `replay_demo_run`) that validate provenance, manifest hashes, the RunEvent
+  ledger, evidence and claim counts, and policy bounds before publishing
+  `run/`, `trace.html`, and `demo-report.json`.
+- Packaged fixture: CC0-1.0, media-free (no media, private data, or provider
+  output), a real RunBundle with `manifest.json`, `events.jsonl`,
+  `result.json`, and 11 strict evidence JSON items.
+- Fixture run shape: 6 agent decisions, exactly two bounded tools
+  (`transcribe_audio` and `sample_evidence`), 8 grounded claims.
+- Package data: the demo fixture files force-included in both wheel and
+  sdist.
+- `.gitignore`: narrow ordered exceptions unignore only the publishable demo
+  fixture JSON/JSONL source assets (provenance, run bundle, evidence), and a
+  governance test prevents them from becoming ignored.
+- README 30-second demo section.
+- Tests: new `tests/test_demo.py`; distribution test switched to full-build
+  verification.
+
+### TDD evidence (this session, this worktree)
+
+- Initial focused RED: 13 failed / 6 passed because the command, packaged
+  assets, and docs were absent.
+- Trace review found `agent.step` invisible and the manifest incomplete;
+  repaired to `agent.decision` events plus 11 `evidence.added` events and
+  real RunBundle fields.
+- Focused GREEN: 19 passed.
+- Initial full build then exposed the wheel-from-sdist missing fixture;
+  changed the distribution test to full build (sdist then wheel-from-sdist),
+  observed RED (`FileNotFoundError` for the forced include
+  `src/vidsnap/demo/fixtures/provenance.json`), and added precise sdist
+  force-includes for the 15 fixture files.
+- Distribution GREEN: 5 passed; full build green (sdist and wheel).
+- Pre-fix `git check-ignore` showed `provenance.json` ignored by `*.json`
+  and the fixture run bundle ignored by `run/`.
+- Focused governance RED was repaired with the narrow ordered exceptions in
+  `.gitignore`; governance GREEN: 10 passed.
+- All 15 fixture files are now visible as untracked source assets before
+  commit.
+
+### Clean wheel smoke (verified)
+
+- Built the wheel, force-installed it outside the source context, and unset
+  both key environment variables.
+- `vidsnap demo` succeeded: report counts 6 steps, 11 evidence, 8/8 claims;
+  usage 0 model calls, 2 tool calls, 12 frames; `trace.html` 34603 bytes;
+  no media, private data, or provider output.
+
+### Final full clean gate (verified)
+
+- `ruff format --check`: PASS, 128 files already formatted.
+- `ruff check .`: PASS.
+- `mypy src`: PASS, 62 source files.
+- `python -m pytest -q`: PASS, 351 passed.
+- `python -m build`: PASS, sdist and wheel.
+- `vidsnap conformance`: PASS, 12 checks green.
+- `python scripts/secret_scan.py`: PASS.
+- `git diff --check`: PASS.
+
+### Remaining risks
+
+- The demo is an explicit replay, not live generation: it proves
+  distribution, DX, and trace integrity only — not model quality or harness
+  superiority.
+- The fixture is synthetic; no live benchmark or provider call occurred.
+
+### Commit
+
+Pending: Phase 2 commit — held until the main agent commits.
 
 ### Status
 
@@ -299,8 +388,6 @@ Pending: Phase 1 commit — held until the main agent commits.
 Each phase below has a one-line goal and is `NOT_STARTED`. Status values are
 restricted to `NOT_STARTED` / `IN_PROGRESS` / `BLOCKED` / `VERIFIED`.
 
-- Phase 2 — Zero-Key Offline Demo: `vidsnap demo` with no key, no network,
-  replay of a legitimately distributable fixture. `NOT_STARTED`
 - Phase 3 — Trace Viewer: extend the offline trace export to a shareable,
   static, privacy-safe HTML across all terminal states. `NOT_STARTED`
 - Phase 4 — Source-Preserving Interview Recipe: first Recipe-layer artifact

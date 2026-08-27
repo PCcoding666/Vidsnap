@@ -1,0 +1,9 @@
+{
+  "id": "e11",
+  "start_seconds": 18.0,
+  "end_seconds": 20.0,
+  "modality": "frame",
+  "content": "Closing frame shows the end card.",
+  "captured_at": "2026-01-01T00:00:00Z",
+  "budget_class": "direct_baseline"
+}

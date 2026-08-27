@@ -20,11 +20,18 @@ VidSnap takes one local video plus one goal and produces an auditable agent run:
 
 Nothing leaves your machine except model calls to your configured provider. There are no accounts, no job queue, and no stored history.
 
+## 30-second demo
+
+Replay a packaged synthetic run with no key, account, network request, model call, GPU, or private media:
+
+    vidsnap demo
+
+The command writes a real RunBundle, verified result, and offline HTML trace to vidsnap-demo/. It is an explicit replay of public synthetic fixtures, not live model generation. Use vidsnap analyze for a credentialed live run against your own local video.
+
 ## Quick Start
 
-Requirements: Python >= 3.10, FFmpeg and ffprobe on PATH, and a local provider key
-in `VIDSNAP_QWEN_API_KEY` (fallback `QWEN_API_KEY`). There is no zero-key demo yet;
-every real run needs a key.
+Live analyze runs require Python >= 3.10, FFmpeg and ffprobe on PATH, and a local
+provider key in `VIDSNAP_QWEN_API_KEY` (fallback `QWEN_API_KEY`).
 
     python -m pip install -e '.[server,dev]'
     vidsnap --help

@@ -1,6 +1,15 @@
+import subprocess
 from pathlib import Path
 
 ROOT = Path(__file__).parents[1]
+
+PUBLIC_DEMO_FIXTURE_ASSETS = (
+    "src/vidsnap/demo/fixtures/provenance.json",
+    "src/vidsnap/demo/fixtures/run/events.jsonl",
+    "src/vidsnap/demo/fixtures/run/manifest.json",
+    "src/vidsnap/demo/fixtures/run/result.json",
+    "src/vidsnap/demo/fixtures/run/evidence/e01.json",
+)
 
 ALLOWED_STATUSES = (
     "PROPOSED",
@@ -252,3 +261,16 @@ def test_dependabot_covers_python_and_github_actions_weekly() -> None:
     assert 'package-ecosystem: "pip"' in config
     assert 'package-ecosystem: "github-actions"' in config
     assert config.count('interval: "weekly"') == 2
+
+
+def test_public_demo_fixture_source_assets_are_not_gitignored() -> None:
+    result = subprocess.run(
+        ["git", "check-ignore", "--", *PUBLIC_DEMO_FIXTURE_ASSETS],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 1, (
+        f"git check-ignore rc={result.returncode} "
+        f"(0 means a publishable asset is ignored): {result.stdout}{result.stderr}"
+    )

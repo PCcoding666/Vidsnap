@@ -9,6 +9,7 @@ import typer
 
 from vidsnap.config import HarnessConfig
 from vidsnap.contracts import HarnessPolicy, VideoGoal, VideoSource
+from vidsnap.demo import replay_demo_run
 from vidsnap.harness import VideoHarness
 from vidsnap.trace.export import export_trace
 
@@ -52,6 +53,28 @@ def analyze(
             ensure_ascii=True,
         )
     )
+
+
+@app.command()
+def demo(output_dir: Path = typer.Option(Path("vidsnap-demo"), "--output-dir")) -> None:
+    """Replay the packaged synthetic demo run into a fresh output directory."""
+    resolved = output_dir.expanduser().resolve()
+    try:
+        report = replay_demo_run(resolved)
+    except (FileExistsError, ValueError) as error:
+        typer.echo(f"Demo refused: {error}")
+        raise typer.Exit(code=2) from None
+    typer.echo("Loaded VidSnap packaged synthetic replay (not live model generation)")
+    typer.echo("Goal: Summarize a synthetic 20-second demo clip with grounded observations")
+    typer.echo(f"Replayed {report.counts.steps} agent steps")
+    typer.echo(f"Tool Calls: {report.budget.tool_calls}")
+    typer.echo(f"Loaded {report.counts.evidence} evidence items")
+    typer.echo(f"Verified {report.counts.claims_grounded}/{report.counts.claims_total} claims")
+    typer.echo("Verification: passed")
+    typer.echo("Budget respected")
+    typer.echo(f"Final Artifact: {resolved / 'run' / 'result.json'}")
+    typer.echo("Trace exported")
+    typer.echo(f"Trace: {resolved / 'trace.html'}")
 
 
 @app.command()

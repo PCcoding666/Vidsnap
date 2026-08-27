@@ -1,0 +1,84 @@
+{
+  "summary": "Synthetic replay fixture: an eight-point walkthrough of a 20-second demo clip, grounded entirely in packaged evidence.",
+  "claims": [
+    {
+      "text": "The clip opens with a title card before the walkthrough begins.",
+      "evidence": [
+        {
+          "evidence_id": "e01"
+        }
+      ],
+      "confidence": 0.9
+    },
+    {
+      "text": "A scene cut separates the introduction from the body of the walkthrough.",
+      "evidence": [
+        {
+          "evidence_id": "e02"
+        },
+        {
+          "evidence_id": "e07"
+        }
+      ],
+      "confidence": 0.85
+    },
+    {
+      "text": "The narrator frames the clip as a demonstration of an offline analysis workflow.",
+      "evidence": [
+        {
+          "evidence_id": "e03"
+        }
+      ],
+      "confidence": 0.9
+    },
+    {
+      "text": "On-screen captions label the inspection phase as step 1.",
+      "evidence": [
+        {
+          "evidence_id": "e04"
+        }
+      ],
+      "confidence": 0.8
+    },
+    {
+      "text": "A progress indicator appears during the first third of the clip.",
+      "evidence": [
+        {
+          "evidence_id": "e05"
+        }
+      ],
+      "confidence": 0.75
+    },
+    {
+      "text": "A synthetic audio tone marks the transition between sections.",
+      "evidence": [
+        {
+          "evidence_id": "e06"
+        }
+      ],
+      "confidence": 0.8
+    },
+    {
+      "text": "The narrator describes the evidence sampling strategy.",
+      "evidence": [
+        {
+          "evidence_id": "e09"
+        }
+      ],
+      "confidence": 0.85
+    },
+    {
+      "text": "The clip closes by reporting that all checks passed.",
+      "evidence": [
+        {
+          "evidence_id": "e10"
+        },
+        {
+          "evidence_id": "e11"
+        }
+      ],
+      "confidence": 0.9
+    }
+  ],
+  "required_sections": {}
+}

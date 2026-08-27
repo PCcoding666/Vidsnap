@@ -106,3 +106,13 @@ def test_docs_landing_links_and_topics() -> None:
 
     docs_lower = raw.lower()
     assert all(topic in docs_lower for topic in TOPICS)
+
+
+def test_readme_offers_thirty_second_zero_key_demo() -> None:
+    text = (ROOT / "README.md").read_text(encoding="utf-8")
+    lowered = text.lower()
+
+    assert "## 30-second demo" in lowered
+    assert "vidsnap demo" in lowered
+    assert "no zero-key demo" not in lowered
+    assert lowered.index("## 30-second demo") < lowered.index("## quick start")

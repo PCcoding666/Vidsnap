@@ -1,0 +1,9 @@
+{
+  "id": "e02",
+  "start_seconds": 0.5,
+  "end_seconds": 1.5,
+  "modality": "frame",
+  "content": "Presenter slide introduces the three-part walkthrough.",
+  "captured_at": "2026-01-01T00:00:00Z",
+  "budget_class": "direct_baseline"
+}

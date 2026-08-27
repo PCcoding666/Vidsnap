@@ -1,0 +1,9 @@
+{
+  "id": "e07",
+  "start_seconds": 9.0,
+  "end_seconds": 10.5,
+  "modality": "scene",
+  "content": "Scene cut detected between the introduction and the body.",
+  "captured_at": "2026-01-01T00:00:00Z",
+  "budget_class": "direct_baseline"
+}
