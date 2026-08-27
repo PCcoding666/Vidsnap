@@ -196,9 +196,9 @@ The main agent reran the complete Phase 0 gate in a clean venv
 
 ### Commit
 
-Pending: `docs: record open source v0.1 baseline` — subject held until the
-main agent commits. The clean-environment full gate has passed; only the
-commit action remains.
+`601a4b94 docs: record open source v0.1 baseline` — committed on branch
+`codex/opensource-v0.1`. The clean-environment full gate had passed before
+the commit.
 
 ### Remaining risks
 
@@ -215,13 +215,90 @@ commit action remains.
 
 `VERIFIED`
 
+## Phase 1 — GitHub Product Identity
+
+### Goal
+
+Reposition README/metadata so a stranger understands VidSnap in 30 seconds:
+newcomer-first README, truthful documentation landing page, and exact project
+identity metadata, driven by RED acceptance tests.
+
+### Changes
+
+Four identity surfaces changed plus this state record; no runtime behavior changed:
+
+- `README.md`: rebuilt newcomer-first (# VidSnap hero, tagline, pipeline
+  line, What VidSnap does, Quick Start, What is a trace, Why VidSnap exists,
+  not another video summarizer, Core/Plugin/Recipe, evidence grounding,
+  replayable trace, plugin/recipe boundaries, bounded safety, current
+  guarantees, benchmark evidence, surfaces, contributing).
+- `docs/README.md`: concise landing page with the wrapped tagline, correct
+  `../README.md#...` anchors (quick-start, trace, plugin, recipe, benchmark,
+  contributing), preserved detailed-doc links, and the nine discoverability
+  topics.
+- `pyproject.toml`: exact description `Auditable video-agent runtime with
+  bounded tools, pluggable tasks, evidence-grounded outputs, and replayable
+  traces.` plus the nine keywords (video-ai, agent-harness, multimodal,
+  ai-agents, video-analysis, llm-evaluation, python, observability,
+  agent-runtime).
+- `tests/test_project_identity.py`: four acceptance tests (RED first),
+  later reformatted to Ruff's single-line `keywords_match` form
+  (formatting only; test behavior unchanged).
+- `docs/implementation/opensource-v0.1-state.md`: records observed Phase 1
+  evidence (TDD states, regression, repair, gates, stranger audit).
+
+### TDD evidence (this session, this worktree)
+
+- RED: `tests/test_project_identity.py` → 4 failed (acceptance unmet).
+- GREEN after README/docs/pyproject implementation: 4 passed.
+- Legacy documentation regression: 1 failed / 336 passed (documentation
+  contract phrases missing from the rewritten pages).
+- Repair: added compact `Current guarantees` blocks to README.md and
+  docs/README.md preserving the six exact contiguous contract phrases.
+- Focused identity + documentation run: 10 passed.
+
+### Final full clean gate (verified)
+
+- `ruff format --check`: PASS, 125 files already formatted.
+- `ruff check .`: PASS.
+- `mypy src`: PASS, 60 source files.
+- `python -m pytest -q`: PASS, 337 passed.
+- `python -m build`: PASS (sdist and wheel).
+- `vidsnap conformance`: PASS, 12 checks green.
+- `python scripts/secret_scan.py`: PASS.
+- `git diff --check`: PASS.
+
+### Stranger audit (Gate 1)
+
+All six questions are answered in the first half of README.md: What VidSnap
+does, Why VidSnap exists, not another video summarizer, Quick Start, What is
+a trace, How to extend; the words Core, Plugin, Recipe appear in the first
+half, with the real install (`python -m pip install -e '.[server,dev]'`),
+`vidsnap --help` / `vidsnap conformance`, and the real
+`vidsnap trace export RUN_DIR -o trace.html` command.
+
+### Truthful boundaries recorded
+
+- Core is public and working; Plugin is internal and allow-listed with only
+  `transcribe_audio` and `sample_evidence` model-visible by default; external
+  plugin DX comes later; Recipe does not exist yet and comes later.
+- No zero-key demo is claimed (that is Phase 2). No performance,
+  superiority, public plugin SDK, recipes, or live benchmark conclusion is
+  claimed.
+
+### Commit
+
+Pending: Phase 1 commit — held until the main agent commits.
+
+### Status
+
+`VERIFIED`
+
 ## Later phases
 
 Each phase below has a one-line goal and is `NOT_STARTED`. Status values are
 restricted to `NOT_STARTED` / `IN_PROGRESS` / `BLOCKED` / `VERIFIED`.
 
-- Phase 1 — GitHub Product Identity: reposition README/metadata so a
-  stranger understands VidSnap in 30 seconds. `NOT_STARTED`
 - Phase 2 — Zero-Key Offline Demo: `vidsnap demo` with no key, no network,
   replay of a legitimately distributable fixture. `NOT_STARTED`
 - Phase 3 — Trace Viewer: extend the offline trace export to a shareable,

@@ -5,7 +5,18 @@ build-backend = "hatchling.build"
 [project]
 name = "vidsnap-harness"
 version = "0.1.0"
-description = "A local-first, evidence-grounded harness for video analysis agents."
+description = "Auditable video-agent runtime with bounded tools, pluggable tasks, evidence-grounded outputs, and replayable traces."
+keywords = [
+    "video-ai",
+    "agent-harness",
+    "multimodal",
+    "ai-agents",
+    "video-analysis",
+    "llm-evaluation",
+    "python",
+    "observability",
+    "agent-runtime",
+]
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
