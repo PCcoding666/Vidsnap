@@ -1,0 +1,242 @@
+# Open Source v0.1 — Program State
+
+This page records the phase state of the open-source v0.1 program on branch
+`codex/opensource-v0.1`. It records observed facts only. Phase status values
+are restricted to `NOT_STARTED`, `IN_PROGRESS`, `BLOCKED`, `VERIFIED`.
+
+No live benchmark has been run and no provider call has been made for this
+program. This page claims no Harness performance conclusion of any kind.
+
+## Isolation
+
+- Baseline commit: `31a7d365b019280ed7d3a8b7f75ce44b22b83ca5` (merge of PR #16).
+- Worktree: `/Users/chengpeng/MyProject/Vidsnap-opensource-v0.1`, branch
+  `codex/opensource-v0.1`; working tree clean at baseline.
+- The original worktree `/Users/chengpeng/MyProject/Vidsnap` (holding the
+  user's uncommitted changes) has not been touched. No push, merge, or
+  force-push has been performed from this worktree.
+
+## Phase 0 — Repository Reality Check
+
+### Goal
+
+Record the truthful baseline before any open-source repositioning:
+architecture, CLI, tests, build, conformance, secret scan, Core/Plugin/Recipe
+boundaries, new-user obstacles, and environment findings. Changes in this
+phase are record-only.
+
+### Changes
+
+- Added this file only. No production code, test, CI, README, or project
+  metadata was modified.
+
+### Current architecture (observed)
+
+Python src-package `src/vidsnap` (~60 modules), strict typing, Python >= 3.10,
+runtime deps httpx/pydantic/typer, optional fastapi/uvicorn (server extra).
+
+- Core: `runtime/kernel.py` (`HarnessKernel`: bounded execution, enforced
+  budgets, call fingerprints, payload redaction), `runtime/policies.py`
+  (`FixedPolicy` default, `AgenticPolicy`, `DirectPolicy`), `loop/`
+  (state machine, `RunBundle`, events, trace recorder, claim verifier),
+  `contracts/` (strict models, LoopSpec `vidsnap.loop/v1`, output schema
+  `vidsnap.video-analysis/v1`), `tasks/video_analysis.py` (verifier gates
+  `claims_are_supported`, `required_sections_covered`).
+- Plugins: `plugins/` with strict manifests (`vidsnap.plugin/v1`; kinds
+  tool/policy/task/observer), an allow-list registry frozen before runs and
+  never mutated by runs, and entry-point discovery restricted to explicitly
+  allow-listed IDs. Built-in model-visible tools: `transcribe_audio`,
+  `sample_evidence`. There is no external plugin SDK, no
+  `vidsnap plugin validate/test`, and no template.
+- Providers: typed ports (`VideoModelPort`, `ToolPlanningPort`,
+  `AgentModelPort`); the only concrete client is Qwen-compatible with model
+  fixed to `qwen3.8-max`, concurrency capped at 2, key read only from
+  `VIDSNAP_QWEN_API_KEY` / `QWEN_API_KEY`.
+- Trace: `trace/` offline HTML export (`vidsnap trace export`); template
+  assets ship in the wheel.
+- API: `api/app.py` stateless localhost FastAPI (`/health`, `/v1/manifest`,
+  `/v1/analyze`, `/v1/analyze/stream`); temporary RunBundle deleted after
+  the request.
+- Benchmark: `benchmark/` modules, `scripts/`, and `benchmarks/` profiles
+  (documentation only). CLI `benchmark run/compare` honestly report
+  `BLOCKED_LIVE_BENCHMARK` when no key is configured.
+
+### Current CLI (observed)
+
+`vidsnap analyze | manifest | serve | conformance | benchmark run |
+benchmark compare | trace export`. `--help` and `conformance` pass locally
+(conformance report `passed=true`, all twelve checks green).
+
+### Tests / build / install / gates (observed)
+
+- 333 offline tests collected; 333 pass when the import path resolves to
+  this worktree (see environment pollution below).
+- `ruff format --check` (124 files) and `ruff check .`: pass (ruff 0.11.0).
+- `mypy src` strict: 60 source files. One error under the old shared
+  environment's mypy 1.10.0 + pydantic 2.10.0 (see environment section);
+  clean venv gate: PASS, 60 source files.
+- The committed wheel ships the output schema, all five prompt JSON assets,
+  and `trace/assets/trace.html` + `timeline.js`, and registers the
+  `vidsnap` console script.
+- `python scripts/secret_scan.py`: pass. `git diff --check`: clean. No
+  tracked media or binary assets (166 tracked files total).
+- CI (`.github/workflows/ci.yml`) already gates: ruff, mypy, pytest, build,
+  wheel smoke (`vidsnap --help`, `vidsnap conformance` in a fresh venv),
+  secret scan, and `git diff --check`.
+- No `examples/` directory exists.
+
+### Core / Plugin / Recipe boundaries (real, today)
+
+- Core exists and is genuinely bounded (kernel, budgets, verifier gates,
+  RunBundle, replayable trace).
+- Plugins exist only as an internal mechanism (two builtin tool plugins plus
+  the registry/manifest machinery). Extension by external developers is
+  source-reading only.
+- Recipes do not exist as a layer: no recipe concept, registry, CLI surface,
+  or documentation. The only task is the built-in video-analysis adapter.
+
+### Obstacles for a new GitHub user (observed)
+
+- Understand: the README leads with internal guarantees and benchmark
+  framing; a stranger cannot tell in 30 seconds what VidSnap is or how it
+  differs from a video summarizer.
+- Try: there is no zero-key path. Any run requires a local Qwen key; no
+  offline demo, no shipped replay fixture, no `vidsnap demo`.
+- Extend: no recipe layer, no plugin developer documentation, no template,
+  no examples directory.
+- Community surface gaps: no `CODE_OF_CONDUCT.md`, `ROADMAP.md`,
+  `MAINTAINERS.md`, or `examples/`. `CONTRIBUTING.md`, `AGENTS.md`,
+  `SECURITY.md`, and the Task Contract templates exist and are consistent
+  with `PROJECT_STATE.md`.
+
+### Environment pollution and dependency drift (observed; not code defects)
+
+The shell's active Python is the old shared conda env
+`miniconda3/envs/yt_summarizer` (Python 3.10.16, pytest 8.3.5), in which
+`import vidsnap` resolves to
+`/Users/chengpeng/MyProject/Vidsnap-youtube-publishing-pilot/src/vidsnap` —
+not this worktree. Verified consequences:
+
+- Full suite in that env: 1 failed / 332 passed (earlier baseline run).
+  The failing test is `test_manifest_preparer_rejects_repository_root`:
+  `src/vidsnap/benchmark/manifest.py:31` derives `REPOSITORY_ROOT` from the
+  imported package location (`Path(__file__).resolve().parents[3]`), so with
+  the wrong `vidsnap` imported the assertion compares different roots.
+  With `PYTHONPATH=src` in this worktree the focused test passes and the
+  full suite is 333 passed. Root cause: environment import-path pollution.
+- mypy 1.10.0 + pydantic 2.10.0: exactly 1 error in 60 files —
+  `src/vidsnap/trace/reader.py:25`,
+  `_USAGE_FIELDS = frozenset(EventUsage.model_fields)`
+  (`call-overload` on `model_fields`). Clean venv (mypy 1.20.2 +
+  pydantic 2.13.4): 60 source files, no issues. Dependency drift; no code
+  was changed for it.
+- Conformance vacuous-scan risk: `conformance.py`
+  `_check_forbidden_dependencies` walks `Path(__file__).resolve().parents[2] / "src"`.
+  In a wheel-installed context that directory does not exist, the scan
+  finds no files, and the check passes vacuously. Recorded as a risk;
+  deliberately not fixed in Phase 0.
+- No SaaS runtime remains in `src/` (offline tests
+  `test_no_saas_dependencies.py` / `test_repository_governance.py` guard
+  this), but `.gitignore` still carries legacy SaaS-era entries
+  (`backend/`, `frontend/`, `node_modules`, `hf_space`,
+  `backend/youtube_cookies.txt`, `storage/`, `run/`,
+  `benchmark-results/`). Documentation-only residue.
+
+### Observed problems
+
+1. Baseline verification environment is polluted (wrong `vidsnap` import
+   path), producing one false test failure.
+2. Toolchain drift: the declared version ranges admit a
+   mypy/pydantic combination that fails `mypy src` (1 error).
+3. Conformance forbidden-dependency scan can be vacuous in wheel installs.
+4. No zero-key demo, no recipe layer, no plugin developer surface.
+5. Community/community-surface files incomplete; `examples/` missing.
+6. `.gitignore` contains SaaS-era residue.
+
+### Repairs
+
+None in Phase 0. This is a record-only phase; the environment findings must
+not be "fixed" by code changes as part of the baseline.
+
+### Verification evidence (this session, this worktree)
+
+- `PYTHONPATH=src python -m pytest --collect-only -q` → 333 collected.
+- `PYTHONPATH=src python -m pytest -q` → 333 passed.
+- `PYTHONPATH=src python -m pytest tests/test_prepare_agentic_manifests_script.py -q`
+  → 1 passed.
+- `python -c "import vidsnap; print(vidsnap.__file__)"` (no PYTHONPATH) →
+  resolves to `Vidsnap-youtube-publishing-pilot/src/vidsnap` (pollution
+  reproduced).
+- `python -m mypy src` → 1 error, `src/vidsnap/trace/reader.py:25` (old
+  mypy 1.10.0 + pydantic 2.10.0).
+- `python -m ruff format --check src tests scripts` → 124 files formatted;
+  `python -m ruff check .` → all checks passed.
+- `python scripts/secret_scan.py` → pass. `git diff --check` → clean.
+- `PYTHONPATH=src vidsnap --help` → usage renders;
+  `PYTHONPATH=src vidsnap conformance` → `passed=true`.
+
+### Clean-environment full gate (verified)
+
+The main agent reran the complete Phase 0 gate in a clean venv
+(`/tmp/vidsnap-v01-check.mfVkWs/venv`). All gates PASS:
+
+- `ruff format --check src tests scripts`: PASS, 124 files already formatted.
+- `ruff check .`: PASS.
+- `mypy src`: PASS, 60 source files.
+- `python -m pytest -q`: PASS, 333 passed in 5.39s.
+- `python -m build`: PASS, built `vidsnap_harness-0.1.0.tar.gz` and
+  `vidsnap_harness-0.1.0-py3-none-any.whl`.
+- `vidsnap conformance`: PASS, `passed=true`, all 12 checks green; default
+  model-visible tools `sample_evidence` and `transcribe_audio`; fixed order
+  `transcribe_audio` then `sample_evidence`.
+- `python scripts/secret_scan.py`: PASS.
+- `git diff --check`: PASS.
+- Separate brand-new temporary wheel venv: installed the built wheel;
+  `vidsnap --help` PASS; `vidsnap conformance` PASS (`passed=true`).
+
+### Commit
+
+Pending: `docs: record open source v0.1 baseline` — subject held until the
+main agent commits. The clean-environment full gate has passed; only the
+commit action remains.
+
+### Remaining risks
+
+- Environment pollution is environmental, not a code defect: gates rerun in
+  the old shared environment can still produce one false test failure and a
+  spurious mypy error. Re-run gates in a clean venv (as recorded above).
+- The declared dependency ranges (`mypy>=1.10,<2`, `pydantic>=2.7,<3`)
+  admit a version combination that fails `mypy src`.
+- Conformance forbidden-dependency scan may be vacuous for wheel installs.
+- Benchmark evidence is absent by design (no live runs); this is recorded
+  honestly rather than filled with claims.
+
+### Status
+
+`VERIFIED`
+
+## Later phases
+
+Each phase below has a one-line goal and is `NOT_STARTED`. Status values are
+restricted to `NOT_STARTED` / `IN_PROGRESS` / `BLOCKED` / `VERIFIED`.
+
+- Phase 1 — GitHub Product Identity: reposition README/metadata so a
+  stranger understands VidSnap in 30 seconds. `NOT_STARTED`
+- Phase 2 — Zero-Key Offline Demo: `vidsnap demo` with no key, no network,
+  replay of a legitimately distributable fixture. `NOT_STARTED`
+- Phase 3 — Trace Viewer: extend the offline trace export to a shareable,
+  static, privacy-safe HTML across all terminal states. `NOT_STARTED`
+- Phase 4 — Source-Preserving Interview Recipe: first Recipe-layer artifact
+  with structured editorial provenance. `NOT_STARTED`
+- Phase 5 — Plugin Developer Experience: plugin contract docs,
+  `vidsnap plugin validate/test`, example template. `NOT_STARTED`
+- Phase 6 — Provider Decoupling: stable provider protocol, reference and
+  mock providers, contract test suite; no in-run provider switching.
+  `NOT_STARTED`
+- Phase 7 — Community Surface: CONTRIBUTING/AGENTS/MAINTAINERS/
+  CODE_OF_CONDUCT/ROADMAP/SECURITY completion and good first issues.
+  `NOT_STARTED`
+- Phase 8 — Benchmark as Trust Layer: honest, reproducible methodology;
+  no marketing numbers. `NOT_STARTED`
+- Phase 9 — v0.1 Release Readiness: clean-environment build/install/smoke
+  checklist and release verification. `NOT_STARTED`
