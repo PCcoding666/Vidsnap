@@ -118,19 +118,17 @@ def test_default_export_never_reads_evidence_artifacts(
     tmp_path: Path,
     run_with_evidence: Path,
 ) -> None:
-    evidence_dir = run_with_evidence / "evidence"
+    """Structured evidence JSON may be read; artifact bytes stay unread."""
     artifacts_dir = run_with_evidence / "artifacts"
-    os.chmod(evidence_dir, 0)
     os.chmod(artifacts_dir, 0)
     try:
         output = export_trace(run_with_evidence, tmp_path / "trace.html")
     finally:
-        os.chmod(evidence_dir, 0o755)
         os.chmod(artifacts_dir, 0o755)
 
     html = output.read_text(encoding="utf-8")
     assert "tool.call.completed" in html
-    assert "EVIDENCE_MARKER_9f3c" not in html
+    assert "PREVIEW_MARKER_7a2f" in html
     assert "ARTIFACT_BYTES_77e1" not in html
 
 

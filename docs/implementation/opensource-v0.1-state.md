@@ -377,7 +377,147 @@ network request, model call, GPU, or private media.
 
 ### Commit
 
-Pending: Phase 2 commit — held until the main agent commits.
+`cb1d557b feat: add zero-key offline demo` — committed on branch
+`codex/opensource-v0.1`. The final full clean gate had passed before the
+commit.
+
+### Status
+
+`VERIFIED`
+
+## Phase 3 — Trace Viewer
+
+### Goal
+
+Extend the offline trace export into a shareable, static, privacy-safe HTML
+projection of run overview, budget, agent timeline, evidence, claims, and a
+privacy panel across all terminal states, with a sanitized truth-only reader
+boundary between raw RunBundle ledgers and the projected TraceDocument.
+
+### Changes
+
+- `src/vidsnap/trace/models.py`: frozen typed Pydantic projection models
+  (`FrozenProjectionModel`, `TraceOverview`, `TraceBudgetCounter`,
+  `TraceBudget`, `TraceEvidence`, `TraceClaim`) with safe defaults;
+  `TraceDocument` extended with `overview`, `budget`, `evidence`, `claims`;
+  budget counters are `int | None` so missing values stay missing.
+- `src/vidsnap/trace/reader.py`:
+  - Overview projected from recorded truth only: `goal`/`input_sha256` from
+    the `run.started` item payload; `status` from the manifest terminal
+    state; `duration_ms` from the recorded run span; provider marker exactly
+    `configured (identity redacted)` when the manifest provider is
+    configured, otherwise `not recorded`; `recipe` from `loop_spec.id`.
+  - Budget projected from the latest `budget.updated` event (`model_calls`,
+    `evidence_frames`, `iterations`) and manifest resources
+    (`max_model_calls`, `max_evidence_frames`, `max_iterations`;
+    `runtime_ms.limit = max_wall_seconds * 1000`, `runtime_ms.used` = run
+    duration); missing values remain `None`.
+  - Evidence projected from `*.json` directly under `run/evidence`, sorted,
+    parsed strictly with `Evidence.model_validate_json`, 280-character
+    content preview, artifact bytes never opened; claims projected from
+    `result.json` via strict `VideoAnalysisResult.model_validate_json`;
+    invalid/unreadable files are skipped with one truthful limitation;
+    summary-only stays empty.
+  - Recursive projection-boundary sanitizer applied before any raw event
+    payload enters `TraceItem` or the budget/overview projection: sensitive
+    keys and containers are dropped case-insensitively (authorization/auth
+    headers, api/access/PAT/credential/secret/password/cookie keys, env and
+    environment containers including arbitrary env vars,
+    chain_of_thought/reasoning/internal_reasoning/scratchpad/thoughts,
+    header containers) while legitimate usage keys such as
+    `input_tokens`/`output_tokens` are preserved; remaining string values
+    that expose provider URLs with credentials, secret-bearing query
+    strings, or absolute local user paths (`/Users/...`, `/home/...`) are
+    redacted. No sensitive marker or sensitive key name remains in the
+    `TraceDocument` JSON.
+- `src/vidsnap/trace/assets/trace.html`: accessible named sections with
+  exact visible labels Run Overview, Budget, Agent Timeline, Evidence,
+  Claims, Privacy and stable container IDs; renderers for
+  overview/budget/evidence/claims wired into `renderVariant`;
+  `textContent`-only data injection; missing values shown as 未记录;
+  truthful empty states; minimal responsive CSS; the page remains fully
+  offline and self-contained (no external resources, network, backend,
+  login, or telemetry).
+- Tests (all trace test files changed in this phase):
+  - `tests/trace/test_phase3_projection.py` — new: projection coverage for
+    overview/budget/evidence/claims plus the adversarial raw-ledger
+    sentinel boundary test.
+  - `tests/trace/conftest.py` — shared trace-suite fixtures updated for the
+    Phase 3 trace document shape.
+  - `tests/trace/test_export.py` — offline export expectations updated to
+    the Phase 3 document/section shape.
+  - `tests/trace/test_reader.py` — legacy payload expectation repaired to
+    the authoritative Phase 3 contract (see conflict below).
+  No production behavior beyond the above.
+
+### TDD evidence
+
+- RED (privacy boundary): the new adversarial test built a finalized bundle,
+  appended a sensitive-laden event line directly to `events.jsonl`
+  (bypassing write-time redaction), and verified the raw ledger still held
+  every sentinel. `read_trace` then projected the raw `model.request`
+  payload verbatim: the test failed with
+  `AssertionError: trace document leaked sensitive marker 'sentinel-bearer-auth-9d2f1c'`.
+- GREEN after the sanitizer: the focused trace suite passed.
+- Earlier phase-3 slices (overview, budget, evidence, claims, HTML sections
+  and renderers) were implemented slice-by-slice with focused runs after
+  each edit.
+
+### Observed old-test conflict and repair
+
+- After the sanitizer, `tests/trace/test_reader.py::test_payload_and_usage_stay_typed_and_redacted`
+  failed (1 failed / 33 passed): the legacy expectation required
+  `api_key: "***REDACTED***"` to remain inside the projected
+  `tool.call.started` payload, while the new Phase 3 contract requires
+  sensitive key names to be absent even when their values were already
+  write-time redacted.
+- Resolution: the Phase 3 privacy contract was treated as authoritative.
+  The legacy expectation was repaired to require omission of `api_key`
+  (payload equals `{"name": "sample_evidence"}`) with an added explicit
+  `assert "api_key" not in serialized` while preserving the benign payload
+  field and the usage-counter assertions. The sanitizer was not weakened
+  and the new adversarial test was not modified. Result: all trace tests
+  green.
+
+### Verification evidence (recorded independent results)
+
+- Trace tests: `PYTHONPATH=src python -m pytest -q tests/trace` → 34 passed.
+- Full suite: 359 passed.
+- `ruff format --check`: PASS, 129 files already formatted.
+- `ruff check .`: PASS.
+- `mypy src`: PASS, 62 source files.
+- `python -m build`: PASS (sdist and wheel).
+- `vidsnap conformance`: PASS, 12 checks green.
+- `python scripts/secret_scan.py`: PASS.
+- `git diff --check`: PASS (clean).
+- Zero-key demo replay plus re-export produced two byte-identical
+  45,629-byte `trace.html` files.
+- All five terminal-state exports (SUCCEEDED, PARTIAL, FAILED, EXHAUSTED,
+  BLOCKED) passed the offline export tests: terminal state present; no
+  scheme URLs, no `fetch(`/`WebSocket`, no secret host or query values.
+- Application in-app browser refused direct `file://` navigation by its
+  security policy, so visual browser inspection could not be performed and
+  was not bypassed; recorded as an explicit limitation below.
+
+### Remaining risks
+
+- Visual-browser inspection of the exported HTML remains an explicit
+  limitation: the in-app browser refused `file://` navigation by security
+  policy, so rendering was validated by tests only, not by a human in a
+  browser.
+- The sanitizer is a targeted key/value boundary, not a general PII
+  anonymizer: it removes the enumerated sensitive key families and redacts
+  credentialed/secret-query URLs and absolute local user paths; other
+  benign-looking strings are not scanned for secrets.
+- Conformance forbidden-dependency scan vacuity and the dependency-drift
+  risks recorded in Phase 0 remain.
+- No live benchmark was run; the demo is an explicit synthetic replay, so
+  no model-quality or performance conclusion is claimed.
+
+### Commit
+
+`feat: add portable trace viewer` — pending: held until the main agent
+commits on branch `codex/opensource-v0.1`.
 
 ### Status
 
@@ -385,11 +525,10 @@ Pending: Phase 2 commit — held until the main agent commits.
 
 ## Later phases
 
-Each phase below has a one-line goal and is `NOT_STARTED`. Status values are
-restricted to `NOT_STARTED` / `IN_PROGRESS` / `BLOCKED` / `VERIFIED`.
+The entries below are the remaining Phase 4–9 goals; each is `NOT_STARTED`.
+Status values are restricted to `NOT_STARTED` / `IN_PROGRESS` / `BLOCKED` /
+`VERIFIED`. Completed Phase 3 is recorded above.
 
-- Phase 3 — Trace Viewer: extend the offline trace export to a shareable,
-  static, privacy-safe HTML across all terminal states. `NOT_STARTED`
 - Phase 4 — Source-Preserving Interview Recipe: first Recipe-layer artifact
   with structured editorial provenance. `NOT_STARTED`
 - Phase 5 — Plugin Developer Experience: plugin contract docs,

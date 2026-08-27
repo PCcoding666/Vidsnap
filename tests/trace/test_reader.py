@@ -144,13 +144,14 @@ def test_payload_and_usage_stay_typed_and_redacted(traced_run: Path) -> None:
     tool_started = _item(trace, "tool.call.started")
     assert tool_started.payload == {
         "name": "sample_evidence",
-        "api_key": "***REDACTED***",
     }
+    serialized = trace.model_dump_json()
+    assert "api_key" not in serialized
+    assert "must-not-appear" not in serialized
     model_completed = _item(trace, "model.request.completed")
     assert model_completed.usage is not None
     assert model_completed.usage.input_tokens == 7
     assert model_completed.usage.output_tokens == 3
-    assert "must-not-appear" not in trace.model_dump_json()
 
 
 def test_provider_url_never_appears_in_the_trace_document(traced_run: Path) -> None:

@@ -273,6 +273,33 @@
   .thumb img { width: 100%; height: 96px; object-fit: cover; border-radius: 6px; background: var(--panel-deep); }
   .thumb figcaption { color: var(--muted); font-family: var(--mono); font-size: 11px; margin-top: 6px; overflow-wrap: anywhere; }
 
+  .record {
+    background: var(--panel);
+    border: 1px solid var(--border-soft);
+    border-radius: 10px;
+    padding: 12px 14px;
+    margin-top: 8px;
+  }
+  .record-grid {
+    display: grid;
+    grid-template-columns: minmax(120px, 180px) 1fr;
+    gap: 4px 14px;
+    margin: 0;
+    font-size: 13.5px;
+  }
+  .record-grid dt {
+    color: var(--faint);
+    font-size: 11.5px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding-top: 2px;
+  }
+  .record-grid dd { margin: 0; color: var(--text); overflow-wrap: anywhere; font-family: var(--mono); }
+  .metric-value.overview-value { white-space: normal; overflow-wrap: anywhere; font-size: 14px; }
+  @media (max-width: 720px) {
+    .record-grid { grid-template-columns: 1fr; gap: 2px; }
+  }
+
   footer {
     max-width: 1120px;
     margin: 0 auto;
@@ -309,13 +336,23 @@
 
   <div id="notices"></div>
 
+  <section id="overview-section" aria-labelledby="overview-title">
+    <h2 id="overview-title">Run Overview</h2>
+    <div class="summary-grid" id="overview-grid"></div>
+  </section>
+
+  <section id="budget-section" aria-labelledby="budget-title">
+    <h2 id="budget-title">Budget</h2>
+    <div class="summary-grid" id="budget-grid"></div>
+  </section>
+
   <section aria-labelledby="summary-title">
     <h2 id="summary-title">Summary</h2>
     <div class="summary-grid" id="summary-grid"></div>
   </section>
 
   <section id="timeline-section" aria-labelledby="timeline-title" hidden>
-    <h2 id="timeline-title">Timeline</h2>
+    <h2 id="timeline-title">Agent Timeline</h2>
     <div class="track-wrap">
       <div class="track" id="timeline-track"></div>
       <div class="scale" id="timeline-scale"></div>
@@ -344,9 +381,34 @@
     </div>
   </section>
 
+  <section id="evidence-section" aria-labelledby="evidence-title">
+    <h2 id="evidence-title">Evidence</h2>
+    <div id="evidence-list"></div>
+  </section>
+
+  <section id="claims-section" aria-labelledby="claims-title">
+    <h2 id="claims-title">Claims</h2>
+    <div id="claims-list"></div>
+  </section>
+
   <section id="thumbnails-section" aria-labelledby="thumbnails-title" hidden>
     <h2 id="thumbnails-title">Evidence thumbnails</h2>
     <div class="thumb-grid" id="thumb-grid"></div>
+  </section>
+
+  <section id="privacy-section" aria-labelledby="privacy-title">
+    <h2 id="privacy-title">Privacy</h2>
+    <div class="banner" id="privacy-notes" role="note">
+      This page is fully offline: it makes no network requests, contains no
+      external resources, telemetry, or login, and nothing in it is sent
+      anywhere. The embedded trace is a sanitized projection: sensitive fields
+      (credentials, API keys, environment variables, chain-of-thought or
+      reasoning traces, provider identity) are removed again at the export
+      projection boundary, before the trace document is rendered. This is
+      targeted secret removal at that boundary — not a general PII
+      anonymization — and payloads are shown as projected, not byte-for-byte
+      as recorded.
+    </div>
   </section>
 </main>
 
@@ -494,6 +556,145 @@ function renderSummary(doc) {
     card.appendChild(el("div", "metric-label", label));
     card.appendChild(el("div", value === NOT_RECORDED ? "metric-value missing" : "metric-value", value));
     grid.appendChild(card);
+  }
+}
+
+function recordedValue(value) {
+  if (value === null || value === undefined) return null;
+  if (typeof value === "string") return value.length > 0 ? value : null;
+  if (typeof value === "number") return Number.isFinite(value) ? value : null;
+  return value;
+}
+
+function recordedText(value) {
+  const present = recordedValue(value);
+  return present === null ? NOT_RECORDED : String(present);
+}
+
+function factList(rows) {
+  const dl = el("dl", "record-grid");
+  for (const row of rows) {
+    dl.appendChild(el("dt", null, row[0]));
+    dl.appendChild(el("dd", null, row[1]));
+  }
+  return dl;
+}
+
+function overviewCard(grid, label, value) {
+  const card = el("div", "metric");
+  card.appendChild(el("div", "metric-label", label));
+  card.appendChild(
+    el("div", value === NOT_RECORDED ? "metric-value missing" : "metric-value overview-value", value)
+  );
+  grid.appendChild(card);
+}
+
+function renderOverview(doc) {
+  const grid = document.getElementById("overview-grid");
+  clear(grid);
+  const overview = doc.overview || {};
+  const status = recordedValue(overview.status) === null ? recordedValue(doc.terminal_state) : overview.status;
+  const duration = recordedValue(overview.duration_ms) === null ? doc.duration_ms : overview.duration_ms;
+  const rows = [
+    ["Goal", recordedText(overview.goal)],
+    ["Input", recordedText(overview.input_sha256)],
+    ["Status", recordedText(status)],
+    ["Duration", isRecorded(duration) ? formatMs(duration) : NOT_RECORDED],
+    ["Provider", recordedText(overview.provider)],
+    ["Recipe", recordedText(overview.recipe)],
+  ];
+  for (const row of rows) overviewCard(grid, row[0], row[1]);
+}
+
+function budgetCounterText(counter) {
+  const used = recordedValue(counter && counter.used);
+  const limit = recordedValue(counter && counter.limit);
+  if (used === null && limit === null) return NOT_RECORDED;
+  return (
+    (used === null ? NOT_RECORDED : String(used)) +
+    " / " +
+    (limit === null ? NOT_RECORDED : String(limit))
+  );
+}
+
+function renderBudget(doc) {
+  const grid = document.getElementById("budget-grid");
+  clear(grid);
+  const budget = doc.budget || {};
+  const rows = [
+    ["Model calls", budgetCounterText(budget.model_calls)],
+    ["Evidence frames", budgetCounterText(budget.evidence_frames)],
+    ["Iterations", budgetCounterText(budget.iterations)],
+    ["Runtime (ms)", budgetCounterText(budget.runtime_ms)],
+  ];
+  for (const row of rows) {
+    const card = el("div", "metric");
+    card.appendChild(el("div", "metric-label", row[0]));
+    card.appendChild(
+      el("div", row[1] === NOT_RECORDED ? "metric-value missing" : "metric-value", row[1])
+    );
+    grid.appendChild(card);
+  }
+}
+
+function evidenceTimestamp(item) {
+  const start = recordedValue(item.start_seconds);
+  const end = recordedValue(item.end_seconds);
+  if (start !== null && end !== null) return String(start) + " – " + String(end) + " s";
+  if (start !== null) return String(start) + " s";
+  if (end !== null) return String(end) + " s";
+  return NOT_RECORDED;
+}
+
+function renderEvidence(doc) {
+  const container = document.getElementById("evidence-list");
+  clear(container);
+  const evidence = Array.isArray(doc.evidence) ? doc.evidence : [];
+  if (evidence.length === 0) {
+    container.appendChild(el("div", "empty-note", "No evidence was recorded for this run."));
+    return;
+  }
+  for (const item of evidence) {
+    const card = el("div", "record");
+    card.appendChild(
+      factList([
+        ["Evidence ID", recordedText(item.evidence_id)],
+        ["Timestamp", evidenceTimestamp(item)],
+        ["Modality", recordedText(item.modality)],
+        ["Source", recordedText(item.source)],
+        ["Speaker", recordedText(item.speaker)],
+        ["Frame", recordedText(item.frame)],
+        ["Confidence", recordedText(item.confidence)],
+        ["Content preview", recordedText(item.content_preview)],
+      ])
+    );
+    container.appendChild(card);
+  }
+}
+
+function renderClaims(doc) {
+  const container = document.getElementById("claims-list");
+  clear(container);
+  const claims = Array.isArray(doc.claims) ? doc.claims : [];
+  if (claims.length === 0) {
+    container.appendChild(el("div", "empty-note", "No claims were recorded for this run."));
+    return;
+  }
+  for (const claim of claims) {
+    const ids =
+      Array.isArray(claim.evidence_ids) && claim.evidence_ids.length > 0
+        ? claim.evidence_ids.join(", ")
+        : NOT_RECORDED;
+    const card = el("div", "record");
+    card.appendChild(
+      factList([
+        ["Claim", recordedText(claim.text)],
+        ["Evidence IDs", ids],
+        ["Verification result", recordedText(claim.verification_result)],
+        ["Editorial/transformation status", recordedText(claim.editorial_status)],
+      ])
+    );
+    container.appendChild(card);
   }
 }
 
@@ -686,10 +887,14 @@ function renderVariant(key) {
   const doc = state.traces[key];
   renderHeader(doc);
   renderNotices(doc);
+  renderOverview(doc);
+  renderBudget(doc);
   renderSummary(doc);
   renderTimeline(doc);
   renderLanes(doc);
   renderEvents(doc);
+  renderEvidence(doc);
+  renderClaims(doc);
   renderThumbnails(key);
   const bar = document.getElementById("variant-bar");
   for (const button of bar.querySelectorAll("button")) {
