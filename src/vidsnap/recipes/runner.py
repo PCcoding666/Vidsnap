@@ -18,7 +18,7 @@ from vidsnap.contracts import (
 from vidsnap.loop.run_bundle import RunBundle
 from vidsnap.plugins.base import SpeechRecognizerAdapter, TranscriptionPort
 from vidsnap.providers.asr import QwenAsrRecognizer
-from vidsnap.providers.base import AgentModelPort
+from vidsnap.providers.base import AgentModelPort, ProviderIdentity, ProviderProtocol
 from vidsnap.providers.qwen import QwenCompatibleClient
 from vidsnap.recipes.interview import InterviewRecipeResult
 from vidsnap.recipes.render import InterviewRecipeArtifacts, render_interview_recipe
@@ -67,12 +67,16 @@ class InterviewRecipeRunner:
         recognizer: TranscriptionPort | None = None,
         sampler: AdaptiveSampler | None = None,
         agent_model: AgentModelPort | None = None,
+        provider: ProviderProtocol | None = None,
     ) -> None:
+        if provider is not None and agent_model is not None:
+            raise ValueError("provider and agent_model are mutually exclusive")
         self._config = config
         self._media = media
         self._recognizer = recognizer
         self._sampler = sampler
-        self._agent_model = agent_model
+        self._provider = provider
+        self._agent_model: AgentModelPort | None = provider if provider is not None else agent_model
 
     async def run(self, source: VideoSource, output_dir: Path) -> InterviewRecipeRunResult:
         """Execute the recipe for ``source`` into ``output_dir``."""
@@ -80,14 +84,20 @@ class InterviewRecipeRunner:
         try:
             media = self._media or FFmpegMediaPort()
             sampler = self._sampler or AdaptiveSampler()
-            agent_model: AgentModelPort = self._agent_model or QwenCompatibleClient(
-                api_key=config.api_key,
-                model_concurrency=config.model_concurrency,
-                timeout_seconds=config.request_timeout_seconds,
-            )
-            recognizer: TranscriptionPort | None = self._recognizer or SpeechRecognizerAdapter(
-                QwenAsrRecognizer(api_key=config.api_key)
-            )
+            if self._provider is not None:
+                agent_model: AgentModelPort = self._provider
+                recognizer: TranscriptionPort | None = self._recognizer
+                provider_identity = self._provider.identity
+            else:
+                agent_model = self._agent_model or QwenCompatibleClient(
+                    api_key=config.api_key,
+                    model_concurrency=config.model_concurrency,
+                    timeout_seconds=config.request_timeout_seconds,
+                )
+                recognizer = self._recognizer or SpeechRecognizerAdapter(
+                    QwenAsrRecognizer(api_key=config.api_key)
+                )
+                provider_identity = None
             return await self._run_bounded(
                 source,
                 output_dir,
@@ -95,6 +105,7 @@ class InterviewRecipeRunner:
                 sampler=sampler,
                 agent_model=agent_model,
                 recognizer=recognizer,
+                provider_identity=provider_identity,
             )
         except Exception:
             return InterviewRecipeRunResult(
@@ -111,6 +122,7 @@ class InterviewRecipeRunner:
         sampler: AdaptiveSampler,
         agent_model: AgentModelPort,
         recognizer: TranscriptionPort | None,
+        provider_identity: ProviderIdentity | None,
     ) -> InterviewRecipeRunResult:
         """Drive one kernel-owned agentic run inside a private temporary workspace."""
         with tempfile.TemporaryDirectory(prefix="vidsnap-recipe-") as workspace:
@@ -118,7 +130,12 @@ class InterviewRecipeRunner:
             bundle = RunBundle.create(
                 workspace_path / "run",
                 loop_spec=default_loop_spec(),
-                provider_url=TOKEN_PLAN_BASE_URL,
+                provider_url=(
+                    provider_identity.base_url
+                    if provider_identity is not None
+                    else TOKEN_PLAN_BASE_URL
+                ),
+                provider_identity=provider_identity,
             )
             context: RunContext[InterviewRecipeResult, AgentModelPort] = RunContext(
                 source=source,

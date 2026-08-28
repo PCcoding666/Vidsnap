@@ -22,6 +22,7 @@ Build auditable video agents with bounded tools, plugins, and replayable traces.
 
 - [Migration from the legacy SaaS](migration-to-harness.md)
 - [Default tools and data review checklist](default-tools-and-data-review.md)
+- [Providers](providers.md)
 - [Implementation loop state](implementation/2026-08-11-video-harness-loop-state.md)
 - [Harness architecture](superpowers/specs/2026-08-11-video-harness-design.md)
 - [Benchmark status](benchmark-status.md)

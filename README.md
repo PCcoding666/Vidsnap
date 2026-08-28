@@ -148,6 +148,7 @@ result claims. See [benchmark status](docs/benchmark-status.md).
 
 - [Contributing guide](CONTRIBUTING.md)
 - [Documentation landing](docs/README.md)
+- [Provider guide](docs/providers.md)
 - [Migration from the legacy SaaS](docs/migration-to-harness.md)
 - [Default tools and data review checklist](docs/default-tools-and-data-review.md)
 - [Implementation state](docs/implementation/2026-08-11-video-harness-loop-state.md)

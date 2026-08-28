@@ -584,8 +584,8 @@ transcript evidence; live provider/media behavior remains unproven.
 
 ### Commit
 
-`feat: add source-preserving interview recipe` — pending until the main agent
-commits on `codex/opensource-v0.1`.
+`bf635179 feat: add source-preserving interview recipe` — committed on branch
+`codex/opensource-v0.1`.
 
 ### Status
 
@@ -668,7 +668,94 @@ minutes: a statically validated `vidsnap.plugin-project/v1` project contract,
 
 ### Commit
 
-`feat: add plugin developer kit` — pending until the main agent commits on
+`29f7df0c feat: add plugin developer kit` — committed on branch
+`codex/opensource-v0.1`.
+
+### Status
+
+`VERIFIED`
+
+## Phase 6 — Provider Decoupling
+
+### Goal
+
+Decouple the model provider behind stable typed ports: a stable
+runtime-checkable provider protocol with an immutable identity, a reference
+Qwen provider, a deterministic mock provider, allow-listed provider-plugin
+discovery, and application-selected provider injection into the Harness and
+recipes, with no in-run provider switching.
+
+### Changes
+
+- Stable runtime-checkable `ProviderProtocol` and immutable
+  `ProviderIdentity`.
+- The application-selected provider is fixed for a run; no in-run switching.
+- Agent schemas carry no provider, model, or base_url fields.
+- `QwenProvider` reference provider, deterministic `MockProvider`, explicit
+  allow-listed `vidsnap.providers` entry-point discovery, and an async shared
+  provider contract checker.
+- `VideoHarness` and `InterviewRecipeRunner` accept provider injection;
+  conflicting configuration is rejected, and provider mode performs no
+  implicit Qwen ASR (an explicit recognizer is required).
+- Legacy/default Fixed Harness behavior and the default tool order are
+  unchanged.
+- The RunBundle records the provider-injected identity redacted.
+- `BenchmarkProfile` remains locked to `qwen3.8-max`.
+
+### TDD evidence
+
+- Initial collection was RED because the provider modules did not exist yet.
+- Discovery was RED with 3 failures caused by a direct `entry_points` import
+  (repaired, see below).
+- The documentation contract was RED with 10 failures (repaired, see below).
+- Final focused runs: provider tests 59 passed, focused Harness regression
+  19 passed, Interview runner 4 passed.
+
+### Observed problems and repairs
+
+- Discovery failed 3 tests because of a direct `entry_points` import; it was
+  repaired to the runtime `importlib.metadata.entry_points` call.
+- mypy found one redundant cast; it was repaired.
+- The documentation contract had 10 failures; provider documentation and
+  links were added to satisfy it.
+
+### Independent post-implementation review (TDD)
+
+- Four RED failures exposed non-callable or required-argument entry-point
+  factories leaking `TypeError`, and over-broad third-party credential
+  documentation.
+- After the factory repair, one remaining RED documentation assertion
+  exposed a contradictory universal sentence.
+- Repairs: provider discovery wraps those factory violations as `ValueError`
+  naming the entry point, and denied entries are never loaded; the
+  credential-free RunBundle guarantee is scoped to built-in providers, while
+  custom identity authors must exclude credentials.
+
+### Verification evidence (final full gate)
+
+- `ruff format --check`: PASS, 151 files already formatted.
+- `ruff check .`: PASS.
+- `mypy src`: PASS, 71 source files.
+- `python -m pytest -q`: PASS, 548 passed in 10.48s.
+- `python -m build`: PASS.
+- `vidsnap conformance`: PASS, all 12 checks green; default tools and their
+  order unchanged.
+- `python scripts/secret_scan.py`: PASS; `git diff --check`: PASS.
+- Clean wheel (repeated after the review fix): a fresh venv installed the
+  wheel from its site-packages; MockProvider contract, `vidsnap --help`,
+  and `vidsnap conformance` all PASS.
+
+### Remaining risks
+
+- No live provider or model call was made; no benchmark, quality, or
+  performance claim is recorded.
+- Provider plugins are trusted, unsandboxed code.
+- Provider injection does not supply ASR and requires an explicit recognizer.
+- `BenchmarkProfile` stays locked to `qwen3.8-max`.
+
+### Commit
+
+`feat: decouple model providers` — pending until the main agent commits on
 `codex/opensource-v0.1`.
 
 ### Status
@@ -677,13 +764,10 @@ minutes: a statically validated `vidsnap.plugin-project/v1` project contract,
 
 ## Later phases
 
-The entries below are the remaining Phase 6–9 goals; each is `NOT_STARTED`.
+The entries below are the remaining Phase 7–9 goals; each is `NOT_STARTED`.
 Status values are restricted to `NOT_STARTED` / `IN_PROGRESS` / `BLOCKED` /
-`VERIFIED`. Completed Phases 0–5 are recorded above.
+`VERIFIED`. Completed Phases 0–6 are recorded above.
 
-- Phase 6 — Provider Decoupling: stable provider protocol, reference and
-  mock providers, contract test suite; no in-run provider switching.
-  `NOT_STARTED`
 - Phase 7 — Community Surface: CONTRIBUTING/AGENTS/MAINTAINERS/
   CODE_OF_CONDUCT/ROADMAP/SECURITY completion and good first issues.
   `NOT_STARTED`
