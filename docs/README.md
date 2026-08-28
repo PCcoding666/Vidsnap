@@ -30,6 +30,7 @@ Topics: video-ai, agent-harness, multimodal, ai-agents, video-analysis, llm-eval
 - [Migration from the legacy SaaS](migration-to-harness.md) — what was removed and how bounded runs work now.
 - [Default tools and data review](default-tools-and-data-review.md) — what the built-in tools read, their budgets, and what leaves the machine.
 - [Benchmark status](benchmark-status.md) — no live comparison is published; infrastructure validation is not proof that Harness beats Direct, and these pages make no performance claims.
+- [Benchmark methodology](benchmark-methodology.md) — the offline trust metrics, fairness registration rules, and the deterministic `vidsnap benchmark evaluate` command; no results are published.
 - [Benchmark evidence](../README.md#benchmark-evidence) — the benchmark infrastructure exists, but no live benchmark results are published.
 
 ## Current behavior

@@ -845,8 +845,97 @@ Fresh venv with the built wheel installed:
 
 ### Commit
 
-`docs: add community contribution surface` — pending until the main agent
-commits on `codex/opensource-v0.1`.
+`1e870a12 docs: add community contribution surface` — committed on branch
+`codex/opensource-v0.1`.
+
+### Status
+
+`VERIFIED`
+
+## Phase 8 — Benchmark as Trust Layer
+
+### Goal
+
+Benchmark as Trust Layer: honest, reproducible, explainable evaluation of the
+Harness against the Direct baseline with no marketing numbers.
+
+### Changes
+
+- `src/vidsnap/benchmark/trust.py`: typed sealed registration and evaluation
+  — `RegisteredCase`, `RepetitionObservation`, `TrustMeasurement`,
+  `TrustOutcome`, `TrustManifest` (content-sealed `manifest_sha256`),
+  `TrustMetricValue`, `TrustVariantMetrics`, `TrustReport`, and
+  `TrustEvaluationInput`.
+- Exact nine deterministic metrics: temporal grounding (interval IoU mean),
+  citation precision, unsupported claim rate, evidence coverage, tool budget
+  compliance (all three caps), provider regression, latency (median/total/
+  count), cost (median/total/count), replay determinism. Missing
+  observations are unknown, never zero.
+- Fair Direct-vs-Harness gates: the nine fairness fields must match the
+  registered case exactly, coverage must be exactly one outcome for every
+  registered case×variant (duplicates, missing, and extra rejected), used
+  evidence must be a subset of declared evidence, and a stale seal is
+  rejected by recomputation.
+- Deterministic reports: normalized outcome order, sorted-key compact UTF-8
+  canonical JSON, stable `report_sha256` computed over the report content
+  excluding the hash itself.
+- CLI: offline `vidsnap benchmark evaluate INPUT_JSON --output REPORT_JSON`
+  with a strict `manifest`/`outcomes` envelope; output is written only after
+  parsing, validation, and evaluation succeed; failures print one generic
+  redacted error and exit 2; success stdout prints only status and the
+  resolved output path.
+- Documentation: `docs/benchmark-methodology.md` added; `docs/
+  benchmark-status.md`, `docs/README.md`, and the README `Benchmark evidence`
+  section link it and carry the exact no-evidence sentence; `benchmark
+  run/compare` truth unchanged.
+- Tests: `tests/benchmark/test_trust_fairness.py`,
+  `test_trust_metrics.py`, `test_trust_cli.py`,
+  `test_trust_methodology_docs.py`.
+- One type-check-only `tomli` fallback annotation
+  (`src/vidsnap/plugins/project.py`) required by the clean Python 3.12
+  environment running mypy configured for Python 3.10 where `tomli` is not
+  installed; runtime selection unchanged and Python 3.10 support preserved.
+
+### TDD evidence
+
+- CLI RED: 4 failed / 2 passed before the command existed; GREEN: 6 passed.
+- Documentation RED (corrected suite): 8 failed before the docs; GREEN:
+  8 passed. The initial documentation test had a repository-root derivation
+  mistake (`parents[1]` resolving under `tests/`); review rejected it and it
+  was corrected to `parents[2]` before the RED state was accepted.
+- Final focused trust suite: 41 passed.
+
+### Review findings
+
+- No socket, provider, key, or network dependency in evaluation.
+- CLI errors are generic and redacted (exception class name only).
+- `evaluate` validates everything before writing any output file.
+- Missing, extra, and duplicate outcomes are all rejected.
+- Stale manifest seals and undeclared evidence are rejected.
+
+### Final clean gate (verified, `/tmp/vidsnap-phase8-gate.45LfY3/venv`)
+
+- `ruff format --check`: PASS, 157 files already formatted.
+- `ruff check .`: PASS.
+- `mypy src`: PASS, 72 source files.
+- `python -m pytest -q`: PASS, 607 passed (one existing
+  `importlib.abc.Traversable` deprecation warning).
+- `python -m build`: PASS (sdist and wheel).
+- `vidsnap conformance`: PASS, all 12 checks green.
+- `python scripts/secret_scan.py`: PASS.
+- `git diff --check`: PASS.
+
+### Truthful boundaries
+
+- Exact no-evidence sentence: benchmark infrastructure ready; current
+  results are not statistically meaningful.
+- No live provider or model call was made and no benchmark sample result
+  occurred; no quality, superiority, latency, or cost claim is recorded.
+
+### Commit
+
+`feat: add reproducible video-agent eval suite` — pending until the main
+agent commits on `codex/opensource-v0.1`.
 
 ### Status
 
@@ -854,11 +943,9 @@ commits on `codex/opensource-v0.1`.
 
 ## Later phases
 
-The entries below are the remaining Phase 8–9 goals; each is `NOT_STARTED`.
+The entries below are the remaining Phase 9 goals; it is `NOT_STARTED`.
 Status values are restricted to `NOT_STARTED` / `IN_PROGRESS` / `BLOCKED` /
-`VERIFIED`. Completed Phases 0–7 are recorded above.
+`VERIFIED`. Completed Phases 0–8 are recorded above.
 
-- Phase 8 — Benchmark as Trust Layer: honest, reproducible methodology;
-  no marketing numbers. `NOT_STARTED`
 - Phase 9 — v0.1 Release Readiness: clean-environment build/install/smoke
   checklist and release verification. `NOT_STARTED`

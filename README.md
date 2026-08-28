@@ -96,7 +96,17 @@ Five boundaries, each separately documented:
 ## Benchmark evidence
 
 The `vidsnap benchmark` infrastructure exists, but there are no published
-live benchmark results.
+live benchmark results. Status: benchmark infrastructure ready; current results are not statistically meaningful.
+
+Evaluate recorded results fully offline — no key, no provider, no network:
+
+    vidsnap benchmark evaluate INPUT_JSON --output REPORT_JSON
+
+The input envelope uses exactly the strict top-level keys `manifest` and
+`outcomes`; the report is deterministic and carries a stable `report_sha256`.
+The formulas and fairness rules are specified in
+[benchmark methodology](docs/benchmark-methodology.md). No superiority,
+quality, latency, or cost claims are published.
 
 ## CLI and API surfaces
 

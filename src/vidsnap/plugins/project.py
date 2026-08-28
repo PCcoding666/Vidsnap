@@ -23,7 +23,7 @@ from vidsnap.contracts.models import StrictModel
 if sys.version_info >= (3, 11):
     import tomllib
 else:
-    import tomli as tomllib
+    import tomli as tomllib  # type: ignore[import-not-found]
 
 PROJECT_FILE = "vidsnap.plugin.json"
 _OUTPUT_SCHEMA = {"$ref": "vidsnap://schemas/tool-result/v1"}

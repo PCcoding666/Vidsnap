@@ -7,6 +7,7 @@ from typing import Annotated
 
 import typer
 
+from vidsnap.benchmark.trust import TrustEvaluationInput, evaluate_trust
 from vidsnap.config import HarnessConfig
 from vidsnap.contracts import HarnessPolicy, TerminalState, VideoGoal, VideoSource
 from vidsnap.demo import replay_demo_run
@@ -266,6 +267,42 @@ def benchmark_run() -> None:
 def benchmark_compare() -> None:
     """Report whether a measured local Direct-vs-Harness comparison is available."""
     typer.echo(json.dumps(_benchmark_availability("compare"), ensure_ascii=True))
+
+
+@benchmark_app.command("evaluate")
+def benchmark_evaluate(
+    input_json: Annotated[
+        Path,
+        typer.Argument(
+            metavar="INPUT_JSON",
+            help="Trust evaluation input: sealed manifest and paired outcomes.",
+        ),
+    ],
+    output: Annotated[Path, typer.Option("--output", help="Destination trust report JSON.")],
+) -> None:
+    """Evaluate trust metrics offline from one sealed manifest and its outcomes."""
+    try:
+        raw = input_json.read_text(encoding="utf-8")
+        parsed = TrustEvaluationInput.model_validate(json.loads(raw))
+        report = evaluate_trust(parsed.manifest, parsed.outcomes)
+        destination = output.expanduser().resolve()
+        text = json.dumps(
+            report.model_dump(mode="json"),
+            sort_keys=True,
+            ensure_ascii=False,
+            separators=(",", ":"),
+        )
+        destination.write_text(text + "\n", encoding="utf-8")
+    except (ValueError, OSError) as error:
+        typer.echo(f"benchmark evaluate refused: {type(error).__name__}", err=True)
+        raise typer.Exit(code=2) from None
+    typer.echo(
+        json.dumps(
+            {"status": "EVALUATED", "output": str(destination)},
+            ensure_ascii=True,
+            separators=(",", ":"),
+        )
+    )
 
 
 def main() -> None:
