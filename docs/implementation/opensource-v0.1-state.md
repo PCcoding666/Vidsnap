@@ -934,18 +934,52 @@ Harness against the Direct baseline with no marketing numbers.
 
 ### Commit
 
-`feat: add reproducible video-agent eval suite` — pending until the main
-agent commits on `codex/opensource-v0.1`.
+`1ffdf371 feat: add reproducible video-agent eval suite` — committed on branch
+`codex/opensource-v0.1`.
+
+### Status
+
+`COMPLETE`
+
+## Phase 9 — v0.1 Release Readiness
+
+### Goal
+
+Clean-environment build/install/smoke checklist and release verification.
+
+### Pre-documentation evidence (`/tmp/vidsnap-v01-release.i049cZ`)
+
+- sdist and wheel built.
+- Fresh wheel install: import and `vidsnap --help` passed.
+- `vidsnap conformance`: 12 checks.
+- Zero-key demo: 6 steps, 2 tool calls, 11 evidence items, 8/8 claims, and
+  trace export.
+- Copied plugin template: `vidsnap plugin validate` VALID, `vidsnap plugin
+  test` PASS, offline pytest 1 passed.
+- Copied recipe: tests 79 passed.
+
+### Final clean source gate (verified, `/tmp/vidsnap-v01-final.MkYXEI`)
+
+- Editable source install succeeded in a new virtual environment.
+- `ruff format --check`: PASS, 158 files already formatted.
+- `ruff check .`: PASS.
+- `mypy src`: PASS, 72 source files.
+- `python -m pytest -q`: PASS, 612 passed (one existing
+  `importlib.abc.Traversable` deprecation warning).
+- `python -m build`: PASS, sdist and wheel.
+- `vidsnap conformance`: PASS, 12 checks.
+- `python scripts/secret_scan.py`: PASS.
+- `git diff --check`: PASS.
+
+### Pending
+
+- Release commit with planned message `chore: prepare v0.1 release`.
+
+### Truthful boundaries
+
+- No live provider or model call was made and no benchmark or performance
+  claim is recorded.
 
 ### Status
 
 `VERIFIED`
-
-## Later phases
-
-The entries below are the remaining Phase 9 goals; it is `NOT_STARTED`.
-Status values are restricted to `NOT_STARTED` / `IN_PROGRESS` / `BLOCKED` /
-`VERIFIED`. Completed Phases 0–8 are recorded above.
-
-- Phase 9 — v0.1 Release Readiness: clean-environment build/install/smoke
-  checklist and release verification. `NOT_STARTED`

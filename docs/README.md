@@ -32,6 +32,7 @@ Topics: video-ai, agent-harness, multimodal, ai-agents, video-analysis, llm-eval
 - [Benchmark status](benchmark-status.md) — no live comparison is published; infrastructure validation is not proof that Harness beats Direct, and these pages make no performance claims.
 - [Benchmark methodology](benchmark-methodology.md) — the offline trust metrics, fairness registration rules, and the deterministic `vidsnap benchmark evaluate` command; no results are published.
 - [Benchmark evidence](../README.md#benchmark-evidence) — the benchmark infrastructure exists, but no live benchmark results are published.
+- [Release checklist](release-checklist.md) — the reusable release steps and the currently verified release evidence.
 
 ## Current behavior
 

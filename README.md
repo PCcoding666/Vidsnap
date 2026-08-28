@@ -34,7 +34,8 @@ HTML trace to `vidsnap-demo/`.
 
 For a live run against your own local video you need Python >= 3.10, FFmpeg and
 ffprobe on PATH, and a provider key in `VIDSNAP_QWEN_API_KEY` (fallback
-`QWEN_API_KEY`):
+`QWEN_API_KEY`). The commands below run from a source checkout — clone this
+repository and change into it, then install in editable mode:
 
     python -m pip install -e '.[server,dev]'
     vidsnap --help
