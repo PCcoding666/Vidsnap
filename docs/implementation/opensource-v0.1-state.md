@@ -516,8 +516,76 @@ boundary between raw RunBundle ledgers and the projected TraceDocument.
 
 ### Commit
 
-`feat: add portable trace viewer` — pending: held until the main agent
-commits on branch `codex/opensource-v0.1`.
+`325f3cc8 feat: add portable trace viewer` — committed on branch
+`codex/opensource-v0.1`.
+
+### Status
+
+`VERIFIED`
+
+## Phase 4 — Source-Preserving Interview Recipe
+
+### Goal
+
+Add the first real Recipe-layer workflow: `vidsnap recipe interview VIDEO --output-dir OUT`, producing exactly `transcript.zh.md`, `interview.article.md`, `brief.md`, and `trace.html`.
+
+### Changes and boundaries
+
+Input is a local video only; the model configuration is fixed to qwen3.8-max;
+only `transcribe_audio` and `sample_evidence` are model-selectable; the CLI
+exposes no model, prompt, URL, budget, or tool options; the kernel owns probe,
+result, and verifier; the existing Fixed Harness remains unchanged. Editorial
+provenance records speaker, times, transcript evidence, optional frame
+evidence, and the statuses `source`, `faithful_translation`,
+`edited_for_clarity`, `model_commentary`, `unknown`, `unverified`, `partial`.
+Source material and model commentary remain visibly separate. Artifacts are
+created only for verified SUCCEEDED; BLOCKED, PARTIAL, and FAILED create none,
+and the CLI never prints `failure_reason`; a SUCCEEDED run without artifacts
+also exits 1. Hardening recorded: the trace reader rejects malformed recipe
+provenance all-or-none (no partial claims); `edited_for_clarity` is a
+Unicode-aware removal-only edit check that rejects punctuation-only rendered
+text and invented words in any script while accepting removal-only CJK and
+Arabic; the renderer stages all four artifacts in a private staging directory
+and publishes them with one atomic rename, removing only the staging directory
+on late write failure; the CLI treats SUCCEEDED without artifacts as a failure
+(exit 1). Duplicate-ID hardening recorded: recipe models reject duplicate
+segment ids, duplicate block ids across source/commentary blocks, and
+duplicate brief-point ids; the portable trace projection enforces the same
+all-or-none. The trace reader projects valid recipe results generically and
+emits no partial claims for malformed results.
+
+### Deterministic verification
+
+The gates are exactly `dialogue_present`, `dialogue_retained`,
+`timestamps_in_bounds`, `referenced_evidence_exists`, `source_text_supported`,
+`provenance_complete`. Speaker labels and transcript-evidence time spans are
+checked.
+
+### TDD and verification evidence
+
+Trace-projection hardening was RED with 3 failures then GREEN 9 passed; the
+renderer late-write atomicity test was RED with 1 failure then GREEN 8 passed;
+the CLI missing-artifacts test was RED with 1 failure then GREEN 9 passed; the
+editorial Unicode hardening was RED with 2 failures then GREEN (focused
+models+renderer 54 passed); duplicate-ID hardening was RED with 3 model
+failures then GREEN 49 model tests, and RED with 2 trace failures then GREEN
+combined 60 focused tests. Final gate: Ruff 139 files; mypy 67 source files;
+pytest 455 passed; build PASS; conformance all 12 checks green with unchanged
+tools/order; secret scan and diff check passed. Clean-wheel: the wheel was
+imported from its venv site-packages, recipe help PASS, and 8 renderer tests
+passed.
+
+### Truthful limits
+
+No live provider/model call was made and no benchmark or quality/performance
+claim is recorded. Validation is synthetic/offline; preservation is bounded by
+captured ASR/evidence; speaker verification requires explicit labels in
+transcript evidence; live provider/media behavior remains unproven.
+
+### Commit
+
+`feat: add source-preserving interview recipe` — pending until the main agent
+commits on `codex/opensource-v0.1`.
 
 ### Status
 
@@ -525,12 +593,10 @@ commits on branch `codex/opensource-v0.1`.
 
 ## Later phases
 
-The entries below are the remaining Phase 4–9 goals; each is `NOT_STARTED`.
+The entries below are the remaining Phase 5–9 goals; each is `NOT_STARTED`.
 Status values are restricted to `NOT_STARTED` / `IN_PROGRESS` / `BLOCKED` /
-`VERIFIED`. Completed Phase 3 is recorded above.
+`VERIFIED`. Completed Phase 4 is recorded above.
 
-- Phase 4 — Source-Preserving Interview Recipe: first Recipe-layer artifact
-  with structured editorial provenance. `NOT_STARTED`
 - Phase 5 — Plugin Developer Experience: plugin contract docs,
   `vidsnap plugin validate/test`, example template. `NOT_STARTED`
 - Phase 6 — Provider Decoupling: stable provider protocol, reference and

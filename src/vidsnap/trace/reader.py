@@ -69,6 +69,10 @@ _QUERY_SECRET_PARTS = (
     "signature=",
     "credential=",
 )
+_INVALID_RESULT_LIMITATION = "structured result was invalid or unreadable; claims were omitted"
+_RECIPE_SEGMENT_STATUSES = frozenset(
+    {"source", "faithful_translation", "edited_for_clarity", "unknown", "unverified", "partial"}
+)
 
 
 def read_trace(path: Path) -> TraceDocument:
@@ -347,11 +351,15 @@ def _project_claims(path: Path) -> tuple[list[TraceClaim], list[str]]:
     """Project claims from the structured result without inventing review state."""
     result_path = path / "result.json"
     try:
-        result = VideoAnalysisResult.model_validate_json(result_path.read_text(encoding="utf-8"))
+        raw = result_path.read_text(encoding="utf-8")
     except FileNotFoundError:
         return [], []
-    except (OSError, UnicodeDecodeError, ValidationError, ValueError):
-        return [], ["structured result was invalid or unreadable; claims were omitted"]
+    except (OSError, UnicodeDecodeError):
+        return [], [_INVALID_RESULT_LIMITATION]
+    try:
+        result = VideoAnalysisResult.model_validate_json(raw)
+    except ValidationError:
+        return _project_recipe_claims(raw)
     return [
         TraceClaim(
             text=claim.text,
@@ -359,6 +367,136 @@ def _project_claims(path: Path) -> tuple[list[TraceClaim], list[str]]:
         )
         for claim in result.claims
     ], []
+
+
+def _project_recipe_claims(raw: str) -> tuple[list[TraceClaim], list[str]]:
+    """Project the portable recipe shape with plain structural checks only."""
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError:
+        return [], [_INVALID_RESULT_LIMITATION]
+    if not isinstance(data, dict):
+        return [], [_INVALID_RESULT_LIMITATION]
+    segments = data.get("segments")
+    blocks = data.get("blocks")
+    brief_points = data.get("brief_points")
+    if not isinstance(segments, list):
+        return [], [_INVALID_RESULT_LIMITATION]
+    if not isinstance(blocks, list):
+        return [], [_INVALID_RESULT_LIMITATION]
+    if not isinstance(brief_points, list):
+        return [], [_INVALID_RESULT_LIMITATION]
+    segment_ids: set[str] = set()
+    valid_segments: list[dict[str, Any]] = []
+    for segment in segments:
+        if not isinstance(segment, dict):
+            return [], [_INVALID_RESULT_LIMITATION]
+        segment_id = _optional_str(segment.get("id"))
+        if segment_id is None or segment_id in segment_ids:
+            return [], [_INVALID_RESULT_LIMITATION]
+        segment_ids.add(segment_id)
+        valid_segments.append(segment)
+    block_ids: set[str] = set()
+    for block in blocks:
+        if not isinstance(block, dict):
+            return [], [_INVALID_RESULT_LIMITATION]
+        block_id = _optional_str(block.get("id"))
+        if block_id is None or block_id in block_ids:
+            return [], [_INVALID_RESULT_LIMITATION]
+        block_ids.add(block_id)
+        block_type = block.get("type")
+        if block_type == "source":
+            segment_id = _optional_str(block.get("segment_id"))
+            if segment_id is None or segment_id not in segment_ids:
+                return [], [_INVALID_RESULT_LIMITATION]
+        elif block_type != "commentary":
+            return [], [_INVALID_RESULT_LIMITATION]
+    claims: list[TraceClaim] = []
+    for segment in valid_segments:
+        claim = _segment_claim(segment)
+        if claim is None:
+            return [], [_INVALID_RESULT_LIMITATION]
+        claims.append(claim)
+    for block in blocks:
+        if block["type"] == "source":
+            continue
+        claim = _commentary_claim(block)
+        if claim is None:
+            return [], [_INVALID_RESULT_LIMITATION]
+        claims.append(claim)
+    brief_ids: set[str] = set()
+    for point in brief_points:
+        if not isinstance(point, dict):
+            return [], [_INVALID_RESULT_LIMITATION]
+        point_id = _optional_str(point.get("id"))
+        if point_id is None or point_id in brief_ids:
+            return [], [_INVALID_RESULT_LIMITATION]
+        brief_ids.add(point_id)
+        claim = _brief_claim(point)
+        if claim is None:
+            return [], [_INVALID_RESULT_LIMITATION]
+        claims.append(claim)
+    return claims, []
+
+
+def _segment_claim(segment: Any) -> TraceClaim | None:
+    if not isinstance(segment, dict):
+        return None
+    rendered_text = _optional_str(segment.get("rendered_text"))
+    transcript_evidence_id = _optional_str(segment.get("transcript_evidence_id"))
+    editorial_status = _optional_str(segment.get("editorial_status"))
+    if rendered_text is None or transcript_evidence_id is None or editorial_status is None:
+        return None
+    if editorial_status not in _RECIPE_SEGMENT_STATUSES:
+        return None
+    raw_frame_evidence = segment.get("frame_evidence_id")
+    frame_evidence = _optional_str(raw_frame_evidence)
+    if raw_frame_evidence is not None and frame_evidence is None:
+        return None
+    evidence_ids = [transcript_evidence_id]
+    if frame_evidence is not None:
+        evidence_ids.append(frame_evidence)
+    return TraceClaim(
+        text=rendered_text,
+        evidence_ids=evidence_ids,
+        editorial_status=editorial_status,
+    )
+
+
+def _commentary_claim(block: dict[str, Any]) -> TraceClaim | None:
+    text = _optional_str(block.get("text"))
+    editorial_status = _optional_str(block.get("editorial_status"))
+    evidence_ids = _unique_evidence_ids(block.get("evidence_ids"))
+    if text is None or editorial_status is None or evidence_ids is None:
+        return None
+    if editorial_status != "model_commentary":
+        return None
+    return TraceClaim(text=text, evidence_ids=evidence_ids, editorial_status=editorial_status)
+
+
+def _brief_claim(point: Any) -> TraceClaim | None:
+    if not isinstance(point, dict):
+        return None
+    commentary = _optional_str(point.get("commentary"))
+    editorial_status = _optional_str(point.get("editorial_status"))
+    evidence_ids = _unique_evidence_ids(point.get("evidence"))
+    if commentary is None or editorial_status is None or evidence_ids is None:
+        return None
+    if editorial_status != "model_commentary":
+        return None
+    return TraceClaim(text=commentary, evidence_ids=evidence_ids, editorial_status=editorial_status)
+
+
+def _unique_evidence_ids(value: Any) -> list[str] | None:
+    if not isinstance(value, list):
+        return None
+    evidence_ids: list[str] = []
+    for item in value:
+        evidence_id = _optional_str(item)
+        if evidence_id is None or evidence_id in evidence_ids:
+            return None
+        evidence_ids.append(evidence_id)
+    return evidence_ids or None
 
 
 def _load_events(ledger_path: Path) -> list[RunEvent]:

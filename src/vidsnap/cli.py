@@ -8,9 +8,10 @@ from typing import Annotated
 import typer
 
 from vidsnap.config import HarnessConfig
-from vidsnap.contracts import HarnessPolicy, VideoGoal, VideoSource
+from vidsnap.contracts import HarnessPolicy, TerminalState, VideoGoal, VideoSource
 from vidsnap.demo import replay_demo_run
 from vidsnap.harness import VideoHarness
+from vidsnap.recipes.runner import InterviewRecipeRunner
 from vidsnap.trace.export import export_trace
 
 app = typer.Typer(
@@ -22,6 +23,8 @@ benchmark_app = typer.Typer(help="Run fair Direct-vs-Harness benchmarks.")
 app.add_typer(benchmark_app, name="benchmark")
 trace_app = typer.Typer(help="Export truthful local run traces.")
 app.add_typer(trace_app, name="trace")
+recipe_app = typer.Typer(help="Run grounded editorial recipes.")
+app.add_typer(recipe_app, name="recipe")
 
 
 @app.callback()
@@ -75,6 +78,33 @@ def demo(output_dir: Path = typer.Option(Path("vidsnap-demo"), "--output-dir")) 
     typer.echo(f"Final Artifact: {resolved / 'run' / 'result.json'}")
     typer.echo("Trace exported")
     typer.echo(f"Trace: {resolved / 'trace.html'}")
+
+
+@recipe_app.command("interview")
+def recipe_interview(
+    video: Path = typer.Argument(..., exists=True, readable=True),
+    output_dir: Path = typer.Option(..., "--output-dir"),
+) -> None:
+    """Produce the grounded interview record for one local video."""
+    resolved_video = video.expanduser().resolve()
+    resolved_output = output_dir.expanduser().resolve()
+    result = asyncio.run(
+        InterviewRecipeRunner().run(VideoSource(path=resolved_video), resolved_output)
+    )
+    payload: dict[str, object] = {"terminal_state": result.terminal_state.value}
+    artifacts = result.artifacts
+    succeeded = False
+    if result.terminal_state is TerminalState.SUCCEEDED and artifacts is not None:
+        succeeded = True
+        payload["artifacts"] = [
+            str(artifacts.transcript_path),
+            str(artifacts.article_path),
+            str(artifacts.brief_path),
+            str(artifacts.trace_path),
+        ]
+    typer.echo(json.dumps(payload, ensure_ascii=True))
+    if not succeeded:
+        raise typer.Exit(code=1)
 
 
 @app.command()
