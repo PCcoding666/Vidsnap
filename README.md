@@ -4,152 +4,134 @@ Build auditable video agents with bounded tools, plugins, and replayable traces.
 
 Video → Agent → Tools → Evidence → Verified Output → Replayable Trace
 
-VidSnap is a local-first Python runtime for video-analysis agents. It runs bounded
-agent loops over local video files, verifies output against sampled evidence, and
-records a replayable trace of every run.
+VidSnap is a local-first Python runtime for video-analysis agents. Point it at
+one local video and one goal: it runs a bounded agent loop, checks the draft
+output against sampled evidence, and records the whole run as a replayable
+trace. Nothing leaves your machine except model calls to your configured
+provider — no accounts, no job queue, no stored history.
 
 ## What VidSnap does
 
-VidSnap takes one local video plus one goal and produces an auditable agent run:
-
-- Fixed policy uses a deterministic bounded tool order (`transcribe_audio` before
-  `sample_evidence`); Agentic policy lets the model select only from the allow-listed
-  tools under enforced budgets.
-- Draft output must pass verifier gates against the evidence actually collected before it is returned.
-- The run is written to a RunBundle and exportable as an offline HTML trace you can replay step by step.
-
-Nothing leaves your machine except model calls to your configured provider. There are no accounts, no job queue, and no stored history.
+Point VidSnap at one local video and one goal. The core runtime plans a
+bounded agent loop, calls only registered allow-listed tools
+(`transcribe_audio`, `sample_evidence`) under declared budgets, verifies the
+draft output against sampled evidence with the built-in gates
+`claims_are_supported` and `required_sections_covered`, and records every
+event in a RunBundle you can export and replay offline. Unsupported claims
+fail the run instead of being returned.
 
 ## 30-second demo
 
-Replay a packaged synthetic run with no key, account, network request, model call, GPU, or private media:
+No key, account, network request, model call, GPU, or private media needed:
 
     vidsnap demo
 
-The command writes a real RunBundle, verified result, and offline HTML trace to vidsnap-demo/. It is an explicit replay of public synthetic fixtures, not live model generation. Use vidsnap analyze for a credentialed live run against your own local video.
+This replays packaged synthetic fixtures — an explicit replay, not live model
+generation — and writes a real RunBundle, a verified result, and an offline
+HTML trace to `vidsnap-demo/`.
 
 ## Quick Start
 
-Live analyze runs require Python >= 3.10, FFmpeg and ffprobe on PATH, and a local
-provider key in `VIDSNAP_QWEN_API_KEY` (fallback `QWEN_API_KEY`).
+For a live run against your own local video you need Python >= 3.10, FFmpeg and
+ffprobe on PATH, and a provider key in `VIDSNAP_QWEN_API_KEY` (fallback
+`QWEN_API_KEY`):
 
     python -m pip install -e '.[server,dev]'
     vidsnap --help
     vidsnap conformance
-
-A real run:
-
     vidsnap analyze /absolute/path/video.mp4 --goal "Summarize the demonstration"
     vidsnap manifest run/<run-id>
 
-## What is a trace
-
-Every run records a replayable trace: the plan, each tool call with its payload
-fingerprint, the sampled evidence, verifier gates, repair rounds, and the final
-output. Export one finished run as a fully offline HTML page:
-
-    vidsnap trace export RUN_DIR -o trace.html
-
-Open `trace.html` in a browser. Legacy result directories are summary-only and are
-never reconstructed.
-
 ## Why VidSnap exists
 
-Video-agent systems usually fail invisibly: hidden tool calls, unverified summaries,
-runs you cannot reproduce. VidSnap exists to make those things visible and bounded —
-hard budgets, verifier gates, and a trace you can replay offline after the fact.
+Most video tools compress footage and hide their work. VidSnap is
+not another video summarizer: it grounds every output claim in sampled
+evidence, fails runs the evidence cannot support, and records every step
+in a RunBundle you can replay and audit offline.
 
-## Why this is not another video summarizer
+## What is a trace
 
-A conventional summarizer returns text and usually discards the process. VidSnap returns verified
-output plus the chain behind it:
+- Bounded tool calls. The Fixed policy (default) keeps a deterministic tool
+  order (`transcribe_audio` before `sample_evidence`); the Agentic policy lets
+  the model choose only allow-listed tools under enforced budgets.
+- Verifier gates. The output contract `vidsnap.video-analysis/v1` requires
+  sections and claims that pass the built-in gates `claims_are_supported` and
+  `required_sections_covered` against the evidence actually collected.
+  Unsupported claims fail the run instead of being returned.
+- RunBundles. Each run writes a bundle recording the plan, every tool call with
+  its payload fingerprint, the sampled evidence, verifier gates, repair rounds,
+  and the final output.
+- Offline replayable traces. Export a finished run as a fully offline HTML page
+  and replay it step by step in a browser:
 
-- Claims must be supported by sampled evidence, or the run fails instead of answering.
-- The model can only choose allow-listed tools, within bounded order and budget.
-- The run is replayable from its trace, not merely re-runnable.
+      vidsnap trace export RUN_DIR -o trace.html
 
 ## How to extend: Core, Plugin, Recipe
 
-VidSnap has three boundaries, and today they are not equally open. Be clear about
-what exists now:
+Five boundaries, each separately documented:
 
-- Core — public and working: bounded loop, policies, contracts, verifier gates, trace.
-- Plugin — internal and allow-listed today: only `transcribe_audio` and
-  `sample_evidence` are model-visible by default. An external plugin developer
-  experience is coming later.
-- Recipe — does not exist yet: the recipe layer comes later. The only task today is
-  the built-in video-analysis adapter.
-
-## Evidence grounding
-
-The output contract `vidsnap.video-analysis/v1` requires sections and claims that
-pass verifier gates against collected evidence. The built-in gates are
-`claims_are_supported` and `required_sections_covered`; unsupported claims fail the
-run rather than being returned.
-
-## Replayable trace
-
-Run events (plan, tool calls, evidence, verification, repair) are recorded into a
-RunBundle and exported offline as HTML with `vidsnap trace export`. Trace template
-assets ship inside the wheel.
-
-## Plugin boundary
-
-Only allow-listed, dependency-checked plugins run, and a run can never mutate the
-allow-list. Built-in model-visible tools today: `transcribe_audio` and
-`sample_evidence`. There is no public plugin SDK yet — reading the source is the only
-extension path today, and the plugin developer experience is planned for a later phase.
-
-## Recipe boundary
-
-There is no recipe layer today: no recipe concept, registry, CLI surface, or
-documentation. Recipes are planned as packaged task configurations on top of Core
-and will arrive in a later phase.
-
-## Bounded safety
-
-- Fixed policy is the default and keeps `transcribe_audio` before `sample_evidence`
-  (ASR before visual evidence).
-- The Agentic policy is a true iterative loop: the model chooses only allowed tools
-  and receives their results; budgets and verifier gates still bound every run.
-- The main model is fixed to qwen3.8-max, concurrency is capped at two, and keys come
-  only from local environment variables; they are never accepted by the API and never
-  stored in a RunBundle.
-- The API binds to 127.0.0.1, has no accounts/jobs/history/WebSockets, and deletes its
-  temporary RunBundle when the request finishes or is cancelled.
+- Core — the bounded loop, policies, typed contracts, and verifier gates.
+- Plugin — tool plugins load only from a validated, allow-listed registry that a
+  run can never mutate. Only `transcribe_audio` and `sample_evidence` are
+  model-visible by default; `vidsnap plugin validate .` and
+  `vidsnap plugin test .` check a plugin statically and contractually. Start
+  from the [Plugin template](examples/plugin-template/README.md).
+- Recipe — packaged task configurations on top of Core. The source-preserving
+  [Interview recipe](src/vidsnap/recipes/) ships in the package.
+- Provider — every model call goes through a typed provider port; the loop,
+  verifier, and tools never see a raw client, endpoint, or credential. Built-in
+  providers are `QwenProvider` and the offline `MockProvider`. See the
+  [Provider guide](docs/providers.md).
+- Trace — the RunBundle event log and its offline HTML export.
 
 ## Current guarantees
 
-- Plugin trust boundary: only allow-listed, dependency-checked plugins run, and runs can never mutate them.
-- The Agentic policy is a true iterative loop: the model chooses only allowed tools and receives tool results; budgets and verifier gates still bound every run.
-- Fixed remains the default policy and keeps transcribe_audio before sample_evidence (ASR before visual evidence).
-- Legacy result directories are summary-only and are never reconstructed.
-- Infrastructure validation is not evidence that Harness beats Direct; that question requires actual benchmark evidence.
-- These pages make no live result claims.
+- trust boundary
+- the model chooses only allowed tools and receives tool results
+- transcribe_audio before sample_evidence
+- summary-only and are never reconstructed
+- Infrastructure validation is not evidence that Harness beats Direct
+- no live result claims
 
 ## Benchmark evidence
 
-The repo ships `vidsnap benchmark run` and `vidsnap benchmark compare`, but no live
-benchmark has been published. Without a configured key the commands honestly report
-`BLOCKED_LIVE_BENCHMARK`. Infrastructure validation is not evidence that Harness beats
-Direct; that question requires actual benchmark evidence, and these pages make no live
-result claims. See [benchmark status](docs/benchmark-status.md).
+The `vidsnap benchmark` infrastructure exists, but there are no published
+live benchmark results.
 
-## Surfaces
+## CLI and API surfaces
 
-- Python import: `vidsnap`; the SDK exposes the same stateless contract as the API
-  (`VideoHarness().run(...)`).
-- CLI: `vidsnap analyze`, `manifest`, `serve`, `conformance`, `benchmark run`,
-  `benchmark compare`, `trace export`.
-- API (localhost): `GET /health`, `GET /v1/manifest`, `POST /v1/analyze`,
+- CLI: `vidsnap demo`, `analyze`, `manifest`, `serve`, `conformance`,
+  `trace export`, `benchmark run`, `benchmark compare`, `plugin validate`,
+  `plugin test`.
+- Python import: `vidsnap`; `VideoHarness().run(...)` exposes the same
+  stateless contract as the API.
+- Localhost API: `GET /health`, `GET /v1/manifest`, `POST /v1/analyze`,
   `POST /v1/analyze/stream`.
+
+## Honest limitations
+
+- The built-in provider is pinned to one model (qwen3.8-max) with concurrency
+  capped at two. Keys come only from local environment variables, are never
+  accepted by the API, and are never stored in a RunBundle.
+- The API binds to 127.0.0.1 with no accounts, jobs, history, or WebSockets,
+  and deletes its temporary RunBundle when the request finishes or is
+  cancelled.
+- Plugins and providers are trusted code, not sandboxes: they run with your
+  process's privileges, and allow-lists express your selection, not a security
+  boundary. Only install code you trust.
+- Speech recognition is a separate port; without a recognizer, transcription is
+  skipped for the run.
+- No live benchmark has been published. The `vidsnap benchmark` commands exist,
+  and without a configured key they truthfully report
+  `BLOCKED_LIVE_BENCHMARK`. See [benchmark status](docs/benchmark-status.md).
+- The project is early: typed public contracts should be treated as breaking
+  when they change. Check the [Roadmap](ROADMAP.md) for direction and
+  non-goals.
 
 ## Contributing
 
-- [Contributing guide](CONTRIBUTING.md)
-- [Documentation landing](docs/README.md)
-- [Provider guide](docs/providers.md)
-- [Migration from the legacy SaaS](docs/migration-to-harness.md)
-- [Default tools and data review checklist](docs/default-tools-and-data-review.md)
-- [Implementation state](docs/implementation/2026-08-11-video-harness-loop-state.md)
-- [Harness architecture](docs/superpowers/specs/2026-08-11-video-harness-design.md)
+- [Contributing](CONTRIBUTING.md)
+- [Roadmap](ROADMAP.md)
+- [Security](SECURITY.md)
+- [Maintainers](MAINTAINERS.md)
+- [Documentation](docs/README.md)

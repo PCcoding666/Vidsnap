@@ -755,8 +755,98 @@ recipes, with no in-run provider switching.
 
 ### Commit
 
-`feat: decouple model providers` — pending until the main agent commits on
+`031d8da6 feat: decouple model providers` — committed on branch
 `codex/opensource-v0.1`.
+
+### Status
+
+`VERIFIED`
+
+## Phase 7 — Community Surface
+
+### Goal
+
+Turn the repository into a credible open-source contribution target without
+touching runtime behavior: a newcomer README/docs surface, complete community
+governance files, GitHub issue forms and a pull-request template, scoped good
+first issues, and offline community acceptance tests.
+
+### Changes
+
+- `README.md`: newcomer surface completed — the extension heading names the
+  real boundaries (`## How to extend: Core, Plugin, Recipe`), a
+  `Current guarantees` section carries the six contract statements one per
+  line, a `Benchmark evidence` section states that the infrastructure exists
+  but no live benchmark result is published, and the final section is renamed
+  `Contributing`.
+- `docs/README.md`: landing page links the README anchors (quick-start,
+  trace, plugin, recipe, benchmark, contributing), carries one Topics line
+  with the nine discoverability keywords, and adds a `Current behavior`
+  section with the same six statements; tagline and existing links preserved.
+- `CONTRIBUTING.md`, `AGENTS.md`, and `SECURITY.md` updated; `MAINTAINERS.md`,
+  `CODE_OF_CONDUCT.md`, and `ROADMAP.md` added (Now / Next / Later with
+  explicit non-goals).
+- `.github`: the generic task issue template was replaced by issue forms
+  (`bug.yml`, `documentation.yml`, `plugin-proposal.yml`,
+  `provider-compatibility.yml`, `recipe-proposal.yml`);
+  `PULL_REQUEST_TEMPLATE.md` updated.
+- `docs/good-first-issues.md`: scoped starter tasks with acceptance criteria.
+- `tests/test_community_surface.py`: new offline acceptance tests covering
+  the community surface.
+- `tests/test_repository_governance.py`: governance coverage extended for the
+  community surface files.
+- `examples/plugin-template/`: `pyproject.toml` gained a `test` extra
+  (`pytest`, `pytest-asyncio`) and the template README install step became
+  `python -m pip install -e '.[test]'` before the offline pytest command.
+- No runtime code, contracts, recipe or RunBundle formats, or CLI behavior
+  changed.
+
+### TDD evidence
+
+- Initial community-surface RED: 16 failed / 11 passed (acceptance unmet);
+  GREEN after implementing the surfaces: 27 passed.
+- Later focused docs RED: 3 failed; GREEN: 28 passed.
+- Clean stranger audit first attempt: `vidsnap plugin validate` and the
+  installed `vidsnap plugin test` passed, but the offline template pytest
+  failed only because `pytest-asyncio` was not installed (`async def
+  functions are not natively supported`, unknown `pytest.mark.asyncio`).
+- Protection test RED: 1 failed / 7 passed (template `test` extra and
+  `.[test]` install step absent); GREEN: 8 passed after the template fix.
+
+### Clean stranger audit (verified, `/tmp/vidsnap-stranger.q4rd70`)
+
+Fresh venv with the built wheel installed:
+
+- `vidsnap --help` PASS; `vidsnap conformance` PASS; `vidsnap demo` PASS.
+- Plugin template copied and renamed, then installed with `-e '.[test]'`.
+- `vidsnap plugin validate .` → VALID; `vidsnap plugin test .` → PASS;
+  offline pytest → 1 passed.
+
+### Final full clean gate (verified)
+
+- `ruff format --check`: PASS, 152 files already formatted.
+- `ruff check .`: PASS.
+- `mypy src`: PASS, 71 source files.
+- `python -m pytest -q`: PASS, 566 passed.
+- `python -m build`: PASS (sdist and wheel).
+- `vidsnap conformance`: PASS, all 12 checks green.
+- `python scripts/secret_scan.py`: PASS.
+- `git diff --check`: PASS.
+
+### Truthful boundaries
+
+- No live provider or model call was made and no benchmark result was
+  produced. Infrastructure validation is not evidence that Harness beats
+  Direct; no performance or superiority claim is recorded.
+- Community and governance files record intent and process; they add no
+  runtime capability and are enforced only by offline tests.
+- Plugins and providers remain trusted, unsandboxed code; the demo remains an
+  explicit synthetic replay.
+
+### Commit
+
+`docs: add community contribution surface` — pending until the main agent
+commits on `codex/opensource-v0.1`.
 
 ### Status
 
@@ -764,13 +854,10 @@ recipes, with no in-run provider switching.
 
 ## Later phases
 
-The entries below are the remaining Phase 7–9 goals; each is `NOT_STARTED`.
+The entries below are the remaining Phase 8–9 goals; each is `NOT_STARTED`.
 Status values are restricted to `NOT_STARTED` / `IN_PROGRESS` / `BLOCKED` /
-`VERIFIED`. Completed Phases 0–6 are recorded above.
+`VERIFIED`. Completed Phases 0–7 are recorded above.
 
-- Phase 7 — Community Surface: CONTRIBUTING/AGENTS/MAINTAINERS/
-  CODE_OF_CONDUCT/ROADMAP/SECURITY completion and good first issues.
-  `NOT_STARTED`
 - Phase 8 — Benchmark as Trust Layer: honest, reproducible methodology;
   no marketing numbers. `NOT_STARTED`
 - Phase 9 — v0.1 Release Readiness: clean-environment build/install/smoke

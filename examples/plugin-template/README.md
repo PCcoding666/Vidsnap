@@ -53,10 +53,13 @@ lockstep with the installed harness.
 From the template directory:
 
 ```
-python -m pip install -e .
+python -m pip install -e '.[test]'
 ```
 
-Editable install keeps your edits live. `pip show video-metadata` confirms it.
+Editable install keeps your edits live. The `test` extra adds the offline test
+runner (`pytest`, `pytest-asyncio`) used in step 6, so `async def` tests execute
+instead of failing with "async def functions are not natively supported".
+`pip show video-metadata` confirms it.
 
 ## 4. Static validation (2 min)
 

@@ -5,6 +5,9 @@ description = "Deterministic local video metadata tool plugin for VidSnap."
 requires-python = ">=3.10"
 dependencies = ["vidsnap-harness>=0.1.0"]
 
+[project.optional-dependencies]
+test = ["pytest>=8,<9", "pytest-asyncio>=0.23,<1"]
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"

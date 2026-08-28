@@ -1,0 +1,93 @@
+name: Provider compatibility
+description: Report compatibility with a model provider adapter.
+title: "[Provider]: "
+labels: ["compatibility"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting a provider compatibility issue.
+
+        VidSnap Harness integrates with model providers only through typed provider ports (a conforming `ProviderProtocol` may be injected before a run). To make your report actionable, include a minimal reproduction that runs fully offline against a fake transport — no network, no real media, no credentials.
+
+  - type: input
+    id: provider-adapter
+    attributes:
+      label: Provider adapter
+      description: Which provider adapter are you reporting? Name the bundled adapter or describe your own conforming ProviderProtocol implementation.
+      placeholder: e.g. bundled Qwen adapter, custom ProviderProtocol implementation
+    validations:
+      required: true
+
+  - type: input
+    id: package-version
+    attributes:
+      label: Package version
+      description: Installed package version from `python -m pip show vidsnap-harness` (or the commit hash when running from source). Never include API keys, tokens, cookies, or endpoint secrets.
+      placeholder: e.g. 0.1.0, or a source commit hash
+    validations:
+      required: true
+
+  - type: dropdown
+    id: failing-typed-port
+    attributes:
+      label: Failing typed port
+      description: Which typed provider port or guarantee fails?
+      options:
+        - "analyze_evidence (VideoModelPort)"
+        - "plan_tools (ToolPlanningPort)"
+        - "decide_next (AgentModelPort)"
+        - "Identity/discovery"
+        - "Error mapping"
+        - "Other typed provider contract"
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected-behavior
+    attributes:
+      label: Expected behavior
+      description: What should the adapter or typed port do?
+    validations:
+      required: true
+
+  - type: textarea
+    id: observed-behavior
+    attributes:
+      label: Observed behavior
+      description: What actually happens? Sanitize all output — no keys and no raw provider requests/responses.
+      render: shell
+    validations:
+      required: true
+
+  - type: textarea
+    id: offline-reproduction
+    attributes:
+      label: Minimal offline fake-transport reproduction
+      description: A minimal, self-contained script or test that reproduces the issue using a fake in-memory transport. It must run fully offline — no network, no model endpoints, no real media. Paste the fake transport and the failing call inline.
+      placeholder: |
+        # Minimal repro with a fake transport (no network, no credentials)
+      render: python
+    validations:
+      required: true
+
+  - type: textarea
+    id: compatibility-impact
+    attributes:
+      label: Compatibility impact
+      description: What breaks because of this (bounded runs, recipes, trace/replay, conformance checks)?
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: no-secrets-checklist
+    attributes:
+      label: No-secrets and raw-data checklist
+      description: Confirm the report is safe to publish publicly.
+      options:
+        - label: This report contains no API keys, tokens, cookies, credentials, or .env contents.
+          required: true
+        - label: This report contains no raw provider requests/responses, media, datasets, or RunBundle artifacts.
+          required: true
+        - label: The reproduction runs fully offline with a fake transport — no network and no model calls.
+          required: true

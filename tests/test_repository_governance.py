@@ -138,7 +138,7 @@ def test_project_state_tracks_stack_001_as_current_task_contract() -> None:
     assert "no security-setting" in lowered
 
 
-def test_protocol_docs_record_batch_a_review_corrections() -> None:
+def test_project_state_records_batch_a_review_corrections() -> None:
     state = _read("PROJECT_STATE.md")
 
     assert "no live GitHub or provider query was performed" not in state
@@ -150,56 +150,31 @@ def test_protocol_docs_record_batch_a_review_corrections() -> None:
     assert "https://github.com/PCcoding666/Vidsnap/pull/10" in state
     assert "already closed" not in state
 
-    contributing = _read("CONTRIBUTING.md")
 
-    assert "maintainer-run agentic changes" in contributing
-    assert "human contributors may implement directly" in contributing
-    assert "Task Contract" in contributing
-    assert "user merge gate" in contributing
+def test_public_issue_forms_do_not_expose_internal_task_contract() -> None:
+    template_dir = ROOT / ".github" / "ISSUE_TEMPLATE"
+    assert not (template_dir / "task.yml").exists()
 
-
-def test_task_issue_form_requires_every_contract_field() -> None:
-    form = _read(".github/ISSUE_TEMPLATE/task.yml")
-    field_ids = (
-        "objective",
-        "non_goals",
-        "acceptance_evidence",
-        "boundaries",
-        "roles",
-        "next_human_gate",
-    )
-    for index, field_id in enumerate(field_ids):
-        block = form.split(f"id: {field_id}", 1)[1]
-        if index + 1 < len(field_ids):
-            block = block.split(f"id: {field_ids[index + 1]}", 1)[0]
-        assert "required: true" in block
-    assert 'labels: ["task-contract"]' not in form
     assert "blank_issues_enabled: false" in _read(".github/ISSUE_TEMPLATE/config.yml")
 
+    forms = [
+        path.read_text(encoding="utf-8")
+        for path in sorted(template_dir.glob("*.yml"))
+        if path.name != "config.yml"
+    ]
+    combined = "\n".join(forms).lower()
+    for forbidden in ("project_state", "task contract", "task card"):
+        assert forbidden not in combined
 
-def test_pull_request_template_preserves_evidence_and_human_gates() -> None:
+
+def test_pull_request_template_is_contributor_facing() -> None:
     template = _read(".github/PULL_REQUEST_TEMPLATE.md")
-    for required in (
-        "## Task Contract",
-        "Task ID",
-        "## Acceptance Evidence",
-        "## Authority and Data Boundaries",
-        "## Verification",
-        "No live benchmark",
-        "does not authorize merge",
-    ):
-        assert required in template
-    for ci_gate in (
-        "mypy src",
-        "python -m build",
-        "vidsnap conformance",
-        "scripts/secret_scan.py",
-        "git diff --check",
-    ):
-        assert ci_gate in template
-    assert "unless explicitly authorized" in template
-    assert "outside the repository" in template
-    assert "not committed" in template
+    for heading in ("# Summary", "## Tests", "## Security", "## Compatibility"):
+        assert heading in template
+
+    lowered = template.lower()
+    for forbidden in ("codex", "qoder", "project_state", "task contract", "task card"):
+        assert forbidden not in lowered
 
 
 def test_ci_runs_for_pull_requests_against_any_base() -> None:

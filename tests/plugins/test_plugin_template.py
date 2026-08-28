@@ -5,6 +5,7 @@ from __future__ import annotations
 import ast
 import importlib
 import json
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -126,6 +127,34 @@ def test_validate_plugin_project_succeeds_with_single_video_metadata_entry() -> 
     pyproject_text = (TEMPLATE_ROOT / "pyproject.toml").read_text(encoding="utf-8")
     assert pyproject_text.count("video-metadata = ") == 1
     assert 'video-metadata = "video_metadata.plugin:TOOL"' in pyproject_text
+
+
+def test_template_test_extra_covers_offline_pytest_requirements() -> None:
+    pyproject = (TEMPLATE_ROOT / "pyproject.toml").read_text(encoding="utf-8")
+    start = pyproject.find("[project.optional-dependencies]")
+    assert start != -1, "template pyproject.toml must declare [project.optional-dependencies]"
+    rest = pyproject[start + len("[project.optional-dependencies]") :]
+    next_table = re.search(r"^\[", rest, re.MULTILINE)
+    table = rest if next_table is None else rest[: next_table.start()]
+    test_extra = re.search(r"^test\s*=\s*\[(.*?)\]", table, re.DOTALL | re.MULTILINE)
+    assert test_extra is not None, "template pyproject.toml must expose a 'test' extra"
+    names: set[str] = set()
+    for spec in re.findall(r"[\"']([^\"']+)[\"']", test_extra.group(1)):
+        matched = re.match(r"[A-Za-z0-9][A-Za-z0-9._-]*", spec)
+        if matched is not None:
+            names.add(matched.group(0).lower())
+    assert {"pytest", "pytest-asyncio"} <= names, (
+        f"template 'test' extra must include pytest and pytest-asyncio, found {sorted(names)}"
+    )
+
+    readme = (TEMPLATE_ROOT / "README.md").read_text(encoding="utf-8")
+    install = re.search(r"^python -m pip install[^\n]*\[test\]", readme, re.MULTILINE)
+    assert install is not None, "template README install command must use the 'test' extra"
+    pytest_command = readme.find("python -m pytest")
+    assert pytest_command != -1, "template README must document the offline pytest command"
+    assert install.start() < pytest_command, (
+        "template README must install the 'test' extra before the offline pytest command"
+    )
 
 
 def test_example_run_files_are_valid_json_objects() -> None:

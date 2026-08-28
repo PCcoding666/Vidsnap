@@ -2,41 +2,41 @@
 
 Build auditable video agents with bounded tools, plugins, and replayable traces.
 
+Topics: video-ai, agent-harness, multimodal, ai-agents, video-analysis, llm-evaluation, python, observability, agent-runtime.
+
 ## Start here
 
 - [Quick Start](../README.md#quick-start) — install, `vidsnap --help`, `vidsnap conformance`, and a first real run.
-- [What is a trace](../README.md#what-is-a-trace) — replay a run offline with `vidsnap trace export`.
-- [How to extend](../README.md#how-to-extend-core-plugin-recipe) — what Core, Plugin, and Recipe mean today.
+- [Traces and replay](../README.md#what-is-a-trace) — export a finished run and replay it offline with `vidsnap trace export`.
+- [Harness architecture](superpowers/specs/2026-08-11-video-harness-design.md) — the bounded-loop design: run lifecycle, RunBundle, and verifier gates.
 
-## Reference
+## Extend
 
-- [Plugin boundary](../README.md#plugin-boundary) — internal and allow-listed; only `transcribe_audio` and `sample_evidence` are model-visible by default. No public plugin SDK yet.
-- [Recipe boundary](../README.md#recipe-boundary) — no recipe layer exists yet; it comes in a later phase.
-- [Benchmark evidence](../README.md#benchmark-evidence) — no live benchmark has been published; these pages make no performance claims.
+- [Plugin and recipe extension](../README.md#how-to-extend-core-plugin-recipe) — the extension boundaries in the main README.
+- [Plugin template](../examples/plugin-template/README.md) — build and test a tool plugin from a working example.
+- [Interview recipe](../src/vidsnap/recipes/) — source-preserving recipe that keeps original media references intact end to end.
+- [Provider guide](providers.md) — typed provider ports, the fixed model, and local-only key handling.
 
 ## Project
 
-- [Contributing](../README.md#contributing) and the main [README](../README.md).
+- [Contributing](../CONTRIBUTING.md) — setup, quality gates, and how to submit changes.
+- [Contributing and project links](../README.md#contributing) — the README's contributing section.
+- [Roadmap](../ROADMAP.md) — Now / Next / Later priorities and explicit non-goals.
+- [Security](../SECURITY.md) — supported versions and private vulnerability reporting.
+- [Good first issues](good-first-issues.md) — scoped starter tasks with acceptance criteria.
 
-## Detailed docs
+## Reference
 
-- [Migration from the legacy SaaS](migration-to-harness.md)
-- [Default tools and data review checklist](default-tools-and-data-review.md)
-- [Providers](providers.md)
-- [Implementation loop state](implementation/2026-08-11-video-harness-loop-state.md)
-- [Harness architecture](superpowers/specs/2026-08-11-video-harness-design.md)
-- [Benchmark status](benchmark-status.md)
+- [Migration from the legacy SaaS](migration-to-harness.md) — what was removed and how bounded runs work now.
+- [Default tools and data review](default-tools-and-data-review.md) — what the built-in tools read, their budgets, and what leaves the machine.
+- [Benchmark status](benchmark-status.md) — no live comparison is published; infrastructure validation is not proof that Harness beats Direct, and these pages make no performance claims.
+- [Benchmark evidence](../README.md#benchmark-evidence) — the benchmark infrastructure exists, but no live benchmark results are published.
 
-## Current guarantees
+## Current behavior
 
-- Plugin trust boundary: only allow-listed, dependency-checked plugins run, and runs can never mutate them.
-- The Agentic policy is a true iterative loop: the model chooses only allowed tools and receives tool results; budgets and verifier gates still bound every run.
-- Fixed remains the default policy and keeps transcribe_audio before sample_evidence (ASR before visual evidence).
-- Legacy result directories are summary-only and are never reconstructed.
-- Infrastructure validation is not evidence that Harness beats Direct; that question requires actual benchmark evidence.
-- These pages make no live result claims.
-
-## Discoverability
-
-Topics: video-ai, agent-harness, multimodal, ai-agents, video-analysis,
-llm-evaluation, python, observability, agent-runtime.
+- trust boundary
+- the model chooses only allowed tools and receives tool results
+- transcribe_audio before sample_evidence
+- summary-only and are never reconstructed
+- Infrastructure validation is not evidence that Harness beats Direct
+- no live result claims
