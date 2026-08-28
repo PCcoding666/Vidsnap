@@ -11,6 +11,8 @@ from vidsnap.config import HarnessConfig
 from vidsnap.contracts import HarnessPolicy, TerminalState, VideoGoal, VideoSource
 from vidsnap.demo import replay_demo_run
 from vidsnap.harness import VideoHarness
+from vidsnap.plugins import PluginRegistry, ToolPlugin, discovery
+from vidsnap.plugins.project import validate_plugin_project
 from vidsnap.recipes.runner import InterviewRecipeRunner
 from vidsnap.trace.export import export_trace
 
@@ -25,6 +27,81 @@ trace_app = typer.Typer(help="Export truthful local run traces.")
 app.add_typer(trace_app, name="trace")
 recipe_app = typer.Typer(help="Run grounded editorial recipes.")
 app.add_typer(recipe_app, name="recipe")
+plugin_app = typer.Typer(help="Validate and test local plugin projects.")
+app.add_typer(plugin_app, name="plugin")
+
+
+def _plugin_error() -> None:
+    """Print one generic, redacted plugin CLI result and exit with code 2."""
+    typer.echo(json.dumps({"status": "ERROR"}, ensure_ascii=True, separators=(",", ":")))
+    raise typer.Exit(code=2) from None
+
+
+def _normalize_json_schema(node: object) -> object:
+    """Return a semantic copy of a JSON schema for equality comparison.
+
+    Recursively drops ``title`` and ``description`` keys from mappings,
+    recursively normalizes list items, and sorts only ``required`` name
+    lists; a missing ``required`` list on an object schema is treated as
+    empty. Every other value is preserved as-is.
+    """
+    if isinstance(node, dict):
+        normalized: dict[str, object] = {}
+        for key, value in node.items():
+            if key in ("title", "description"):
+                continue
+            if key == "required" and isinstance(value, list):
+                normalized[key] = sorted(value)
+                continue
+            normalized[key] = _normalize_json_schema(value)
+        if normalized.get("type") == "object" and "required" not in normalized:
+            normalized["required"] = []
+        return normalized
+    if isinstance(node, list):
+        return [_normalize_json_schema(item) for item in node]
+    return node
+
+
+@plugin_app.command("validate")
+def plugin_validate(project: Path = typer.Argument(...)) -> None:
+    """Statically validate one local plugin project without any discovery."""
+    try:
+        validate_plugin_project(project)
+    except Exception:
+        _plugin_error()
+    typer.echo(json.dumps({"status": "VALID"}, ensure_ascii=True, separators=(",", ":")))
+
+
+@plugin_app.command("test")
+def plugin_test(project: Path = typer.Argument(...)) -> None:
+    """Validate statically, resolve the one allow-listed plugin, never execute it."""
+    try:
+        contract = validate_plugin_project(project)
+        discovered = discovery.discover_allowed_plugins([contract.id])
+        if len(discovered) != 1:
+            raise ValueError("plugin discovery must return exactly one plugin")
+        plugin = discovered[0]
+        if not isinstance(plugin, ToolPlugin):
+            raise ValueError("discovered plugin must satisfy the ToolPlugin protocol")
+        manifest = plugin.manifest
+        if (
+            manifest.id != contract.id
+            or manifest.version != contract.version
+            or manifest.kind != contract.kind
+            or manifest.provides != contract.capabilities.provides
+            or manifest.requires != contract.capabilities.requires
+        ):
+            raise ValueError("plugin manifest does not match the project contract")
+        declared_schema = _normalize_json_schema(contract.input_schema)
+        produced_schema = _normalize_json_schema(plugin.input_model.model_json_schema())
+        if declared_schema != produced_schema:
+            raise ValueError("plugin input_model schema does not match the project contract")
+        registry = PluginRegistry([contract.id])
+        registry.register(plugin)
+        registry.resolve()
+    except Exception:
+        _plugin_error()
+    typer.echo(json.dumps({"status": "PASS"}, ensure_ascii=True, separators=(",", ":")))
 
 
 @app.callback()

@@ -591,14 +591,96 @@ commits on `codex/opensource-v0.1`.
 
 `VERIFIED`
 
+## Phase 5 — Plugin Developer Experience
+
+### Goal
+
+A developer installs and verifies their first VidSnap tool plugin in 30
+minutes: a statically validated `vidsnap.plugin-project/v1` project contract,
+`vidsnap plugin validate/test` CLI commands, and a complete example template.
+
+### Changes
+
+- Static project contract `vidsnap.plugin-project/v1`
+  (`src/vidsnap/plugins/project.py`): a strict, closed manifest covering id,
+  name, version, capabilities (provides/requires), `input_schema`,
+  `output_schema` (fixed `vidsnap://schemas/tool-result/v1` reference),
+  `permissions`, `budget_impact`, and the entry point; validation reads
+  `vidsnap.plugin.json` and the real
+  `[project.entry-points."vidsnap.plugins"]` TOML from `pyproject.toml` and
+  never imports or executes plugin code.
+- CLI (`src/vidsnap/cli.py`): `vidsnap plugin validate .` checks the static
+  contract only; `vidsnap plugin test .` performs the same static validation,
+  then resolves the exactly-one allow-listed plugin through entry-point
+  discovery: it imports the entry-point module, calls the zero-argument
+  factory, and checks the returned object satisfies the `ToolPlugin`
+  protocol, the manifest/contract match, and semantic input-schema equality.
+  It never calls `ToolPlugin.execute`.
+- `examples/plugin-template/`: a complete deterministic, zero-model-call
+  `video_metadata` tool plugin that reads only the harness-computed
+  `MediaProbe` and returns seven metadata fields; ships `pyproject.toml`,
+  `vidsnap.plugin.json`, the plugin package, an offline pytest, and an
+  example run (`probe.json`, `expected_result.json`) whose structured
+  content must exactly equal `result.model_dump(mode="json")`. The README
+  documents the 30-minute flow and the trust model.
+- Trust model recorded: installed plugin Python is trusted code, not a
+  sandbox, and runs with host-process permissions; the Agent still invokes
+  tools only through a typed, bounded `ToolExecutionContext`, and the static
+  `permissions`/`budget_impact` declarations cannot dynamically expand
+  harness policy or budget.
+
+### TDD evidence
+
+- Contract, CLI, and template behaviors were driven RED→GREEN; an
+  independent review pass hardened `additionalProperties: false`
+  enforcement, `required` completeness checks, real TOML parsing, and the
+  semantic schema comparison (title/description-stripped, sorted
+  `required` lists).
+- The external Gate first failed on an equivalence gap: a contract schema
+  `{type: object, properties: {}, required: [], additionalProperties: false}`
+  versus Pydantic's semantically identical empty `StrictModel` schema that
+  omits `required` was misreported as ERROR. A new unit test was RED
+  (1 failed); a minimal normalization in `_normalize_json_schema` made a
+  missing `required` list equivalent to an empty one on object schemas only
+  (non-empty `required` and all other fields still compared exactly), then
+  GREEN (1 passed). Final focused plugin tests: 65 passed.
+- The release checklist Gate found the global `*.json` ignore rule hiding the
+  three public template JSONs (`vidsnap.plugin.json`, `example_run/probe.json`,
+  `expected_result.json`); a new release regression test was RED (1 failed),
+  three exact `.gitignore` unignores were added with no other JSON rule
+  relaxed, then GREEN (1 passed).
+
+### Verification evidence (final full gate)
+
+- `ruff format --check`: PASS, 147 files already formatted; `ruff check .`: PASS.
+- `mypy src`: PASS, 68 source files.
+- `python -m pytest -q`: PASS, 520 passed.
+- Template offline pytest: 1 passed.
+- `python -m build`: PASS (sdist and wheel).
+- `vidsnap conformance`: PASS, all 12 checks green; default model-visible
+  tools and their order unchanged.
+- `python scripts/secret_scan.py`: PASS; `git diff --check`: PASS.
+- Out-of-repository Gate `/tmp/vidsnap-plugin-gate.8hQS3x`: fresh venv with
+  the core wheel plus the copied template plugin installed; `vidsnap plugin
+  validate .`, `vidsnap plugin test .`, discovery of the installed plugin,
+  and the fixture invoke matching `expected_result.json` — all PASS.
+- No live model/provider call was made and no benchmark was run.
+
+### Commit
+
+`feat: add plugin developer kit` — pending until the main agent commits on
+`codex/opensource-v0.1`.
+
+### Status
+
+`VERIFIED`
+
 ## Later phases
 
-The entries below are the remaining Phase 5–9 goals; each is `NOT_STARTED`.
+The entries below are the remaining Phase 6–9 goals; each is `NOT_STARTED`.
 Status values are restricted to `NOT_STARTED` / `IN_PROGRESS` / `BLOCKED` /
-`VERIFIED`. Completed Phase 4 is recorded above.
+`VERIFIED`. Completed Phases 0–5 are recorded above.
 
-- Phase 5 — Plugin Developer Experience: plugin contract docs,
-  `vidsnap plugin validate/test`, example template. `NOT_STARTED`
 - Phase 6 — Provider Decoupling: stable provider protocol, reference and
   mock providers, contract test suite; no in-run provider switching.
   `NOT_STARTED`

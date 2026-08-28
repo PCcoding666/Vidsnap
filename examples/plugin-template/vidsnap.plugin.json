@@ -1,0 +1,28 @@
+{
+  "api_version": "vidsnap.plugin-project/v1",
+  "id": "video-metadata",
+  "name": "Video Metadata",
+  "version": "0.1.0",
+  "kind": "tool",
+  "capabilities": {
+    "provides": ["video_metadata"],
+    "requires": []
+  },
+  "input_schema": {
+    "type": "object",
+    "properties": {},
+    "required": [],
+    "additionalProperties": false
+  },
+  "output_schema": {
+    "$ref": "vidsnap://schemas/tool-result/v1"
+  },
+  "permissions": ["read_media_metadata"],
+  "budget_impact": {
+    "model_calls": 0,
+    "provider_calls": 0,
+    "tool_calls": 1,
+    "evidence_frames": 0
+  },
+  "entry_point": "video-metadata"
+}

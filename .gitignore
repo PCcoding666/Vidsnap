@@ -16,6 +16,13 @@
 !src/vidsnap/contracts/schemas/video_analysis.v1.json
 !src/vidsnap/prompts/*.json
 
+# Publishable plugin-template source assets: the validated project manifest
+# and its example run fixtures. Ordered unignores (last matching pattern
+# wins) for these exact paths only.
+!examples/plugin-template/vidsnap.plugin.json
+!examples/plugin-template/example_run/probe.json
+!examples/plugin-template/example_run/expected_result.json
+
 # Virtual environments
 venv/
 .venv/
