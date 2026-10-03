@@ -51,6 +51,7 @@ class RunContext(Generic[OutputT, ModelT]):
     model_calls: int = 0
     tool_calls: int = 0
     iterations: int = 0
+    last_agent_decision_event_id: str | None = None
     trace: TraceRecorder = field(init=False, repr=False)
     _allocated_ids: set[str] = field(default_factory=set, repr=False)
     _id_counters: dict[str, int] = field(default_factory=dict, repr=False)

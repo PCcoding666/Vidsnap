@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Eval Studio</title>
+<style>
+:root {
+  color-scheme: light dark;
+  --bg: #0f1420;
+  --panel: #1a2233;
+  --panel-2: #232e45;
+  --text: #e8ecf4;
+  --muted: #9aa7bd;
+  --line: #35415c;
+  --accent: #5b8cff;
+  --ok: #2e9e5b;
+  --bad: #c94f4f;
+  --warn: #b98a2e;
+  --lane-input: #3d6bd8;
+  --lane-model: #7a5bd8;
+  --lane-tools: #2e9e8f;
+  --lane-verifier: #b98a2e;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+header.studio-header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 12px 20px;
+  border-bottom: 1px solid var(--line);
+  background: var(--panel);
+}
+header.studio-header h1 { font-size: 16px; margin: 0; }
+#studio-title { color: var(--muted); font-weight: 400; }
+[role="tablist"] { display: flex; gap: 4px; padding: 8px 12px 0; }
+[role="tab"] {
+  appearance: none;
+  border: 1px solid var(--line);
+  border-bottom: none;
+  border-radius: 8px 8px 0 0;
+  background: var(--panel);
+  color: var(--muted);
+  padding: 8px 14px;
+  cursor: pointer;
+  font: inherit;
+}
+[role="tab"][aria-selected="true"] {
+  background: var(--panel-2);
+  color: var(--text);
+  border-color: var(--accent);
+}
+[role="tabpanel"] { padding: 16px 20px; border-top: 1px solid var(--line); }
+[role="tabpanel"][hidden] { display: none; }
+[hidden] { display: none !important; }
+:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+button { font: inherit; color: inherit; }
+.matrix-controls { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+select {
+  background: var(--panel-2);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 6px 10px;
+  font: inherit;
+}
+table.matrix { border-collapse: collapse; width: 100%; }
+table.matrix th, table.matrix td {
+  border: 1px solid var(--line);
+  padding: 6px 8px;
+  text-align: left;
+  vertical-align: top;
+}
+table.matrix th { background: var(--panel); color: var(--muted); }
+button.cell {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 2px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: var(--panel-2);
+  cursor: pointer;
+}
+button.cell .cell-status { font-size: 12px; color: var(--muted); }
+button.cell[data-status="passed"] { border-color: var(--ok); }
+button.cell[data-status="failed"] { border-color: var(--bad); }
+.status-passed { color: var(--ok); }
+.status-failed { color: var(--bad); }
+.not-recorded { color: var(--warn); font-style: italic; }
+.synthetic-badge {
+  display: inline-block;
+  background: var(--warn);
+  color: #14100a;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  border-radius: 4px;
+  padding: 2px 8px;
+  font-size: 12px;
+}
+.version-list, .approach-cards { display: grid; gap: 12px; }
+.version-card, .approach-card {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel);
+  padding: 12px 16px;
+}
+.version-card h3, .approach-card h3 { margin: 0 0 6px; }
+.diff-nav, .trial-nav { display: flex; gap: 8px; align-items: center; margin: 8px 0; }
+.diff-nav button, .trial-nav button {
+  background: var(--panel-2);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 6px 10px;
+  cursor: pointer;
+}
+.drawer {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel);
+  padding: 12px 16px;
+  margin-top: 12px;
+}
+.trial-list { list-style: none; margin: 8px 0; padding: 0; display: grid; gap: 6px; }
+.trial-list button {
+  width: 100%;
+  text-align: left;
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: var(--panel-2);
+  cursor: pointer;
+}
+.dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(4, 8, 16, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10;
+}
+.dialog {
+  width: min(1040px, 94vw);
+  max-height: 90vh;
+  overflow: auto;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 16px 20px;
+}
+.panel {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel-2);
+  padding: 10px 14px;
+  margin: 10px 0;
+}
+.panel h3 { margin: 0 0 8px; font-size: 13px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
+.claim, .evidence-item { border-left: 3px solid var(--accent); padding: 4px 10px; margin: 6px 0; }
+.timeline { display: grid; gap: 4px; margin: 8px 0; }
+.timeline-lane { display: grid; grid-template-columns: 84px 1fr; align-items: center; gap: 8px; }
+.lane-label { font-size: 12px; color: var(--muted); text-align: right; }
+.lane-track {
+  position: relative;
+  height: 30px;
+  border-radius: 6px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  overflow: hidden;
+}
+.event-block {
+  position: absolute;
+  top: 3px;
+  bottom: 3px;
+  min-width: 10px;
+  border-radius: 4px;
+  border: 1px solid rgba(0, 0, 0, 0.35);
+  color: #fff;
+  font-size: 11px;
+  line-height: 22px;
+  padding: 0 6px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.event-block.lane-input { background: var(--lane-input); }
+.event-block.lane-model { background: var(--lane-model); }
+.event-block.lane-tools { background: var(--lane-tools); }
+.event-block.lane-verifier { background: var(--lane-verifier); }
+.event-block.status-failed { outline: 2px solid var(--bad); }
+.event-list { width: 100%; border-collapse: collapse; font-size: 12px; }
+.event-list th, .event-list td { border: 1px solid var(--line); padding: 4px 8px; text-align: left; }
+table.eval-compare { border-collapse: collapse; width: 100%; }
+table.eval-compare th, table.eval-compare td { border: 1px solid var(--line); padding: 6px 10px; text-align: left; }
+table.eval-compare th { background: var(--panel); color: var(--muted); }
+.constraints { margin: 8px 0; padding-left: 20px; }
+.diff-body { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.diff-side { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; background: var(--panel-2); }
+kbd.hint { color: var(--muted); font-size: 12px; }
+</style>
+</head>
+<body>
+<header class="studio-header">
+  <h1>Eval Studio</h1>
+  <span id="studio-title"></span>
+  <nav aria-label="Workspaces">
+    <div role="tablist" aria-label="Workspaces" id="workspace-tablist">
+      <button type="button" role="tab" id="ws-tab-iteration" aria-controls="ws-panel-iteration" aria-selected="true" data-workspace-tab="iteration">Iteration</button>
+      <button type="button" role="tab" id="ws-tab-exploration" aria-controls="ws-panel-exploration" aria-selected="false" tabindex="-1" data-workspace-tab="exploration">Exploration</button>
+    </div>
+  </nav>
+</header>
+<main>
+  <noscript><p class="not-recorded">JavaScript is disabled; the recorded workspace data is embedded in this file but cannot be rendered. 未记录内容不会被补充。</p></noscript>
+  <section id="ws-panel-iteration" role="tabpanel" aria-labelledby="ws-tab-iteration" data-workspace-panel="iteration">
+    <div role="tablist" aria-label="Iteration workspace" id="iteration-tablist">
+      <button type="button" role="tab" id="it-tab-prompt" aria-controls="it-panel-prompt" aria-selected="true">Prompt</button>
+      <button type="button" role="tab" id="it-tab-evals" aria-controls="it-panel-evals" aria-selected="false" tabindex="-1">Evals</button>
+      <button type="button" role="tab" id="it-tab-heldout" aria-controls="it-panel-heldout" aria-selected="false" tabindex="-1">Held-out</button>
+    </div>
+    <div id="it-panel-prompt" role="tabpanel" aria-labelledby="it-tab-prompt">
+      <div id="version-list" class="version-list"></div>
+      <div class="diff-nav">
+        <button type="button" data-action="diff-prev" aria-label="Previous version diff">&#9664; Prev</button>
+        <span id="diff-label"></span>
+        <button type="button" data-action="diff-next" aria-label="Next version diff">Next &#9654;</button>
+        <button type="button" data-action="open-diff">View diff</button>
+      </div>
+    </div>
+    <div id="it-panel-evals" role="tabpanel" aria-labelledby="it-tab-evals" hidden>
+      <div class="matrix-controls">
+        <label for="version-select">Version</label>
+        <select id="version-select" aria-label="Prompt version"></select>
+        <kbd class="hint">Arrow keys move between tabs; Esc closes dialogs.</kbd>
+      </div>
+      <div id="eval-matrix" data-matrix="eval"></div>
+    </div>
+    <div id="it-panel-heldout" role="tabpanel" aria-labelledby="it-tab-heldout" hidden>
+      <div id="heldout-matrix" data-matrix="held-out"></div>
+    </div>
+  </section>
+  <section id="ws-panel-exploration" role="tabpanel" aria-labelledby="ws-tab-exploration" data-workspace-panel="exploration" hidden>
+    <div role="tablist" aria-label="Exploration workspace" id="exploration-tablist">
+      <button type="button" role="tab" id="ex-tab-problem" aria-controls="ex-panel-problem" aria-selected="true">Problem</button>
+      <button type="button" role="tab" id="ex-tab-approaches" aria-controls="ex-panel-approaches" aria-selected="false" tabindex="-1">Approaches</button>
+      <button type="button" role="tab" id="ex-tab-eval" aria-controls="ex-panel-eval" aria-selected="false" tabindex="-1">Eval</button>
+    </div>
+    <div id="ex-panel-problem" role="tabpanel" aria-labelledby="ex-tab-problem">
+      <div id="problem-statement"></div>
+    </div>
+    <div id="ex-panel-approaches" role="tabpanel" aria-labelledby="ex-tab-approaches" hidden>
+      <div id="approach-cards" class="approach-cards"></div>
+    </div>
+    <div id="ex-panel-eval" role="tabpanel" aria-labelledby="ex-tab-eval" hidden>
+      <div id="eval-compare-wrap">
+        <table class="eval-compare" id="eval-compare">
+          <thead>
+            <tr><th>Approach</th><th>Passes</th><th>Violations</th><th>Tokens</th><th>Latency</th></tr>
+          </thead>
+          <tbody id="eval-compare-body"></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+</main>
+<div id="trial-drawer" class="drawer" role="region" aria-label="Trial list" hidden>
+  <div class="trial-nav">
+    <button type="button" data-action="back-to-list">&#8592; Back to matrix</button>
+  </div>
+  <ul id="trial-list" class="trial-list"></ul>
+</div>
+<div id="trial-dialog-wrap" class="dialog-backdrop" hidden>
+  <div id="trial-dialog" role="dialog" aria-modal="true" aria-labelledby="trial-dialog-title" class="dialog">
+    <div class="trial-nav">
+      <button type="button" data-action="trial-prev" aria-label="Previous trial">&#9664; Prev trial</button>
+      <button type="button" data-action="trial-next" aria-label="Next trial">Next trial &#9654;</button>
+      <button type="button" data-action="close-dialog" aria-label="Close trial details">Close</button>
+    </div>
+    <h2 id="trial-dialog-title"></h2>
+    <section class="panel" data-panel="answer"><h3>Answer</h3><div data-panel-body="answer"></div></section>
+    <section class="panel" data-panel="evidence"><h3>Evidence</h3><div data-panel-body="evidence"></div></section>
+    <section class="panel" data-panel="trace"><h3>Trace</h3>
+      <div data-panel-body="trace">
+        <div class="timeline" id="trial-timeline">
+          <div class="timeline-lane" data-lane="input"><div class="lane-label">Input</div><div class="lane-track"></div></div>
+          <div class="timeline-lane" data-lane="model"><div class="lane-label">Model</div><div class="lane-track"></div></div>
+          <div class="timeline-lane" data-lane="tools"><div class="lane-label">Tools</div><div class="lane-track"></div></div>
+          <div class="timeline-lane" data-lane="verifier"><div class="lane-label">Verifier</div><div class="lane-track"></div></div>
+        </div>
+        <div id="trial-event-list"></div>
+      </div>
+    </section>
+    <section class="panel" data-panel="verifier"><h3>Verifier</h3><div data-panel-body="verifier"></div></section>
+  </div>
+</div>
+<div id="diff-dialog-wrap" class="dialog-backdrop" hidden>
+  <div id="diff-dialog" role="dialog" aria-modal="true" aria-labelledby="diff-dialog-title" class="dialog">
+    <div class="diff-nav">
+      <button type="button" data-action="diff-modal-prev" aria-label="Previous version diff">&#9664; Prev</button>
+      <button type="button" data-action="diff-modal-next" aria-label="Next version diff">Next &#9654;</button>
+      <button type="button" data-action="close-diff" aria-label="Close diff">Close</button>
+    </div>
+    <h2 id="diff-dialog-title"></h2>
+    <div id="diff-body" class="diff-body"></div>
+  </div>
+</div>
+<span class="synthetic-badge" hidden aria-hidden="true">SYNTHETIC</span>
+<template id="cell-template"><button type="button" class="cell" data-cell="" aria-label=""><span class="cell-name"></span><span class="cell-status"></span></button></template>
+<span id="not-recorded-template" class="not-recorded" hidden>未记录 · not recorded</span>
+<script type="application/json" id="vidsnap-studio-data">__VIDSNAP_STUDIO_JSON__</script>
+<script>
+__VIDSNAP_STUDIO_JS__
+</script>
+</body>
+</html>

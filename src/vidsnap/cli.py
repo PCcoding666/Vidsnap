@@ -3,7 +3,7 @@
 import asyncio
 import json
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, NoReturn
 
 import typer
 
@@ -15,6 +15,7 @@ from vidsnap.harness import VideoHarness
 from vidsnap.plugins import PluginRegistry, ToolPlugin, discovery
 from vidsnap.plugins.project import validate_plugin_project
 from vidsnap.recipes.runner import InterviewRecipeRunner
+from vidsnap.studio.export import export_studio
 from vidsnap.trace.export import export_trace
 
 app = typer.Typer(
@@ -30,6 +31,8 @@ recipe_app = typer.Typer(help="Run grounded editorial recipes.")
 app.add_typer(recipe_app, name="recipe")
 plugin_app = typer.Typer(help="Validate and test local plugin projects.")
 app.add_typer(plugin_app, name="plugin")
+studio_app = typer.Typer(help="Export the offline Eval Studio workbench.")
+app.add_typer(studio_app, name="studio")
 
 
 def _plugin_error() -> None:
@@ -208,6 +211,29 @@ def trace_export(
 ) -> None:
     """Render one RunBundle, legacy result dir, or benchmark case to offline HTML."""
     exported = export_trace(source.resolve(), output.resolve(), include_thumbnails)
+    typer.echo(str(exported))
+
+
+def _studio_error(category: str) -> NoReturn:
+    """Print one generic, redacted studio CLI result and exit with code 2."""
+    typer.echo(json.dumps({"status": "ERROR", "category": category}, ensure_ascii=True))
+    raise typer.Exit(code=2) from None
+
+
+@studio_app.command("export")
+def studio_export(
+    manifest: Annotated[Path, typer.Argument(help="Pre-registered studio manifest JSON.")],
+    output: Annotated[Path, typer.Option("--output", "-o", help="Destination HTML file.")],
+) -> None:
+    """Project one studio manifest into a self-contained offline HTML workbench."""
+    try:
+        exported = export_studio(manifest, output)
+    except FileExistsError:
+        _studio_error("output_refused")
+    except ValueError:
+        _studio_error("manifest_or_runs_invalid")
+    except OSError:
+        _studio_error("filesystem_unavailable")
     typer.echo(str(exported))
 
 

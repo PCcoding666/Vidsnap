@@ -55,6 +55,9 @@ packages = ["src/vidsnap"]
 "src/vidsnap/prompts/repair.json" = "vidsnap/prompts/repair.json"
 "src/vidsnap/trace/assets/trace.html" = "vidsnap/trace/assets/trace.html"
 "src/vidsnap/trace/assets/timeline.js" = "vidsnap/trace/assets/timeline.js"
+"src/vidsnap/studio/assets/studio.html" = "vidsnap/studio/assets/studio.html"
+"src/vidsnap/studio/assets/studio.js" = "vidsnap/studio/assets/studio.js"
+"src/vidsnap/studio/assets/synthetic_exploration.json" = "vidsnap/studio/assets/synthetic_exploration.json"
 "src/vidsnap/demo/fixtures/provenance.json" = "vidsnap/demo/fixtures/provenance.json"
 "src/vidsnap/demo/fixtures/run/manifest.json" = "vidsnap/demo/fixtures/run/manifest.json"
 "src/vidsnap/demo/fixtures/run/events.jsonl" = "vidsnap/demo/fixtures/run/events.jsonl"
@@ -72,6 +75,9 @@ packages = ["src/vidsnap"]
 "src/vidsnap/demo/fixtures/run/evidence/e11.json" = "vidsnap/demo/fixtures/run/evidence/e11.json"
 
 [tool.hatch.build.targets.sdist.force-include]
+"src/vidsnap/studio/assets/studio.html" = "src/vidsnap/studio/assets/studio.html"
+"src/vidsnap/studio/assets/studio.js" = "src/vidsnap/studio/assets/studio.js"
+"src/vidsnap/studio/assets/synthetic_exploration.json" = "src/vidsnap/studio/assets/synthetic_exploration.json"
 "src/vidsnap/demo/fixtures/provenance.json" = "src/vidsnap/demo/fixtures/provenance.json"
 "src/vidsnap/demo/fixtures/run/manifest.json" = "src/vidsnap/demo/fixtures/run/manifest.json"
 "src/vidsnap/demo/fixtures/run/events.jsonl" = "src/vidsnap/demo/fixtures/run/events.jsonl"
