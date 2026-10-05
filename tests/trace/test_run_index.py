@@ -210,3 +210,40 @@ def test_run_references_resolve_by_id_prefix_or_bundle_path(tmp_path: Path) -> N
         resolve_run_id(records, "ffff")
     with pytest.raises(LookupError):
         resolve_run_id(records, "111")  # prefixes shorter than four characters are refused
+
+
+def _run_line(run_id: str) -> str:
+    return json.dumps({"schema_version": "vidsnap.run-index/v1", "record": "run", "run_id": run_id})
+
+
+def test_append_after_a_damaged_last_line_starts_a_new_line(tmp_path: Path) -> None:
+    runs_root = tmp_path / "runs"
+    runs_root.mkdir()
+    index_path = runs_root / INDEX_FILE_NAME
+    index_path.write_text(
+        _run_line("first") + "\n" + '{"schema_version": "vidsnap.run-ind', encoding="utf-8"
+    )
+
+    append_index_record(runs_root, json.loads(_run_line("after-crash")))
+
+    lines = index_path.read_text(encoding="utf-8").splitlines()
+    assert lines[1] == '{"schema_version": "vidsnap.run-ind'
+    assert json.loads(lines[2])["run_id"] == "after-crash"
+    contents = read_index(runs_root)
+    assert [record["run_id"] for record in contents.records] == ["first", "after-crash"]
+    assert contents.invalid_lines == 1
+
+
+def test_reading_counts_a_non_utf8_line_instead_of_failing(tmp_path: Path) -> None:
+    runs_root = tmp_path / "runs"
+    runs_root.mkdir()
+    (runs_root / INDEX_FILE_NAME).write_bytes(
+        (_run_line("before") + "\n").encode()
+        + b'{"schema_version": "vidsnap.run-index/v1", "record": "run", "run_id": "x\xff"}\n'
+        + (_run_line("after") + "\n").encode()
+    )
+
+    contents = read_index(runs_root)
+
+    assert [record["run_id"] for record in contents.records] == ["before", "after"]
+    assert contents.invalid_lines == 1

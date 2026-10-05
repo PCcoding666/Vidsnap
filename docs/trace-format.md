@@ -147,7 +147,8 @@ JSON line with `"schema_version": "vidsnap.run-index/v1"` and
 `"record": "run"`. Every field is derived from the finalized bundle, so the
 index can be rebuilt from bundles; fields a bundle never recorded are `null`.
 If indexing fails, the run's outcome is unchanged and a warning goes to
-stderr.
+stderr. Readers skip and count lines they cannot decode or parse, and a new
+line always starts after a damaged last line.
 
 | Field | Meaning |
 |---|---|

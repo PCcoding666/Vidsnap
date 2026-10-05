@@ -144,28 +144,46 @@ def review_record(run_id: str, review: RunReview) -> dict[str, JsonValue]:
 
 
 def append_index_record(runs_root: Path, record: Mapping[str, JsonValue]) -> Path:
-    """Append exactly one JSON line to ``<runs_root>/index.jsonl`` and return its path."""
+    """Append exactly one JSON line to ``<runs_root>/index.jsonl`` and return its path.
+
+    If an earlier write left a partial last line, a newline is written first so
+    the damaged line cannot swallow this record.
+    """
     runs_root.mkdir(parents=True, exist_ok=True)
     index_path = runs_root / INDEX_FILE_NAME
     line = json.dumps(dict(record), ensure_ascii=True, separators=(",", ":"), sort_keys=True)
-    with index_path.open("a", encoding="utf-8") as handle:
-        handle.write(line + "\n")
+    with index_path.open("a+b") as handle:
+        handle.seek(0, os.SEEK_END)
+        size = handle.tell()
+        prefix = b""
+        if size:
+            handle.seek(size - 1)
+            if handle.read(1) != b"\n":
+                prefix = b"\n"
+        handle.write(prefix + line.encode("ascii") + b"\n")
         handle.flush()
         os.fsync(handle.fileno())
     return index_path
 
 
 def read_index(runs_root: Path) -> IndexContents:
-    """Read every usable index record in file order; count lines that are not."""
+    """Read every usable index record in file order; count lines that are not.
+
+    Undecodable bytes never stop the read: a line containing one is counted as
+    unusable, like a line that is not a valid record.
+    """
     index_path = runs_root / INDEX_FILE_NAME
     try:
-        lines = index_path.read_text(encoding="utf-8").splitlines()
+        lines = index_path.read_text(encoding="utf-8", errors="replace").splitlines()
     except FileNotFoundError:
         return IndexContents()
     records: list[dict[str, Any]] = []
     invalid = 0
     for line in lines:
         if not line.strip():
+            continue
+        if "\ufffd" in line:
+            invalid += 1
             continue
         try:
             record = json.loads(line)
