@@ -19,6 +19,8 @@ writes the run index.
 `vidsnap analyze` writes the bundle to `--output-dir`, or to a new directory
 under the runs root. `vidsnap recipe interview` always keeps its bundle under
 the runs root, whatever the outcome, and prints its location as `run_path`.
+It refuses a non-empty `--output-dir` before the run starts, so no model call
+is spent on output it could not write.
 The runs root is `--runs-root`, else `VIDSNAP_RUNS_ROOT`, else `./run`.
 The bundle directory name is not the run id; the run id is in `manifest.json`
 and in the run index.
@@ -150,7 +152,9 @@ stderr.
 | `input_tokens`, `output_tokens` | Token totals over model requests |
 | `tokens_reported` | `true` only if every model request reported its usage |
 | `cost` | See below; `null` when no price table was supplied |
-| `terminal_state`, `failed_gates` | Terminal state; failed verifier gates, `[]` if all passed, `null` if never verified |
+| `terminal_state` | The outcome the command reported |
+| `bundle_terminal_state` | The bundle's own terminal state; it differs from `terminal_state` only when the command failed after the run finished, for example when the recipe could not write its output, and then `failure_reason` is the command's reason |
+| `failed_gates` | Failed verifier gates, `[]` if all passed, `null` if never verified |
 | `failure_category`, `http_status`, `failure_reason` | From the run failure record |
 | `bundle_path` | Absolute path of the bundle |
 

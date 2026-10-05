@@ -58,8 +58,17 @@ def summarize_run(
     *,
     command: str,
     price_table: LoadedPriceTable | None = None,
+    outcome: str | None = None,
+    outcome_reason: str | None = None,
 ) -> dict[str, JsonValue]:
-    """Summarize one finalized RunBundle into a ``run`` index record."""
+    """Summarize one finalized RunBundle into a ``run`` index record.
+
+    ``outcome`` and ``outcome_reason`` are what the command itself reported.
+    When the command's outcome differs from the bundle's terminal state (for
+    example, a verified run whose output could not be written), the record's
+    ``terminal_state`` and ``failure_reason`` follow the command, and
+    ``bundle_terminal_state`` keeps the bundle's own state.
+    """
     bundle = bundle_path.resolve()
     manifest = _load_manifest(bundle)
     events = _load_events(bundle / "events.jsonl")
@@ -70,6 +79,15 @@ def summarize_run(
     failure = terminal_payload.get("failure")
     failure = failure if isinstance(failure, dict) else {}
     provider_id, model = _provider(header, manifest)
+    bundle_state = _text(manifest.get("terminal_state"))
+    terminal_state = bundle_state
+    failure_category = _text(failure.get("category"))
+    failure_reason = _failure_reason(failure, events)
+    if outcome is not None and outcome != bundle_state:
+        terminal_state = outcome
+        failure_reason = outcome_reason
+        if failure_category is None and outcome_reason is not None:
+            failure_category = "unknown"
     input_tokens, output_tokens, tokens_reported = _model_usage(events)
     budget = _last_payload(events, "budget.updated")
 
@@ -103,11 +121,12 @@ def summarize_run(
             tokens_reported=tokens_reported,
             price_table=price_table,
         ),
-        "terminal_state": _text(manifest.get("terminal_state")),
+        "terminal_state": terminal_state,
+        "bundle_terminal_state": bundle_state,
         "failed_gates": _failed_gates(events, manifest),
-        "failure_category": _text(failure.get("category")),
+        "failure_category": failure_category,
         "http_status": _count(failure.get("http_status")),
-        "failure_reason": _failure_reason(failure, events),
+        "failure_reason": failure_reason,
         "bundle_path": str(bundle),
     }
 

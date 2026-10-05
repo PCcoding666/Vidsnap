@@ -88,3 +88,122 @@ def test_recipe_help_documents_the_runs_root() -> None:
     help_text = strip_ansi(result.stdout)
     assert "--runs-root" in help_text
     assert "VIDSNAP_RUNS_ROOT" in help_text
+
+
+def _real_runner_that_verifies(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Wire the real recipe runner to offline fakes whose final answer passes every gate."""
+    from tests.recipes.test_interview_runner import (
+        FakeInterviewMedia,
+        FakeInterviewTranscriber,
+        ScriptedInterviewAgent,
+        interview_final_payload,
+    )
+    from vidsnap.config import HarnessConfig
+    from vidsnap.contracts import AgentDecision, ToolCallRequest
+    from vidsnap.recipes import InterviewRecipeRunner
+
+    def build() -> InterviewRecipeRunner:
+        agent = ScriptedInterviewAgent(
+            [
+                AgentDecision(
+                    kind="tool_calls",
+                    calls=(ToolCallRequest(name="transcribe_audio", arguments={}),),
+                ),
+                AgentDecision(
+                    kind="tool_calls",
+                    calls=(ToolCallRequest(name="sample_evidence", arguments={"max_frames": 1}),),
+                ),
+                AgentDecision(kind="final", output=interview_final_payload()),
+            ]
+        )
+        return InterviewRecipeRunner(
+            config=HarnessConfig(api_key=None),
+            media=FakeInterviewMedia(),
+            recognizer=FakeInterviewTranscriber(),
+            agent_model=agent,
+        )
+
+    monkeypatch.setattr("vidsnap.cli.InterviewRecipeRunner", build)
+
+
+def test_index_records_the_command_outcome_when_it_differs_from_the_bundle(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _real_runner_that_verifies(monkeypatch)
+
+    def refuse_to_write(*args: object, **kwargs: object) -> object:
+        raise OSError("simulated full disk")
+
+    monkeypatch.setattr("vidsnap.recipes.runner.render_interview_recipe", refuse_to_write)
+    video = tmp_path / "interview.mp4"
+    video.write_bytes(b"fake local video")
+    runs_root = tmp_path / "runs"
+
+    result = CliRunner().invoke(
+        app,
+        [
+            "recipe",
+            "interview",
+            str(video),
+            "--output-dir",
+            str(tmp_path / "out"),
+            "--runs-root",
+            str(runs_root),
+        ],
+    )
+
+    assert result.exit_code == 1
+    printed = json.loads(result.stdout)
+    (line,) = (runs_root / "index.jsonl").read_text(encoding="utf-8").splitlines()
+    record = json.loads(line)
+    # The verified kernel run finished SUCCEEDED, but the command failed afterwards.
+    assert record["bundle_terminal_state"] == "SUCCEEDED"
+    assert printed["terminal_state"] == "FAILED"
+    assert record["terminal_state"] == printed["terminal_state"]
+    assert record["failure_reason"] == "unexpected recipe runner error"
+    assert record["failure_category"] == "unknown"
+
+
+def test_index_outcome_matches_the_command_when_they_agree(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _real_runner_that_verifies(monkeypatch)
+    video = tmp_path / "interview.mp4"
+    video.write_bytes(b"fake local video")
+    runs_root = tmp_path / "runs"
+
+    result = CliRunner().invoke(
+        app,
+        [
+            "recipe",
+            "interview",
+            str(video),
+            "--output-dir",
+            str(tmp_path / "out"),
+            "--runs-root",
+            str(runs_root),
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    record = json.loads((runs_root / "index.jsonl").read_text(encoding="utf-8"))
+    assert record["terminal_state"] == record["bundle_terminal_state"] == "SUCCEEDED"
+    assert json.loads(result.stdout)["terminal_state"] == "SUCCEEDED"
+    assert record["failure_reason"] is None
+
+
+def test_non_empty_output_dir_is_refused_before_any_model_call(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    runner = _RecordingRunner(TerminalState.SUCCEEDED)
+    output_dir = tmp_path / "out"
+    output_dir.mkdir()
+    (output_dir / "draft.md").write_text("keep me", encoding="utf-8")
+
+    result = _invoke(tmp_path, monkeypatch, runner, "--runs-root", str(tmp_path / "runs"))
+
+    assert result.exit_code == 2
+    assert runner.run_dirs == []
+    assert "output directory is not empty" in result.output.lower()
+    assert (output_dir / "draft.md").read_text(encoding="utf-8") == "keep me"
+    assert not (tmp_path / "runs").exists()

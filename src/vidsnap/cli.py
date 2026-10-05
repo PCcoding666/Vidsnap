@@ -81,12 +81,23 @@ def _index_run(
     *,
     command: str,
     prices: LoadedPriceTable | None,
+    outcome: str | None = None,
+    outcome_reason: str | None = None,
 ) -> None:
     """Append the finished run to the run index; never change the run's outcome."""
     if run_path is None or not (run_path / "manifest.json").is_file():
         return
     try:
-        append_index_record(runs_root, summarize_run(run_path, command=command, price_table=prices))
+        append_index_record(
+            runs_root,
+            summarize_run(
+                run_path,
+                command=command,
+                price_table=prices,
+                outcome=outcome,
+                outcome_reason=outcome_reason,
+            ),
+        )
     except (OSError, ValueError) as error:
         typer.echo(f"Run index not updated: {type(error).__name__}", err=True)
 
@@ -242,6 +253,11 @@ def recipe_interview(
     prices = _load_prices(price_table)
     resolved_video = video.expanduser().resolve()
     resolved_output = output_dir.expanduser().resolve()
+    if resolved_output.exists() and (
+        not resolved_output.is_dir() or any(resolved_output.iterdir())
+    ):
+        typer.echo(f"Output directory is not empty: {resolved_output}", err=True)
+        raise typer.Exit(code=2)
     resolved_root = runs_root.expanduser().resolve()
     run_dir = resolved_root / str(uuid.uuid4())
     result = asyncio.run(
@@ -249,7 +265,14 @@ def recipe_interview(
             VideoSource(path=resolved_video), resolved_output, run_dir=run_dir
         )
     )
-    _index_run(result.run_path, resolved_root, command="recipe interview", prices=prices)
+    _index_run(
+        result.run_path,
+        resolved_root,
+        command="recipe interview",
+        prices=prices,
+        outcome=result.terminal_state.value,
+        outcome_reason=result.failure_reason,
+    )
     payload: dict[str, object] = {"terminal_state": result.terminal_state.value}
     artifacts = result.artifacts
     succeeded = False
