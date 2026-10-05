@@ -43,6 +43,17 @@ repository and change into it, then install in editable mode:
     vidsnap analyze /absolute/path/video.mp4 --goal "Summarize the demonstration"
     vidsnap manifest run/<run-id>
 
+## Limitations
+
+- The built-in provider targets only `qwen3.8-max` on Alibaba Cloud's
+  Beijing endpoint and needs its key in `VIDSNAP_QWEN_API_KEY` (fallback
+  `QWEN_API_KEY`); others injectable from code only.
+- Live `vidsnap analyze` is experimental: verification made no live provider
+  call; `vidsnap demo` is offline and needs no key.
+- Local video files only; FFmpeg/ffprobe required on PATH. No URLs/remote
+  media.
+- No hosted service; `vidsnap serve` binds to 127.0.0.1 only.
+
 ## Why VidSnap exists
 
 Most video tools compress footage and hide their work. VidSnap is
