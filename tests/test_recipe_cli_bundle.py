@@ -207,3 +207,51 @@ def test_non_empty_output_dir_is_refused_before_any_model_call(
     assert "output directory is not empty" in result.output.lower()
     assert (output_dir / "draft.md").read_text(encoding="utf-8") == "keep me"
     assert not (tmp_path / "runs").exists()
+
+
+def test_no_keep_bundle_restores_the_temporary_bundle_and_writes_no_index(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    runner = _RecordingRunner(TerminalState.SUCCEEDED)
+    runs_root = tmp_path / "runs"
+
+    result = _invoke(
+        tmp_path, monkeypatch, runner, "--runs-root", str(runs_root), "--no-keep-bundle"
+    )
+
+    assert result.exit_code == 1  # the recording runner returns no artifacts
+    assert runner.run_dirs == [None]
+    assert "run_path" not in json.loads(result.stdout)
+    assert not runs_root.exists()
+
+
+def test_no_keep_bundle_leaves_no_bundle_on_disk_with_the_real_runner(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _real_runner_that_verifies(monkeypatch)
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("VIDSNAP_RUNS_ROOT", raising=False)
+    video = tmp_path / "interview.mp4"
+    video.write_bytes(b"fake local video")
+
+    result = CliRunner().invoke(
+        app,
+        [
+            "recipe",
+            "interview",
+            str(video),
+            "--output-dir",
+            str(tmp_path / "out"),
+            "--no-keep-bundle",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert sorted(entry.name for entry in tmp_path.iterdir()) == ["interview.mp4", "out"]
+    assert len(list((tmp_path / "out").iterdir())) == 4
+
+
+def test_recipe_help_documents_the_keep_bundle_opt_out() -> None:
+    result = CliRunner().invoke(app, ["recipe", "interview", "--help"])
+
+    assert "--no-keep-bundle" in strip_ansi(result.stdout)

@@ -136,6 +136,13 @@ quality, latency, or cost claims are published.
   terminal state, failed gates, failure category, and bundle path.
   `vidsnap runs list` prints it; `vidsnap runs review` adds edit minutes,
   publish decision, factual errors, replaced images, and a note.
+- Kept data: each `analyze` and `recipe interview` bundle under
+  `./run/<uuid>/` holds a full-length 16 kHz mono WAV of the video's audio
+  (about 115 MB per hour), the sampled frame JPEGs, transcripts, the result,
+  and the event ledger. Delete a folder whenever you like, move them with
+  `--runs-root` or `VIDSNAP_RUNS_ROOT`, or pass
+  `vidsnap recipe interview --no-keep-bundle` to keep no bundle and no index
+  line.
 - Python import: `vidsnap`; `VideoHarness().run(...)` exposes the same
   stateless contract as the API.
 - Localhost API: `GET /health`, `GET /v1/manifest`, `POST /v1/analyze`,

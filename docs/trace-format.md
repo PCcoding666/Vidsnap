@@ -30,6 +30,12 @@ was not updated. When a recipe run fails, its JSON output includes
 The bundle directory name is not the run id; the run id is in `manifest.json`
 and in the run index.
 
+A kept bundle holds your data: a full-length 16 kHz mono WAV of the video's
+audio (about 115 MB per hour), the sampled frame JPEGs, the transcripts, and
+the structured result. Delete a bundle folder whenever you no longer need it.
+`vidsnap recipe interview --no-keep-bundle` restores the 0.1.0 behavior: a
+temporary bundle removed when the command ends, and no index line.
+
 Every event payload passes key-based redaction before it is written: values
 under keys containing `api_key`, `authorization`, `credential`, `password`,
 `secret`, or `token` are replaced with `***REDACTED***`, except the usage

@@ -44,10 +44,20 @@ by 0.1.0 and the packaged demo still load, replay, and export. See
 
 ### Changed
 
-- `vidsnap recipe interview` keeps its RunBundle under the runs root on
-  success and failure, and adds `run_path` to its JSON output. The output
-  directory still holds exactly the four recipe artifacts. Library callers
-  that pass no `run_dir` keep the 0.1.0 temporary bundle.
+- `vidsnap recipe interview` keeps its RunBundle under the runs root
+  (`./run/<uuid>/` by default) on success and failure, and adds `run_path` to
+  its JSON output. A kept bundle holds a full-length 16 kHz mono WAV of the
+  video's audio (about 115 MB per hour), the sampled frame JPEGs, the
+  transcripts, the structured result, and the event ledger, as `analyze`
+  bundles already did. The folder is yours to delete; move the runs root with
+  `--runs-root` or `VIDSNAP_RUNS_ROOT`, or pass `--no-keep-bundle` to restore
+  the 0.1.0 behavior of a temporary bundle removed when the command ends (no
+  index line is written then). The output directory still holds exactly the
+  four recipe artifacts. Library callers that pass no `run_dir` keep the
+  temporary bundle.
+- `vidsnap recipe interview` refuses a non-empty `--output-dir`, and both
+  `recipe interview` and `analyze` without `--output-dir` refuse a runs root
+  they cannot write (exit 2), before any model call.
 - `vidsnap analyze` without `--output-dir` writes its bundle under the runs
   root; with the default root this is the same `./run/<id>` as before.
 - The Qwen client raises `ProviderError` for HTTP failures and non-JSON

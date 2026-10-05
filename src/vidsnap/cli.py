@@ -282,11 +282,23 @@ def recipe_interview(
     output_dir: Path = typer.Option(..., "--output-dir"),
     runs_root: RunsRootOption = Path("run"),
     price_table: PriceTableOption = None,
+    keep_bundle: Annotated[
+        bool,
+        typer.Option(
+            "--keep-bundle/--no-keep-bundle",
+            help=(
+                "Keep the RunBundle (audio, frames, transcripts, result) under the runs "
+                "root and index the run. --no-keep-bundle uses a temporary bundle that is "
+                "removed when the command ends, and writes no index line."
+            ),
+        ),
+    ] = True,
 ) -> None:
     """Produce the grounded interview record for one local video.
 
-    The run's RunBundle is kept under the runs root whatever the outcome, its
-    location is printed as run_path, and the run is appended to the run index.
+    By default the run's RunBundle is kept under the runs root whatever the
+    outcome, its location is printed as run_path, and the run is appended to
+    the run index.
     """
     prices = _load_prices(price_table)
     resolved_video = video.expanduser().resolve()
@@ -296,21 +308,22 @@ def recipe_interview(
     ):
         typer.echo(f"Output directory is not empty: {resolved_output}", err=True)
         raise typer.Exit(code=2)
-    resolved_root = _prepare_runs_root(runs_root)
-    run_dir = resolved_root / str(uuid.uuid4())
+    resolved_root = _prepare_runs_root(runs_root) if keep_bundle else None
+    run_dir = resolved_root / str(uuid.uuid4()) if resolved_root is not None else None
     result = asyncio.run(
         InterviewRecipeRunner().run(
             VideoSource(path=resolved_video), resolved_output, run_dir=run_dir
         )
     )
-    _index_run(
-        result.run_path,
-        resolved_root,
-        command="recipe interview",
-        prices=prices,
-        outcome=result.terminal_state.value,
-        outcome_reason=result.failure_reason,
-    )
+    if resolved_root is not None:
+        _index_run(
+            result.run_path,
+            resolved_root,
+            command="recipe interview",
+            prices=prices,
+            outcome=result.terminal_state.value,
+            outcome_reason=result.failure_reason,
+        )
     payload: dict[str, object] = {"terminal_state": result.terminal_state.value}
     artifacts = result.artifacts
     succeeded = False
