@@ -20,6 +20,7 @@ from vidsnap import __version__
 from vidsnap.contracts import Evidence, LoopSpec, TerminalState
 from vidsnap.contracts.models import StrictModel
 from vidsnap.loop.events import EventStatus, EventUsage, RunEvent
+from vidsnap.providers.base import ProviderIdentity
 
 _SENSITIVE_KEY_PARTS = ("api_key", "authorization", "credential", "password", "secret", "token")
 _SAFE_USAGE_COUNTERS = {
@@ -108,7 +109,14 @@ class RunBundle:
         self._finalized = False
 
     @classmethod
-    def create(cls, path: Path, *, loop_spec: LoopSpec, provider_url: str) -> RunBundle:
+    def create(
+        cls,
+        path: Path,
+        *,
+        loop_spec: LoopSpec,
+        provider_url: str,
+        provider_identity: ProviderIdentity | None = None,
+    ) -> RunBundle:
         """Create the required bundle layout without embedding provider credentials."""
         path = path.resolve()
         path.mkdir(parents=True, exist_ok=True)
@@ -132,7 +140,15 @@ class RunBundle:
                 "sha256": loop_spec.digest(),
             },
             "resources": loop_spec.budgets.model_dump(mode="json"),
-            "provider": {"base_url": redact_provider_url(provider_url)},
+            "provider": (
+                {
+                    "id": provider_identity.id,
+                    "model": provider_identity.model,
+                    "base_url": redact_provider_url(provider_identity.base_url),
+                }
+                if provider_identity is not None
+                else {"base_url": redact_provider_url(provider_url)}
+            ),
             "verification": {},
             "files": {},
         }
@@ -231,11 +247,17 @@ def temporary_run_bundle(
     parent: Path | None = None,
     loop_spec: LoopSpec,
     provider_url: str,
+    provider_identity: ProviderIdentity | None = None,
 ) -> Iterator[RunBundle]:
     """Yield a temporary RunBundle and remove every artifact when it closes."""
     parent_path = parent.resolve() if parent is not None else None
     temporary_path = Path(tempfile.mkdtemp(prefix="vidsnap-", dir=parent_path))
     try:
-        yield RunBundle.create(temporary_path, loop_spec=loop_spec, provider_url=provider_url)
+        yield RunBundle.create(
+            temporary_path,
+            loop_spec=loop_spec,
+            provider_url=provider_url,
+            provider_identity=provider_identity,
+        )
     finally:
         shutil.rmtree(temporary_path, ignore_errors=True)

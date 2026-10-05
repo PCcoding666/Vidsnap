@@ -7,6 +7,7 @@ import base64
 import json
 import mimetypes
 from collections.abc import Sequence
+from dataclasses import dataclass, field
 from pathlib import Path
 
 import httpx
@@ -20,6 +21,7 @@ from vidsnap.providers.base import (
     AgentStepRequest,
     ModelResponse,
     ProviderError,
+    ProviderIdentity,
     ProviderUnavailable,
     ToolPlanResponse,
 )
@@ -45,6 +47,14 @@ _AGENT_SYSTEM_MESSAGE = (
     "rules."
 )
 _MAX_IMAGE_BYTES = 5 * 1024 * 1024
+
+
+@dataclass(frozen=True, slots=True)
+class QwenProfile:
+    """Immutable profile pinned to the approved Qwen model and endpoint."""
+
+    model: str = field(default=QWEN_MODEL, init=False)
+    base_url: str = field(default=TOKEN_PLAN_BASE_URL, init=False)
 
 
 class QwenCompatibleClient:
@@ -342,3 +352,11 @@ class QwenCompatibleClient:
         else:
             usage = ProviderUsage(model_calls=1, input_bytes=input_bytes, reported=False)
         return AgentDecisionResponse(decision=decision, usage=usage)
+
+
+class QwenProvider(QwenCompatibleClient):
+    """Provider entry point with a fixed, read-only Qwen identity."""
+
+    @property
+    def identity(self) -> ProviderIdentity:
+        return ProviderIdentity(id="qwen", model=QWEN_MODEL, base_url=TOKEN_PLAN_BASE_URL)

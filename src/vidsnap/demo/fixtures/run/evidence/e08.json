@@ -1,0 +1,9 @@
+{
+  "id": "e08",
+  "start_seconds": 10.5,
+  "end_seconds": 12.0,
+  "modality": "frame",
+  "content": "Frame shows the on-screen step counter at two.",
+  "captured_at": "2026-01-01T00:00:00Z",
+  "budget_class": "direct_baseline"
+}

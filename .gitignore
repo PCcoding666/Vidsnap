@@ -16,6 +16,13 @@
 !src/vidsnap/contracts/schemas/video_analysis.v1.json
 !src/vidsnap/prompts/*.json
 
+# Publishable plugin-template source assets: the validated project manifest
+# and its example run fixtures. Ordered unignores (last matching pattern
+# wins) for these exact paths only.
+!examples/plugin-template/vidsnap.plugin.json
+!examples/plugin-template/example_run/probe.json
+!examples/plugin-template/example_run/expected_result.json
+
 # Virtual environments
 venv/
 .venv/
@@ -91,6 +98,16 @@ backend/storage/
 storage/
 run/
 benchmark-results/
+
+# Packaged zero-key demo fixture: publishable CC0-1.0 source data, not
+# runtime output. Ordered unignores (last matching pattern wins) for its
+# exact paths only; they must stay after the *.json and run/ rules above.
+!src/vidsnap/demo/fixtures/provenance.json
+!src/vidsnap/demo/fixtures/run/
+!src/vidsnap/demo/fixtures/run/manifest.json
+!src/vidsnap/demo/fixtures/run/events.jsonl
+!src/vidsnap/demo/fixtures/run/result.json
+!src/vidsnap/demo/fixtures/run/evidence/*.json
 
 # 个人工作笔记 / 生成产物（含隐私，勿提交）
 note_output.md

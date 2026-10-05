@@ -1,0 +1,99 @@
+name: Plugin proposal
+description: Propose one bounded tool plugin.
+title: "[Plugin]: "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for proposing a plugin. Keep this proposal scoped to **one** bounded tool plugin.
+
+        Plugins in this repository are registered explicitly, validated against allow-lists, and constrained by declared budgets. Proposals that cannot run offline under fixed limits are out of scope.
+
+  - type: input
+    id: plugin-name
+    attributes:
+      label: Plugin name
+      description: Short, lowercase, hyphenated name for the proposed plugin.
+      placeholder: e.g. subtitle-normalizer
+    validations:
+      required: true
+
+  - type: textarea
+    id: problem-outcome
+    attributes:
+      label: Problem and user outcome
+      description: What problem does this solve, and what will a user be able to do after it exists that they cannot do today?
+    validations:
+      required: true
+
+  - type: textarea
+    id: bounded-capability
+    attributes:
+      label: Bounded capability
+      description: Describe the single capability in one or two sentences. Explain how it stays inside explicit allow-lists and declared budgets, and why it does not need to spawn shells, browsers, or unrestricted network access.
+    validations:
+      required: true
+
+  - type: textarea
+    id: typed-io
+    attributes:
+      label: Typed input and output
+      description: Sketch the typed input contract and typed output contract (field names, types, validation rules). Plugins implement public contract interfaces; no raw untyped data across the boundary.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: network-access
+    attributes:
+      label: Network access
+      description: Does the proposed plugin need any network access at run time?
+      options:
+        - "No network access"
+        - "Allow-listed URL schemes only"
+        - "Other (explain under permissions and budget impact)"
+    validations:
+      required: true
+
+  - type: textarea
+    id: permissions-budget
+    attributes:
+      label: Permissions and budget impact
+      description: List the filesystem paths, URL schemes, or environment variables the plugin would touch, and the step, time, token, and size budgets it needs. State which existing budgets cover it, or which new explicit budget is required.
+    validations:
+      required: true
+
+  - type: textarea
+    id: offline-test-plan
+    attributes:
+      label: Offline test plan
+      description: How will this be tested with no network, no model calls, and no real media? Describe recorded fixtures, offline trace/replay coverage, and the expected deterministic results.
+    validations:
+      required: true
+
+  - type: textarea
+    id: non-goals
+    attributes:
+      label: Explicit non-goals
+      description: What this plugin will not do. Call out anything intentionally excluded so review can check for scope creep.
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: security-checklist
+    attributes:
+      label: Trusted code and security checklist
+      description: Every item is required for this proposal to be reviewed.
+      options:
+        - label: The plugin spawns no shells, browsers, or processes of its own.
+          required: true
+        - label: No credentials, API keys, cookies, or .env values are read, logged, or serialized into traces, artifacts, or fixtures.
+          required: true
+        - label: All file and path access stays within the declared allow-list and never modifies, moves, or deletes user data or fixtures.
+          required: true
+        - label: Public contracts, recipe and RunBundle formats, CLI behavior, and conformance checks are unchanged, or any change is explicit, versioned, and tested.
+          required: true
+        - label: Tests are offline and deterministic, requiring no network, model endpoints, or credentials.
+          required: true
+        - label: No media, datasets, RunBundles, benchmark results, or raw provider requests/responses will be committed.
+          required: true

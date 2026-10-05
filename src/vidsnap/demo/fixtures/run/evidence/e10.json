@@ -1,0 +1,9 @@
+{
+  "id": "e10",
+  "start_seconds": 16.0,
+  "end_seconds": 17.5,
+  "modality": "ocr",
+  "content": "On-screen caption reads 'All checks passed'.",
+  "captured_at": "2026-01-01T00:00:00Z",
+  "budget_class": "direct_baseline"
+}

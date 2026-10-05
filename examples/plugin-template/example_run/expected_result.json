@@ -1,0 +1,20 @@
+{
+    "status": "completed",
+    "evidence_ids": [],
+    "summary": {
+        "duration_seconds": 10.0,
+        "fps": 24.0,
+        "width": 640,
+        "height": 360,
+        "has_audio": true,
+        "video_codec": null,
+        "audio_codec": null
+    },
+    "usage": {
+        "model_calls": 0,
+        "input_bytes": 0,
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "reported": false
+    }
+}

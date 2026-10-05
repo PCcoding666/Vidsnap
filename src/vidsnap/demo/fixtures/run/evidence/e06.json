@@ -1,0 +1,9 @@
+{
+  "id": "e06",
+  "start_seconds": 7.5,
+  "end_seconds": 9.0,
+  "modality": "audio",
+  "content": "Synthetic tone marks the transition to the second section.",
+  "captured_at": "2026-01-01T00:00:00Z",
+  "budget_class": "direct_baseline"
+}

@@ -28,6 +28,8 @@ from vidsnap.providers.base import (
     AgentModelPort,
     ModelResponse,
     ProviderError,
+    ProviderIdentity,
+    ProviderProtocol,
     ProviderUnavailable,
     ToolPlanningPort,
     VideoModelPort,
@@ -96,23 +98,42 @@ class VideoHarness:
         recognizer: SpeechRecognizer | None = None,
         sampler: AdaptiveSampler | None = None,
         planner: ToolPlanningPort | None = None,
+        provider: ProviderProtocol | None = None,
     ) -> None:
+        if provider is not None and (model is not None or planner is not None):
+            raise ValueError("provider cannot be combined with model or planner")
         self.config = config or HarnessConfig.from_env()
         self.media = media or FFmpegMediaPort()
         self.model: VideoModelPort
         self.planner: ToolPlanningPort | None
-        if model is None:
-            default_client = QwenCompatibleClient(
-                api_key=self.config.api_key,
-                model_concurrency=self.config.model_concurrency,
-                timeout_seconds=self.config.request_timeout_seconds,
-            )
-            self.model = default_client
-            self.planner = planner or default_client
+        self.recognizer: SpeechRecognizer | None
+        self.agent_model: AgentModelPort | None
+        self._provider_identity: ProviderIdentity | None
+        if provider is not None:
+            self.model = provider
+            self.planner = provider
+            self.agent_model = provider
+            self._provider_identity = provider.identity
+            self.recognizer = recognizer
         else:
-            self.model = model
-            self.planner = planner
-        self.recognizer = recognizer or QwenAsrRecognizer(api_key=self.config.api_key)
+            if model is None:
+                default_client = QwenCompatibleClient(
+                    api_key=self.config.api_key,
+                    model_concurrency=self.config.model_concurrency,
+                    timeout_seconds=self.config.request_timeout_seconds,
+                )
+                self.model = default_client
+                self.planner = planner or default_client
+            else:
+                self.model = model
+                self.planner = planner
+            self.agent_model = (
+                cast(AgentModelPort, self.planner)
+                if self.planner is not None and hasattr(self.planner, "decide_next")
+                else None
+            )
+            self._provider_identity = None
+            self.recognizer = recognizer or QwenAsrRecognizer(api_key=self.config.api_key)
         self.sampler = sampler or AdaptiveSampler()
         self.loop_spec = default_loop_spec()
         self.skills = self._build_skill_registry()
@@ -130,11 +151,7 @@ class VideoHarness:
         if effective_policy.tool_mode == "agentic":
             return await self._run_agentic(source, goal, effective_policy)
         run_path = effective_policy.output_dir or (Path.cwd() / "run" / str(uuid.uuid4()))
-        bundle = RunBundle.create(
-            run_path,
-            loop_spec=self.loop_spec,
-            provider_url=TOKEN_PLAN_BASE_URL,
-        )
+        bundle = self._create_bundle(run_path)
         context = _RunContext(
             source=source,
             goal=goal,
@@ -194,11 +211,7 @@ class VideoHarness:
     ) -> HarnessRunResult:
         """Run the kernel-backed fixed slice with exactly one owned RunBundle."""
         run_path = policy.output_dir or (Path.cwd() / "run" / str(uuid.uuid4()))
-        bundle = RunBundle.create(
-            run_path,
-            loop_spec=self.loop_spec,
-            provider_url=TOKEN_PLAN_BASE_URL,
-        )
+        bundle = self._create_bundle(run_path)
         context: KernelRunContext[VideoAnalysisResult, VideoModelPort] = KernelRunContext(
             source=source,
             policy=policy,
@@ -232,18 +245,9 @@ class VideoHarness:
         policy: HarnessPolicy,
     ) -> HarnessRunResult:
         """Run the kernel-backed agentic slice with exactly one owned RunBundle."""
-        planner = self.planner
-        agent_model: AgentModelPort | None = (
-            cast(AgentModelPort, planner)
-            if planner is not None and hasattr(planner, "decide_next")
-            else None
-        )
+        agent_model = self.agent_model
         run_path = policy.output_dir or (Path.cwd() / "run" / str(uuid.uuid4()))
-        bundle = RunBundle.create(
-            run_path,
-            loop_spec=self.loop_spec,
-            provider_url=TOKEN_PLAN_BASE_URL,
-        )
+        bundle = self._create_bundle(run_path)
         context: KernelRunContext[VideoAnalysisResult, VideoModelPort] = KernelRunContext(
             source=source,
             policy=policy,
@@ -282,6 +286,21 @@ class VideoHarness:
             passed=verification.passed,
             failed_gates=tuple(gate for gate, passed in verification.gates.items() if not passed),
             targeted_resample_seconds=verification.targeted_windows,
+        )
+
+    def _create_bundle(self, run_path: Path) -> RunBundle:
+        """Create one run bundle, recording a known provider identity when present."""
+        if self._provider_identity is not None:
+            return RunBundle.create(
+                run_path,
+                loop_spec=self.loop_spec,
+                provider_url=self._provider_identity.base_url,
+                provider_identity=self._provider_identity,
+            )
+        return RunBundle.create(
+            run_path,
+            loop_spec=self.loop_spec,
+            provider_url=TOKEN_PLAN_BASE_URL,
         )
 
     async def _execute(self, context: _RunContext) -> None:

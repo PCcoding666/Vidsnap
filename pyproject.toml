@@ -5,12 +5,24 @@ build-backend = "hatchling.build"
 [project]
 name = "vidsnap-harness"
 version = "0.1.0"
-description = "A local-first, evidence-grounded harness for video analysis agents."
+description = "Auditable video-agent runtime with bounded tools, pluggable tasks, evidence-grounded outputs, and replayable traces."
+keywords = [
+    "video-ai",
+    "agent-harness",
+    "multimodal",
+    "ai-agents",
+    "video-analysis",
+    "llm-evaluation",
+    "python",
+    "observability",
+    "agent-runtime",
+]
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
     "httpx>=0.27,<1",
     "pydantic>=2.7,<3",
+    "tomli>=2,<3; python_version < '3.11'",
     "typer>=0.12,<1",
 ]
 
@@ -43,6 +55,38 @@ packages = ["src/vidsnap"]
 "src/vidsnap/prompts/repair.json" = "vidsnap/prompts/repair.json"
 "src/vidsnap/trace/assets/trace.html" = "vidsnap/trace/assets/trace.html"
 "src/vidsnap/trace/assets/timeline.js" = "vidsnap/trace/assets/timeline.js"
+"src/vidsnap/demo/fixtures/provenance.json" = "vidsnap/demo/fixtures/provenance.json"
+"src/vidsnap/demo/fixtures/run/manifest.json" = "vidsnap/demo/fixtures/run/manifest.json"
+"src/vidsnap/demo/fixtures/run/events.jsonl" = "vidsnap/demo/fixtures/run/events.jsonl"
+"src/vidsnap/demo/fixtures/run/result.json" = "vidsnap/demo/fixtures/run/result.json"
+"src/vidsnap/demo/fixtures/run/evidence/e01.json" = "vidsnap/demo/fixtures/run/evidence/e01.json"
+"src/vidsnap/demo/fixtures/run/evidence/e02.json" = "vidsnap/demo/fixtures/run/evidence/e02.json"
+"src/vidsnap/demo/fixtures/run/evidence/e03.json" = "vidsnap/demo/fixtures/run/evidence/e03.json"
+"src/vidsnap/demo/fixtures/run/evidence/e04.json" = "vidsnap/demo/fixtures/run/evidence/e04.json"
+"src/vidsnap/demo/fixtures/run/evidence/e05.json" = "vidsnap/demo/fixtures/run/evidence/e05.json"
+"src/vidsnap/demo/fixtures/run/evidence/e06.json" = "vidsnap/demo/fixtures/run/evidence/e06.json"
+"src/vidsnap/demo/fixtures/run/evidence/e07.json" = "vidsnap/demo/fixtures/run/evidence/e07.json"
+"src/vidsnap/demo/fixtures/run/evidence/e08.json" = "vidsnap/demo/fixtures/run/evidence/e08.json"
+"src/vidsnap/demo/fixtures/run/evidence/e09.json" = "vidsnap/demo/fixtures/run/evidence/e09.json"
+"src/vidsnap/demo/fixtures/run/evidence/e10.json" = "vidsnap/demo/fixtures/run/evidence/e10.json"
+"src/vidsnap/demo/fixtures/run/evidence/e11.json" = "vidsnap/demo/fixtures/run/evidence/e11.json"
+
+[tool.hatch.build.targets.sdist.force-include]
+"src/vidsnap/demo/fixtures/provenance.json" = "src/vidsnap/demo/fixtures/provenance.json"
+"src/vidsnap/demo/fixtures/run/manifest.json" = "src/vidsnap/demo/fixtures/run/manifest.json"
+"src/vidsnap/demo/fixtures/run/events.jsonl" = "src/vidsnap/demo/fixtures/run/events.jsonl"
+"src/vidsnap/demo/fixtures/run/result.json" = "src/vidsnap/demo/fixtures/run/result.json"
+"src/vidsnap/demo/fixtures/run/evidence/e01.json" = "src/vidsnap/demo/fixtures/run/evidence/e01.json"
+"src/vidsnap/demo/fixtures/run/evidence/e02.json" = "src/vidsnap/demo/fixtures/run/evidence/e02.json"
+"src/vidsnap/demo/fixtures/run/evidence/e03.json" = "src/vidsnap/demo/fixtures/run/evidence/e03.json"
+"src/vidsnap/demo/fixtures/run/evidence/e04.json" = "src/vidsnap/demo/fixtures/run/evidence/e04.json"
+"src/vidsnap/demo/fixtures/run/evidence/e05.json" = "src/vidsnap/demo/fixtures/run/evidence/e05.json"
+"src/vidsnap/demo/fixtures/run/evidence/e06.json" = "src/vidsnap/demo/fixtures/run/evidence/e06.json"
+"src/vidsnap/demo/fixtures/run/evidence/e07.json" = "src/vidsnap/demo/fixtures/run/evidence/e07.json"
+"src/vidsnap/demo/fixtures/run/evidence/e08.json" = "src/vidsnap/demo/fixtures/run/evidence/e08.json"
+"src/vidsnap/demo/fixtures/run/evidence/e09.json" = "src/vidsnap/demo/fixtures/run/evidence/e09.json"
+"src/vidsnap/demo/fixtures/run/evidence/e10.json" = "src/vidsnap/demo/fixtures/run/evidence/e10.json"
+"src/vidsnap/demo/fixtures/run/evidence/e11.json" = "src/vidsnap/demo/fixtures/run/evidence/e11.json"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

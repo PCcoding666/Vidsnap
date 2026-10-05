@@ -1,0 +1,9 @@
+{
+  "id": "e03",
+  "start_seconds": 1.0,
+  "end_seconds": 4.0,
+  "modality": "transcript",
+  "content": "Narrator states the clip demonstrates an offline analysis workflow.",
+  "captured_at": "2026-01-01T00:00:00Z",
+  "budget_class": "direct_baseline"
+}

@@ -1,0 +1,125 @@
+name: Recipe proposal
+description: Propose one source-preserving recipe.
+title: "[Recipe]: "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Propose **one** source-preserving recipe for VidSnap Harness. Complete every field below; incomplete proposals cannot be evaluated.
+
+        Keep the proposal within the project scope: a local, single-user harness for bounded video analysis runs. A recipe is a versioned task package with a fixed goal and budgets, implemented as typed Python models plus its adapters, runners, and renderers — not merely declarative data. All tests must stay offline and deterministic: no network, no model calls, no real media.
+
+  - type: dropdown
+    id: proposal-kind
+    attributes:
+      label: Proposal kind
+      description: Is this a new recipe or a change to an existing recipe?
+      options:
+        - New recipe
+        - Change to an existing recipe
+    validations:
+      required: true
+
+  - type: input
+    id: task
+    attributes:
+      label: Task
+      description: What one bounded task does this recipe accomplish? State the fixed goal in a single sentence.
+      placeholder: e.g. Extract a chapter-level outline from a local video and its subtitle file.
+    validations:
+      required: true
+
+  - type: textarea
+    id: user-outcome
+    attributes:
+      label: User outcome
+      description: What does a user concretely receive when the recipe finishes, and how do they know it succeeded?
+      placeholder: |
+        - Deliverable:
+        - Success check:
+    validations:
+      required: true
+
+  - type: textarea
+    id: evidence-and-artifacts
+    attributes:
+      label: Evidence and artifacts
+      description: What evidence and committed artifacts must accompany this recipe? List fixtures, sample sources (no real media), docs, and the exact commands a reviewer runs offline to reproduce your results.
+      value: |
+        - Fixtures:
+        - Sample sources:
+        - Reproduction commands:
+    validations:
+      required: true
+
+  - type: textarea
+    id: fixed-tools
+    attributes:
+      label: Fixed tools
+      description: List the exact registered tools this recipe uses. Recipes may only use allow-listed, registered tools.
+      placeholder: e.g. subtitle_reader, frame_sampler
+    validations:
+      required: true
+
+  - type: textarea
+    id: budgets
+    attributes:
+      label: Budgets
+      description: Declare the explicit up-front budgets (step, time, token, and size limits) this recipe fixes.
+      placeholder: e.g. max 12 steps, 10 minutes wall clock, 50k tokens, 100 MB inputs
+    validations:
+      required: true
+
+  - type: textarea
+    id: verifier-gates
+    attributes:
+      label: Verifier gates
+      description: Which verifier gates decide pass/fail? Name the existing or proposed checks and what each one asserts.
+      placeholder: e.g. conformance suite, output-schema check, replay-vs-fixture diff
+    validations:
+      required: true
+
+  - type: textarea
+    id: source-preservation
+    attributes:
+      label: Source-preservation plan
+      description: Explain how the recipe preserves source material — how it avoids modifying, moving, or deleting user media, subtitles, or fixtures, and how outputs stay separate from inputs.
+    validations:
+      required: true
+
+  - type: textarea
+    id: offline-tests
+    attributes:
+      label: Offline tests
+      description: Describe the tests that prove the recipe works offline — recorded fixtures, offline trace/replay — and the exact public gate commands that must pass.
+      placeholder: |
+        - Fixtures used:
+        - Replay checks:
+        - Gates: python -m pytest -q, ruff format --check ., ruff check ., mypy src, python -m build, vidsnap conformance
+    validations:
+      required: true
+
+  - type: textarea
+    id: non-goals
+    attributes:
+      label: Explicit non-goals
+      description: List what this recipe intentionally does not do, including anything that would fall outside the project scope.
+      placeholder: e.g. no network fetches, no new providers, no multi-user features
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: security-checklist
+    attributes:
+      label: Security checklist
+      description: Confirm every item before submitting.
+      options:
+        - label: No credentials, API keys, cookies, .env files, media, datasets, RunBundles, benchmark results, or raw provider requests/responses are included in this proposal.
+          required: true
+        - label: Keys are sourced only from local environment variables and are never logged, serialized into traces, or hard-coded.
+          required: true
+        - label: The recipe introduces no network access, model calls, shells, browsers, or URL schemes outside allow-lists during tests.
+          required: true
+        - label: Existing gates, conformance checks, and security tooling are not weakened, bypassed, or rewritten.
+          required: true

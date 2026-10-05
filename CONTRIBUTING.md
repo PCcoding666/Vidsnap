@@ -1,26 +1,99 @@
 # Contributing
 
-Use Python 3.10+ and install the development extras:
+Thanks for helping improve VidSnap — a local-first Python runtime for auditable video-analysis agents. This guide is for external contributors. Keep changes small, offline-testable, and inside the existing boundaries.
+
+## Requirements
+
+- Python 3.10+
+- FFmpeg and ffprobe on PATH (required for live analyze runs)
+
+## Setup
 
     python -m pip install -e '.[server,dev]'
+    vidsnap --help
+    vidsnap conformance
 
-Before submitting a change, add offline TDD coverage and run:
+No provider key is needed for development: the offline test suite uses deterministic fakes such as `MockProvider`, and `vidsnap demo` replays packaged fixtures with no key and no network.
 
-    ruff format --check .
+## Architecture
+
+Runtime code lives in `src/vidsnap/`: the bounded agent loop with verifier gates (`vidsnap.harness`), typed contracts and schemas (`src/vidsnap/contracts/`), local video ports, providers (`vidsnap.providers`), recipes (`src/vidsnap/recipes/`), trace recording and the offline HTML exporter (`src/vidsnap/trace/`), the localhost API adapter, and the benchmark.
+
+Where to extend, and the docs that explain it:
+
+- Plugins: `examples/plugin-template/README.md` — copy-and-rename a complete, working tool plugin; validate it with `vidsnap plugin validate .` and `vidsnap plugin test .`.
+- Providers: `docs/providers.md` — `ProviderProtocol`, the built-in providers, conformance checking, and entry-point discovery.
+- Recipes: `src/vidsnap/recipes/` — the module docstrings cover `InterviewRecipeRunner` and the source-preserving interview recipe contracts.
+
+## Tests
+
+Everything must run offline and deterministic: no network, no model calls, no keys, no real media. Use recorded fixtures and offline replay.
+
+Focused run for one area:
+
+    python -m pytest -q tests/providers
+    python -m pytest -q tests/recipes
+    python -m pytest -q tests/trace
+
+Full suite:
+
+    python -m pytest -q
+
+On a normal development machine, the full test suite should complete in under 10 minutes.
+
+Follow test-first development: add or extend the offline tests before changing production behavior. New tests live alongside the existing ones under `tests/`: provider changes in `tests/providers`, recipe changes in `tests/recipes`, trace-viewer changes in `tests/trace`.
+
+## Small-change workflow
+
+1. Pick a scoped item — `docs/good-first-issues.md` lists starter-sized issues with acceptance criteria and explicit non-goals — or open an issue first for anything larger.
+2. Create a topic branch.
+3. Write the failing offline test(s).
+4. Implement the smallest change that passes.
+5. Run the focused test directory, then the full pre-PR checklist below.
+6. Open a pull request.
+
+Keep changes minimal and scoped; no drive-by refactors. Style: four-space indentation and strict typed public contracts; `ruff` and `mypy` are the arbiters.
+
+## Pre-PR checklist
+
+Run all of these from the repository root before opening a pull request:
+
+    ruff format --check src tests scripts
     ruff check .
     mypy src
     python -m pytest -q
     python -m build
     vidsnap conformance
+    python scripts/secret_scan.py
+    git diff --check
 
-Do not commit credentials, local media, datasets, generated RunBundles, benchmark outputs, cookies, or .env files. Changes may not introduce SaaS state, databases, queues, accounts, arbitrary model routing, or a frontend.
+## Pull request expectations
 
-## AI-native Development Protocol
+- One focused change per PR, with a short description of what changed and why, linked to an issue.
+- The change is covered by offline tests; CI reruns the suite independently.
+- Docs are updated in the same PR when behavior or the public surface changes.
+- Stay inside the existing boundaries (see Compatibility and Prohibited artifacts below); if your idea needs a new boundary, discuss it in an issue first.
 
-Read PROJECT_STATE.md first; it is the single source of truth for the current main objective, task cards, and state transitions. All work starts from a task card with six required fields: objective, non-goals, acceptance evidence, authority/data/secret boundaries, owner/executor/reviewer, and next human gate. Exactly one main objective may be IN_PROGRESS at a time.
+## Compatibility
 
-Task states use only this seven-state vocabulary: PROPOSED, APPROVED, IN_PROGRESS, READY_FOR_REVIEW, VERIFIED, BLOCKED, RELEASED. Every transition is recorded in PROJECT_STATE.md with its reason.
+- Keep Python 3.10+ compatibility; do not require a newer interpreter without an agreed, documented decision.
+- Public contracts — the output-contract schemas, recipe and RunBundle formats, the CLI surface and conformance checks, `ProviderProtocol`, and the plugin manifest — change only through a deliberate, versioned, tested change; never break them silently.
+- Every model call stays behind the typed provider ports. Provider and model selection are fixed at construction and never change mid-run; the model is pinned to qwen3.8-max, concurrency is capped at two, and benchmark profiles stay locked to the reference model.
 
-The main loop: Qoder CLI is the implementation worker for maintainer-run agentic changes, implementing in TDD batches on one shared branch; human contributors may implement directly, provided they follow the Task Contract, tests, CI, and the user merge gate. Codex reviews each batch and independently reruns the focused gate; CI independently verifies the single Draft PR; only the user decides whether to merge. The executor never self-certifies completion.
+## Security
 
-Do not commit prohibited artifacts: credentials, media, datasets, RunBundles, benchmark results, cookies, .env files, or raw provider requests/responses. Do not configure GitHub rulesets, security-scanning switches, or the default branch without explicit user authorization.
+- Credentials come only from local environment variables. Never hard-code, log, print, or transmit keys anywhere except the provider call path, and never accept them through the API.
+- The API binds to 127.0.0.1 with no accounts, jobs, or stored history; keep it that way.
+- Do not add network egress outside the typed provider ports.
+- Report suspected vulnerabilities privately per `SECURITY.md` — do not open a public issue for them.
+
+## Prohibited artifacts and changes
+
+Never commit or include in a PR:
+
+- credentials, API keys, tokens, cookies, or `.env` files;
+- local media files or datasets;
+- RunBundles, benchmark results, or raw provider requests/responses;
+- anything else generated by a live run.
+
+Do not introduce: users or authentication, databases, queues (Redis, Celery), object-storage persistence, a frontend, job/history state, arbitrary prompt/model/provider proxy endpoints, or any SaaS-style state. VidSnap is local-first by design; propose new infrastructure in an issue before building it.

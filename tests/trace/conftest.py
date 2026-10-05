@@ -11,6 +11,7 @@ import pytest
 
 from vidsnap.contracts import TerminalState, default_loop_spec
 from vidsnap.contracts.agent import ProviderUsage
+from vidsnap.contracts.models import Evidence
 from vidsnap.loop.run_bundle import RunBundle
 from vidsnap.loop.trace_recorder import TraceRecorder
 
@@ -198,7 +199,15 @@ def escaping_run(tmp_path: Path) -> Path:
 def run_with_evidence(traced_run: Path) -> Path:
     """A traced run that also carries real evidence and artifact files on disk."""
     (traced_run / "evidence" / "frame-001.json").write_text(
-        json.dumps({"id": "frame-001", "marker": "EVIDENCE_MARKER_9f3c"})
+        json.dumps(
+            Evidence(
+                id="frame-001",
+                start_seconds=0.0,
+                end_seconds=1.0,
+                modality="frame",
+                content="PREVIEW_MARKER_7a2f sampled opening frame description",
+            ).model_dump(mode="json")
+        )
     )
     artifact_dir = traced_run / "artifacts" / "turn-1"
     artifact_dir.mkdir()

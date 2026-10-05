@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Protocol
+from typing import Protocol, runtime_checkable
 
 from pydantic import JsonValue
 
@@ -94,3 +94,26 @@ class AgentModelPort(Protocol):
 
     async def decide_next(self, request: AgentStepRequest) -> AgentDecisionResponse:
         """Return exactly one bounded tool-call batch or one final answer."""
+
+
+@dataclass(frozen=True, slots=True)
+class ProviderIdentity:
+    """The fixed, immutable identity a provider exposes to harness and discovery."""
+
+    id: str
+    model: str
+    base_url: str
+
+
+@runtime_checkable
+class ProviderProtocol(AgentModelPort, ToolPlanningPort, VideoModelPort, Protocol):
+    """Runtime conformance contract every complete bounded provider must satisfy."""
+
+    @property
+    def identity(self) -> ProviderIdentity:
+        """The read-only fixed identity used by discovery and selection."""
+
+
+@runtime_checkable
+class ProviderPlugin(ProviderProtocol, Protocol):
+    """The provider extension contract; any runtime-conforming provider qualifies."""

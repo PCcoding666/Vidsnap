@@ -1,0 +1,9 @@
+{
+  "id": "e01",
+  "start_seconds": 0.0,
+  "end_seconds": 0.5,
+  "modality": "frame",
+  "content": "Opening title card of the synthetic demo clip.",
+  "captured_at": "2026-01-01T00:00:00Z",
+  "budget_class": "direct_baseline"
+}
