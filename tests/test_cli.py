@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 from typer.testing import CliRunner
 
+from tests.ansi import strip_ansi
 from vidsnap.cli import app
 from vidsnap.contracts import TerminalState, VideoSource
 from vidsnap.recipes.render import InterviewRecipeArtifacts
@@ -49,24 +50,25 @@ def test_cli_help_lists_recipe_command() -> None:
     result = CliRunner().invoke(app, ["--help"])
 
     assert result.exit_code == 0
-    assert "recipe" in result.stdout
+    assert "recipe" in strip_ansi(result.stdout)
 
 
 def test_recipe_help_lists_interview_command() -> None:
     result = CliRunner().invoke(app, ["recipe", "--help"])
 
     assert result.exit_code == 0
-    assert "interview" in result.stdout
+    assert "interview" in strip_ansi(result.stdout)
 
 
 def test_recipe_interview_help_requires_local_video_and_output_dir_only() -> None:
     result = CliRunner().invoke(app, ["recipe", "interview", "--help"])
 
     assert result.exit_code == 0
-    assert "video" in result.stdout.lower()
-    assert "--output-dir" in result.stdout
+    help_text = strip_ansi(result.stdout)
+    assert "video" in help_text.lower()
+    assert "--output-dir" in help_text
     for forbidden in ("--model", "--prompt", "--url", "--budget", "--tool"):
-        assert forbidden not in result.stdout
+        assert forbidden not in help_text
 
 
 def test_recipe_interview_reports_success_with_exactly_four_artifacts(
@@ -154,18 +156,19 @@ def test_cli_help_lists_harness_commands() -> None:
     result = CliRunner().invoke(app, ["--help"])
 
     assert result.exit_code == 0
-    assert "analyze" in result.stdout
-    assert "benchmark" in result.stdout
-    assert "conformance" in result.stdout
-    assert "trace" in result.stdout
-    assert "recipe" in result.stdout
+    help_text = strip_ansi(result.stdout)
+    assert "analyze" in help_text
+    assert "benchmark" in help_text
+    assert "conformance" in help_text
+    assert "trace" in help_text
+    assert "recipe" in help_text
 
 
 def test_cli_help_exposes_trace_export() -> None:
     result = CliRunner().invoke(app, ["trace", "--help"])
 
     assert result.exit_code == 0
-    assert "export" in result.stdout
+    assert "export" in strip_ansi(result.stdout)
 
 
 def test_benchmark_commands_truthfully_report_blocked_without_local_key(monkeypatch) -> None:

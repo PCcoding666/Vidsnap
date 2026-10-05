@@ -9,6 +9,7 @@ from pathlib import Path
 import pytest
 from typer.testing import CliRunner
 
+from tests.ansi import strip_ansi
 from vidsnap.benchmark.trust import (
     RegisteredCase,
     TrustManifest,
@@ -100,8 +101,9 @@ def test_benchmark_evaluate_help_documents_input_and_output() -> None:
     result = CliRunner().invoke(app, ["benchmark", "evaluate", "--help"])
 
     assert result.exit_code == 0
-    assert "INPUT_JSON" in result.stdout
-    assert "--output" in result.stdout
+    help_text = strip_ansi(result.stdout)
+    assert "INPUT_JSON" in help_text
+    assert "--output" in help_text
 
 
 def test_evaluate_writes_report_with_summary_and_nine_metrics_per_variant(
