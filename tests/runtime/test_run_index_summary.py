@@ -73,8 +73,52 @@ async def test_successful_run_summary_carries_header_usage_and_cost(tmp_path: Pa
     cost = record["cost"]
     assert isinstance(cost, dict)
     assert cost["amount"] == pytest.approx((11 * 1000.0 + 7 * 2000.0) / 1_000_000)
-    assert cost["complete"] is True
+    # Speech recognition ran in this run and is not priced, so the cost is incomplete.
+    assert cost["complete"] is False
+    assert cost["note"] == "speech_recognition_not_priced"
     assert cost["currency"] == "CNY"
+
+
+@pytest.mark.asyncio
+async def test_silent_run_cost_covers_every_priced_call(tmp_path: Path) -> None:
+    context, *_ = build_context(tmp_path, has_audio=False)
+    context.provider_identity = ProviderIdentity(
+        id="qwen", model="qwen3.8-max", base_url="https://h/v1"
+    )
+    await make_kernel().run(context)
+
+    record = summarize_run(
+        context.bundle.path,
+        command="analyze",
+        price_table=_price_table(tmp_path, "qwen3.8-max"),
+    )
+
+    cost = record["cost"]
+    assert isinstance(cost, dict)
+    assert cost["complete"] is True
+    assert cost["note"] is None
+
+
+@pytest.mark.asyncio
+async def test_run_without_model_requests_has_no_priced_amount(tmp_path: Path) -> None:
+    context, *_ = build_context(tmp_path, has_audio=True)
+    context.provider_identity = ProviderIdentity(
+        id="qwen", model="qwen3.8-max", base_url="https://h/v1"
+    )
+    context.policy = context.policy.model_copy(update={"max_tool_calls": 0})
+    await make_kernel().run(context)
+
+    record = summarize_run(
+        context.bundle.path,
+        command="analyze",
+        price_table=_price_table(tmp_path, "qwen3.8-max"),
+    )
+
+    assert record["terminal_state"] == "EXHAUSTED"
+    cost = record["cost"]
+    assert isinstance(cost, dict)
+    assert cost["amount"] is None
+    assert cost["note"] == "no_model_requests"
 
 
 @pytest.mark.asyncio

@@ -36,9 +36,10 @@ by 0.1.0 and the packaged demo still load, replay, and export. See
 - Human review records: `vidsnap runs review RUN` appends edit minutes,
   published or not, factual errors found, images replaced, and a note.
 - Cost: `--price-table` (`VIDSNAP_PRICE_TABLE`) accepts your own
-  `vidsnap.price-table/v1` file. Without one, cost is `null`; with one, a run
-  is priced only when its model is listed and every model request reported its
-  usage. VidSnap ships no prices.
+  `vidsnap.price-table/v1` file. Without one, cost is `null`; with one, a
+  run's model requests are priced only when there was at least one, its model
+  is listed, and every request reported its usage. `complete` is `false` when
+  speech recognition ran, because it is not priced. VidSnap ships no prices.
 - `InterviewRecipeRunner.run(..., run_dir=...)` keeps the RunBundle at
   `run_dir` whatever the outcome and reports it as `run_path`.
 

@@ -90,7 +90,7 @@ def summarize_run(
         failure_reason = outcome_reason
         if failure_category is None and outcome_reason is not None:
             failure_category = "unknown"
-    input_tokens, output_tokens, tokens_reported = _model_usage(events)
+    model_requests, input_tokens, output_tokens, tokens_reported = _model_usage(events)
     budget = _last_payload(events, "budget.updated")
 
     return {
@@ -118,9 +118,11 @@ def summarize_run(
         "tokens_reported": tokens_reported,
         "cost": price_run(
             model=model,
+            model_requests=model_requests,
             input_tokens=input_tokens,
             output_tokens=output_tokens,
             tokens_reported=tokens_reported,
+            speech_recognition=_speech_recognition_ran(events),
             price_table=price_table,
         ),
         "terminal_state": terminal_state,
@@ -429,8 +431,9 @@ def _provider(
     return None, None
 
 
-def _model_usage(events: Sequence[RunEvent]) -> tuple[int, int, bool]:
-    """Sum model-request token usage; ``reported`` is False if any attempt went unreported."""
+def _model_usage(events: Sequence[RunEvent]) -> tuple[int, int, int, bool]:
+    """Count model-request attempts and sum tokens; unreported attempts clear ``reported``."""
+    requests = 0
     input_tokens = 0
     output_tokens = 0
     reported = True
@@ -440,13 +443,26 @@ def _model_usage(events: Sequence[RunEvent]) -> tuple[int, int, bool]:
         is_model_lane_usage = event_type.startswith("agent.decision") and event.usage is not None
         if not (is_model_request or is_model_lane_usage):
             continue
+        requests += 1
         if event.usage is None:
             reported = False
             continue
         input_tokens += event.usage.input_tokens
         output_tokens += event.usage.output_tokens
         reported = reported and event.usage.provider_reported
-    return input_tokens, output_tokens, reported
+    return requests, input_tokens, output_tokens, reported
+
+
+def _speech_recognition_ran(events: Sequence[RunEvent]) -> bool:
+    """True when a speech-recognition tool call completed or failed in this run."""
+    for event in events:
+        if not (event.event_type or "").startswith("tool.call"):
+            continue
+        if event.status not in ("completed", "failed"):
+            continue
+        if "transcribe_audio" in (event.payload.get("name"), event.payload.get("tool")):
+            return True
+    return False
 
 
 def _failed_gates(

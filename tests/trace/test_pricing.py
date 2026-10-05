@@ -79,9 +79,11 @@ def test_complete_reported_usage_is_priced_exactly(tmp_path: Path) -> None:
 
     cost = price_run(
         model="example-model",
+        model_requests=2,
         input_tokens=1_000_000,
         output_tokens=250_000,
         tokens_reported=True,
+        speech_recognition=False,
         price_table=loaded,
     )
 
@@ -99,9 +101,11 @@ def test_no_price_table_means_no_cost_record() -> None:
     assert (
         price_run(
             model="example-model",
+            model_requests=1,
             input_tokens=10,
             output_tokens=10,
             tokens_reported=True,
+            speech_recognition=False,
             price_table=None,
         )
         is None
@@ -123,9 +127,11 @@ def test_unpriceable_runs_record_a_null_amount_and_why(
 
     cost = price_run(
         model=model,
+        model_requests=1,
         input_tokens=100,
         output_tokens=100,
         tokens_reported=tokens_reported,
+        speech_recognition=False,
         price_table=loaded,
     )
 
@@ -134,3 +140,37 @@ def test_unpriceable_runs_record_a_null_amount_and_why(
     assert cost["complete"] is False
     assert cost["note"] == note
     assert cost["currency"] == "CNY"
+
+
+def test_a_run_without_model_requests_is_never_priced_as_zero(tmp_path: Path) -> None:
+    cost = price_run(
+        model="example-model",
+        model_requests=0,
+        input_tokens=0,
+        output_tokens=0,
+        tokens_reported=True,
+        speech_recognition=False,
+        price_table=_loaded(tmp_path),
+    )
+
+    assert cost is not None
+    assert cost["amount"] is None
+    assert cost["complete"] is False
+    assert cost["note"] == "no_model_requests"
+
+
+def test_speech_recognition_makes_the_priced_amount_incomplete(tmp_path: Path) -> None:
+    cost = price_run(
+        model="example-model",
+        model_requests=1,
+        input_tokens=1_000_000,
+        output_tokens=0,
+        tokens_reported=True,
+        speech_recognition=True,
+        price_table=_loaded(tmp_path),
+    )
+
+    assert cost is not None
+    assert cost["amount"] == 2.0
+    assert cost["complete"] is False
+    assert cost["note"] == "speech_recognition_not_priced"

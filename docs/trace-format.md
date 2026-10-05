@@ -212,8 +212,13 @@ names and numbers; use your provider's current price list):
 
 An invalid table is refused before the run starts. With a valid table, the
 index line's `cost` is
-`{"amount", "currency", "model", "complete", "note", "price_table_sha256"}`.
-`amount` is computed only when the run's model is known, is listed in the
-table, and every model request reported its usage; otherwise `amount` is
-`null`, `complete` is `false`, and `note` is `model_unknown`,
-`model_not_in_price_table`, or `usage_not_reported`.
+`{"amount", "currency", "model", "complete", "note", "price_table_sha256"}`:
+
+- `amount` prices the run's model requests. It is `null` when the run made
+  no model request (`note`: `no_model_requests`), when its model is unknown
+  (`model_unknown`) or not in the table (`model_not_in_price_table`), or when
+  a model request did not report its usage (`usage_not_reported`).
+- `complete` is `true` only when `amount` covers every provider call the run
+  made. Speech recognition is not priced, so when it ran, `amount` is still
+  given for the model requests but `complete` is `false` and `note` is
+  `speech_recognition_not_priced`.

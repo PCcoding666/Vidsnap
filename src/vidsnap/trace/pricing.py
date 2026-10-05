@@ -1,9 +1,12 @@
 """Cost from a user-supplied price table only; VidSnap ships no prices.
 
-Without a price table there is no cost record. With one, a run is priced only
-when its model is known, listed in the table, and every model request reported
-its token usage; otherwise the amount is ``None`` with a note saying why.
-Unknown is never zero.
+Without a price table there is no cost record. With one, a run's model
+requests are priced only when the run made at least one, its model is known
+and listed in the table, and every request reported its token usage;
+otherwise the amount is ``None`` with a note saying why. ``complete`` is true
+only when the amount covers every provider call the run made: speech
+recognition is not priced, so a run that used it is never complete. Unknown is
+never zero.
 """
 
 from __future__ import annotations
@@ -57,9 +60,11 @@ def load_price_table(path: Path) -> LoadedPriceTable:
 def price_run(
     *,
     model: str | None,
+    model_requests: int,
     input_tokens: int,
     output_tokens: int,
     tokens_reported: bool,
+    speech_recognition: bool,
     price_table: LoadedPriceTable | None,
 ) -> dict[str, JsonValue] | None:
     """Price one run's model-request tokens, or explain why it cannot be priced."""
@@ -68,7 +73,9 @@ def price_run(
     note: str | None = None
     amount: float | None = None
     price = price_table.table.models.get(model) if model is not None else None
-    if model is None:
+    if model_requests == 0:
+        note = "no_model_requests"
+    elif model is None:
         note = "model_unknown"
     elif price is None:
         note = "model_not_in_price_table"
@@ -83,11 +90,13 @@ def price_run(
             / 1_000_000,
             10,
         )
+        if speech_recognition:
+            note = "speech_recognition_not_priced"
     return {
         "amount": amount,
         "currency": price_table.table.currency,
         "model": model,
-        "complete": amount is not None,
+        "complete": amount is not None and not speech_recognition,
         "note": note,
         "price_table_sha256": price_table.sha256,
     }
