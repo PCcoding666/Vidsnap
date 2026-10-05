@@ -52,7 +52,8 @@ Unknown values are always `null`, never zero and never guessed.
 | `plugins` | `[{"id", "version"}]` of the resolved tool plugins |
 | `package_version` | The VidSnap version that ran |
 
-The input is hashed before the run's wall-clock budget starts. The provider
+The input is hashed before the run's wall-clock budget starts, so hashing time
+is not counted in the run's budget or in its recorded duration. The provider
 is known for the built-in Qwen stack and for any port that declares a
 `ProviderIdentity`; the redacted provider URL stays in `manifest.json`.
 Exported HTML traces never show `provider` or `speech_recognizer`.
