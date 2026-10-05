@@ -8,7 +8,8 @@ VidSnap is a local-first Python runtime for video-analysis agents. Point it at
 one local video and one goal: it runs a bounded agent loop, checks the draft
 output against sampled evidence, and records the whole run as a replayable
 trace. Nothing leaves your machine except model calls to your configured
-provider — no accounts, no job queue, no stored history.
+provider — no accounts, no job queue, no server-side history. CLI runs append
+one summary line each to a local run index in a directory you choose.
 
 ## What VidSnap does
 
@@ -41,7 +42,8 @@ repository and change into it, then install in editable mode:
     vidsnap --help
     vidsnap conformance
     vidsnap analyze /absolute/path/video.mp4 --goal "Summarize the demonstration"
-    vidsnap manifest run/<run-id>
+    vidsnap runs list
+    vidsnap manifest run/<bundle-dir>
 
 ## Limitations
 
@@ -70,9 +72,11 @@ in a RunBundle you can replay and audit offline.
   sections and claims that pass the built-in gates `claims_are_supported` and
   `required_sections_covered` against the evidence actually collected.
   Unsupported claims fail the run instead of being returned.
-- RunBundles. Each run writes a bundle recording the plan, every tool call with
-  its payload fingerprint, the sampled evidence, verifier gates, repair rounds,
-  and the final output.
+- RunBundles. Each run writes a bundle recording a run header (goal, input
+  SHA-256, provider and model, versions), every tool call with its redacted
+  arguments and call fingerprint, the evidence, token usage, verifier gates,
+  repairs, structured failures, and the final output
+  ([trace format](docs/trace-format.md)).
 - Offline replayable traces. Export a finished run as a fully offline HTML page
   and replay it step by step in a browser:
 
@@ -122,9 +126,16 @@ quality, latency, or cost claims are published.
 
 ## CLI and API surfaces
 
-- CLI: `vidsnap demo`, `analyze`, `manifest`, `serve`, `conformance`,
-  `trace export`, `benchmark run`, `benchmark compare`, `plugin validate`,
-  `plugin test`.
+- CLI: `vidsnap demo`, `analyze`, `recipe interview`, `manifest`, `runs list`,
+  `runs review`, `serve`, `conformance`, `trace export`, `benchmark run`,
+  `benchmark compare`, `plugin validate`, `plugin test`.
+- Run index: `analyze` and `recipe interview` print their bundle as
+  `run_path` and append one line per finished run to `index.jsonl` under the
+  runs root (`--runs-root`, `VIDSNAP_RUNS_ROOT`, default `./run`): input hash,
+  duration, tokens, cost (only with your own `--price-table`, otherwise null),
+  terminal state, failed gates, failure category, and bundle path.
+  `vidsnap runs list` prints it; `vidsnap runs review` adds edit minutes,
+  publish decision, factual errors, replaced images, and a note.
 - Python import: `vidsnap`; `VideoHarness().run(...)` exposes the same
   stateless contract as the API.
 - Localhost API: `GET /health`, `GET /v1/manifest`, `POST /v1/analyze`,

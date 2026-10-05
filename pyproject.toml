@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "vidsnap-harness"
-version = "0.1.0"
+version = "0.1.1"
 description = "Auditable video-agent runtime with bounded tools, pluggable tasks, evidence-grounded outputs, and replayable traces."
 keywords = [
     "video-ai",

@@ -5,6 +5,64 @@ Keep a Changelog style.
 
 ## [Unreleased]
 
+## [0.1.1] - Unreleased
+
+Every run now leaves a trace that can be evaluated afterwards. All trace
+changes are additive payload keys within `vidsnap.trace/v1`; bundles written
+by 0.1.0 and the packaged demo still load, replay, and export. See
+[Trace format and run index](trace-format.md).
+
+### Added
+
+- Run header: `run.started` records `vidsnap.run-header/v1` with the goal and
+  required sections as given, the input's SHA-256 and byte size, the provider
+  and speech-recognizer id and model when known, the recipe id and version,
+  the resolved plugin versions, and the package version. The probed input
+  duration is repeated on the terminal run event as `input_duration_seconds`.
+- Tool calls: `tool.call.started` records the validated arguments, after the
+  existing key-based redaction, and the call fingerprint the kernel already
+  used to reject duplicate calls. The README's fingerprint statement is now
+  true.
+- Structured failures: failed and blocked `model.request` events record
+  `payload.failure` in the `vidsnap.provider-failure/v1` shape (category, HTTP
+  status, request bytes, and token counts only when reported); the terminal
+  run event records `payload.failure` in the `vidsnap.run-failure/v1` shape,
+  or `null`. `ProviderFailure` and `FailureCategory` are exported from
+  `vidsnap.contracts`, and `ProviderError` accepts an optional `failure=`.
+- Run index: `vidsnap analyze` and `vidsnap recipe interview` append one
+  `vidsnap.run-index/v1` line per finished run to `index.jsonl` under
+  `--runs-root` (`VIDSNAP_RUNS_ROOT`, default `./run`). `vidsnap runs list`
+  prints it as a table.
+- Human review records: `vidsnap runs review RUN` appends edit minutes,
+  published or not, factual errors found, images replaced, and a note.
+- Cost: `--price-table` (`VIDSNAP_PRICE_TABLE`) accepts your own
+  `vidsnap.price-table/v1` file. Without one, cost is `null`; with one, a run
+  is priced only when its model is listed and every model request reported its
+  usage. VidSnap ships no prices.
+- `InterviewRecipeRunner.run(..., run_dir=...)` keeps the RunBundle at
+  `run_dir` whatever the outcome and reports it as `run_path`.
+
+### Changed
+
+- `vidsnap recipe interview` keeps its RunBundle under the runs root on
+  success and failure, and adds `run_path` to its JSON output. The output
+  directory still holds exactly the four recipe artifacts. Library callers
+  that pass no `run_dir` keep the 0.1.0 temporary bundle.
+- `vidsnap analyze` without `--output-dir` writes its bundle under the runs
+  root; with the default root this is the same `./run/<id>` as before.
+- The Qwen client raises `ProviderError` for HTTP failures and non-JSON
+  response bodies in analysis and tool planning, as agent decisions already
+  did. Such runs still end `FAILED`, now with the reason `provider error`
+  instead of `unexpected kernel error`.
+- Rejected tool calls raise `ToolArgumentError` and wall-clock exhaustion
+  raises `WallClockExceeded`; both subclass the exception types raised before
+  (`ValueError` and `BudgetExceeded`), and messages are unchanged.
+- RunBundle redaction keeps an unreported usage counter as `null` instead of
+  masking it.
+- Exported HTML traces drop the run header's `provider` and
+  `speech_recognizer` keys, keeping the guarantee that a projected trace never
+  carries provider identity.
+
 ## [0.1.0] - 2026-10-05
 
 ### Added
