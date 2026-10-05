@@ -222,3 +222,17 @@ index line's `cost` is
   made. Speech recognition is not priced, so when it ran, `amount` is still
   given for the model requests but `complete` is `false` and `note` is
   `speech_recognition_not_priced`.
+
+## Known limitations
+
+- Failure records have no `source` field: a speech-recognition failure such
+  as an ASR HTTP 503 is recorded and indexed with the same category as a
+  model failure, next to the run's model.
+- A provider's content-moderation refusal is recorded as a plain `http_4xx`
+  with its status; the provider's error code is not kept.
+- Appends to `index.jsonl` take no file lock; runs finishing at the same
+  moment against the same runs root could interleave their lines.
+- A rejected tool call (unknown tool, invalid or duplicate arguments) leaves
+  no `tool.call` event; only the run failure records it, as `validation`.
+- Exporting a 0.1.1 bundle with the 0.1.0 exporter shows the provider id and
+  model; export with 0.1.1 or later.

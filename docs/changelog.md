@@ -70,6 +70,18 @@ by 0.1.0 and the packaged demo still load, replay, and export. See
   (`ValueError` and `BudgetExceeded`), and messages are unchanged.
 - RunBundle redaction keeps an unreported usage counter as `null` instead of
   masking it.
+- A failed model request whose request size was measured now carries `usage`
+  (`model_calls: 1`, `input_bytes`, `provider_reported: false`) instead of
+  `null`, so usage totals in traces now count failed attempts.
+- `vidsnap analyze --output-dir X` writes its bundle to `X` as before, but
+  also appends to `./run/index.jsonl` in the working directory unless
+  `--runs-root` or `VIDSNAP_RUNS_ROOT` points elsewhere.
+- The recipe's `trace.html`, and any exported trace, now shows the input's
+  SHA-256 and byte size, the goal, and every tool call's arguments and
+  fingerprint. Review it before publishing it.
+- Export 0.1.1 bundles with VidSnap 0.1.1 or later: the 0.1.0 exporter does
+  not drop the run header's provider identity, so its HTML would show the
+  provider id and model (never the URL or key).
 - Exported HTML traces drop the run header's `provider` and
   `speech_recognizer` keys, keeping the guarantee that a projected trace never
   carries provider identity.
