@@ -17,6 +17,14 @@ from vidsnap.plugins import PluginRegistry, ToolPlugin, discovery
 from vidsnap.plugins.project import validate_plugin_project
 from vidsnap.recipes.runner import InterviewRecipeRunner
 from vidsnap.trace.export import export_trace
+from vidsnap.trace.pricing import LoadedPriceTable, load_price_table
+from vidsnap.trace.run_index import (
+    INDEX_FILE_NAME,
+    append_index_record,
+    read_index,
+    render_run_table,
+    summarize_run,
+)
 
 app = typer.Typer(
     name="vidsnap",
@@ -31,11 +39,52 @@ recipe_app = typer.Typer(help="Run grounded editorial recipes.")
 app.add_typer(recipe_app, name="recipe")
 plugin_app = typer.Typer(help="Validate and test local plugin projects.")
 app.add_typer(plugin_app, name="plugin")
+runs_app = typer.Typer(help="List indexed runs from the local run index.")
+app.add_typer(runs_app, name="runs")
 
 
 _RUNS_ROOT_HELP = (
     "Directory that keeps each RunBundle and the run index (index.jsonl); defaults to ./run."
 )
+_PRICE_TABLE_HELP = (
+    "Your vidsnap.price-table/v1 JSON file; without it the run index records cost as null."
+)
+
+
+RunsRootOption = Annotated[
+    Path, typer.Option("--runs-root", envvar="VIDSNAP_RUNS_ROOT", help=_RUNS_ROOT_HELP)
+]
+PriceTableOption = Annotated[
+    Path | None,
+    typer.Option("--price-table", envvar="VIDSNAP_PRICE_TABLE", help=_PRICE_TABLE_HELP),
+]
+
+
+def _load_prices(path: Path | None) -> LoadedPriceTable | None:
+    """Validate a supplied price table before any run starts; exit 2 when invalid."""
+    if path is None:
+        return None
+    try:
+        return load_price_table(path.expanduser())
+    except ValueError as error:
+        typer.echo(f"Price table refused: {error}", err=True)
+        raise typer.Exit(code=2) from None
+
+
+def _index_run(
+    run_path: Path | None,
+    runs_root: Path,
+    *,
+    command: str,
+    prices: LoadedPriceTable | None,
+) -> None:
+    """Append the finished run to the run index; never change the run's outcome."""
+    if run_path is None or not (run_path / "manifest.json").is_file():
+        return
+    try:
+        append_index_record(runs_root, summarize_run(run_path, command=command, price_table=prices))
+    except (OSError, ValueError) as error:
+        typer.echo(f"Run index not updated: {type(error).__name__}", err=True)
 
 
 def _plugin_error() -> None:
@@ -121,15 +170,25 @@ def analyze(
     video: Path = typer.Argument(..., exists=True, readable=True),
     goal: str = typer.Option("Summarize the video.", "--goal", min=1),
     output_dir: Path | None = typer.Option(None, "--output-dir"),
+    runs_root: RunsRootOption = Path("run"),
+    price_table: PriceTableOption = None,
 ) -> None:
-    """Analyze one local video through the bounded evidence harness."""
+    """Analyze one local video through the bounded evidence harness.
+
+    The RunBundle goes to --output-dir, or to a new directory under the runs
+    root; either way the finished run is appended to the run index.
+    """
+    prices = _load_prices(price_table)
+    resolved_root = runs_root.expanduser().resolve()
+    run_dir = output_dir if output_dir is not None else resolved_root / str(uuid.uuid4())
     result = asyncio.run(
         VideoHarness().run(
             VideoSource(path=video),
             VideoGoal(objective=goal),
-            HarnessPolicy(output_dir=output_dir),
+            HarnessPolicy(output_dir=run_dir),
         )
     )
+    _index_run(result.run_path, resolved_root, command="analyze", prices=prices)
     typer.echo(
         json.dumps(
             {
@@ -168,23 +227,25 @@ def demo(output_dir: Path = typer.Option(Path("vidsnap-demo"), "--output-dir")) 
 def recipe_interview(
     video: Path = typer.Argument(..., exists=True, readable=True),
     output_dir: Path = typer.Option(..., "--output-dir"),
-    runs_root: Path = typer.Option(
-        Path("run"), "--runs-root", envvar="VIDSNAP_RUNS_ROOT", help=_RUNS_ROOT_HELP
-    ),
+    runs_root: RunsRootOption = Path("run"),
+    price_table: PriceTableOption = None,
 ) -> None:
     """Produce the grounded interview record for one local video.
 
-    The run's RunBundle is kept under the runs root whatever the outcome, and
-    its location is printed as run_path.
+    The run's RunBundle is kept under the runs root whatever the outcome, its
+    location is printed as run_path, and the run is appended to the run index.
     """
+    prices = _load_prices(price_table)
     resolved_video = video.expanduser().resolve()
     resolved_output = output_dir.expanduser().resolve()
-    run_dir = runs_root.expanduser().resolve() / str(uuid.uuid4())
+    resolved_root = runs_root.expanduser().resolve()
+    run_dir = resolved_root / str(uuid.uuid4())
     result = asyncio.run(
         InterviewRecipeRunner().run(
             VideoSource(path=resolved_video), resolved_output, run_dir=run_dir
         )
     )
+    _index_run(result.run_path, resolved_root, command="recipe interview", prices=prices)
     payload: dict[str, object] = {"terminal_state": result.terminal_state.value}
     artifacts = result.artifacts
     succeeded = False
@@ -201,6 +262,19 @@ def recipe_interview(
     typer.echo(json.dumps(payload, ensure_ascii=True))
     if not succeeded:
         raise typer.Exit(code=1)
+
+
+@runs_app.command("list")
+def runs_list(runs_root: RunsRootOption = Path("run")) -> None:
+    """Print every indexed run, oldest first, with its latest review."""
+    resolved_root = runs_root.expanduser().resolve()
+    contents = read_index(resolved_root)
+    if not any(record.get("record") == "run" for record in contents.records):
+        typer.echo(f"No runs indexed in {resolved_root / INDEX_FILE_NAME}")
+    else:
+        typer.echo(render_run_table(contents.records))
+    if contents.invalid_lines:
+        typer.echo(f"Skipped {contents.invalid_lines} unreadable index line(s).", err=True)
 
 
 @app.command()
