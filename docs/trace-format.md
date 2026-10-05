@@ -57,7 +57,7 @@ Unknown values are always `null`, never zero and never guessed.
 | `policy` | The policy class name, such as `FixedPolicy` or `AgenticPolicy` (also recorded by 0.1.0) |
 | `goal` | The goal objective, exactly as given |
 | `required_sections` | The goal's required sections, as given |
-| `input_sha256` | SHA-256 of the input file, or `null` if it could not be read |
+| `input_sha256` | SHA-256 of the input file, or `null` if it is not a readable regular file (pipes and devices are never read) |
 | `input_size_bytes` | Size of the input file in bytes, or `null` |
 | `provider` | `{"id", "model"}` of the model provider, or `null` when unknown |
 | `speech_recognizer` | `{"id", "model"}` of the speech recognizer, or `null` when none or unknown |

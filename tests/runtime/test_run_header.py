@@ -256,3 +256,34 @@ async def test_trace_projection_keeps_goal_and_input_but_never_provider_identity
     ):
         assert marker not in document.model_dump_json()
         assert marker not in html
+
+
+@pytest.mark.asyncio
+async def test_unhashable_input_path_still_finalizes_one_truthful_run(tmp_path: Path) -> None:
+    context, *_ = build_context(tmp_path, has_audio=True)
+    context.source = VideoSource(path=Path(f"{tmp_path}/bad\0name.mp4"))
+
+    result = await make_kernel().run(context)
+
+    assert result.terminal_state is TerminalState.SUCCEEDED
+    assert _event(context.bundle.path, "run.started")["payload"]["input_sha256"] is None
+    manifest = json.loads((context.bundle.path / "manifest.json").read_text())
+    assert manifest["finalized_at"] is not None
+
+
+@pytest.mark.asyncio
+async def test_identity_reader_errors_never_escape_the_kernel(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    context, *_ = build_context(tmp_path, has_audio=True)
+
+    async def broken(path: Path) -> object:
+        del path
+        raise RuntimeError("identity reader bug")
+
+    monkeypatch.setattr("vidsnap.runtime.kernel.read_file_identity", broken)
+
+    result = await make_kernel().run(context)
+
+    assert result.terminal_state is TerminalState.SUCCEEDED
+    assert _event(context.bundle.path, "run.started")["payload"]["input_size_bytes"] is None

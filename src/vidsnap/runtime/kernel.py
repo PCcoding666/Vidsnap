@@ -87,11 +87,13 @@ class HarnessKernel(Generic[OutputT, ModelT]):
         self._repair_rounds = 0
         # Hash the input before the wall clock starts so identity never spends budget.
         cancelled_before_start = False
+        input_identity: FileIdentity | None = None
         try:
             input_identity = await read_file_identity(context.source.path)
         except asyncio.CancelledError:
-            input_identity = None
             cancelled_before_start = True
+        except Exception:
+            input_identity = None
         self._started_at = self._clock()
         run_span = context.trace.start(
             "run",
