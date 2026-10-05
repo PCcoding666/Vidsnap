@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Annotated
 
 import typer
+from pydantic import ValidationError
 
 from vidsnap.benchmark.trust import TrustEvaluationInput, evaluate_trust
 from vidsnap.config import HarnessConfig
@@ -20,9 +21,12 @@ from vidsnap.trace.export import export_trace
 from vidsnap.trace.pricing import LoadedPriceTable, load_price_table
 from vidsnap.trace.run_index import (
     INDEX_FILE_NAME,
+    RunReview,
     append_index_record,
     read_index,
     render_run_table,
+    resolve_run_id,
+    review_record,
     summarize_run,
 )
 
@@ -39,7 +43,7 @@ recipe_app = typer.Typer(help="Run grounded editorial recipes.")
 app.add_typer(recipe_app, name="recipe")
 plugin_app = typer.Typer(help="Validate and test local plugin projects.")
 app.add_typer(plugin_app, name="plugin")
-runs_app = typer.Typer(help="List indexed runs from the local run index.")
+runs_app = typer.Typer(help="List and review runs in the local run index.")
 app.add_typer(runs_app, name="runs")
 
 
@@ -275,6 +279,62 @@ def runs_list(runs_root: RunsRootOption = Path("run")) -> None:
         typer.echo(render_run_table(contents.records))
     if contents.invalid_lines:
         typer.echo(f"Skipped {contents.invalid_lines} unreadable index line(s).", err=True)
+
+
+@runs_app.command("review")
+def runs_review(
+    run: Annotated[
+        str,
+        typer.Argument(help="Run id, a unique run-id prefix (4+ characters), or a bundle path."),
+    ],
+    edit_minutes: Annotated[
+        float | None,
+        typer.Option("--edit-minutes", min=0, help="Minutes spent editing the output."),
+    ] = None,
+    published: Annotated[
+        bool | None,
+        typer.Option("--published/--not-published", help="Whether the output was published."),
+    ] = None,
+    factual_errors: Annotated[
+        int | None,
+        typer.Option("--factual-errors", min=0, help="Factual errors found in the output."),
+    ] = None,
+    images_replaced: Annotated[
+        int | None,
+        typer.Option("--images-replaced", min=0, help="Images replaced by hand."),
+    ] = None,
+    note: Annotated[str | None, typer.Option("--note", help="Free-text review note.")] = None,
+    runs_root: RunsRootOption = Path("run"),
+) -> None:
+    """Append one human review of an indexed run; fields left out stay null."""
+    try:
+        review = RunReview(
+            edit_minutes=edit_minutes,
+            published=published,
+            factual_errors=factual_errors,
+            images_replaced=images_replaced,
+            note=note,
+        )
+    except ValidationError as error:
+        fields = sorted({str(item["loc"][0]) for item in error.errors() if item["loc"]})
+        reason = (
+            f"invalid {', '.join(fields)}" if fields else "a review must record at least one field"
+        )
+        typer.echo(f"Review refused: {reason}", err=True)
+        raise typer.Exit(code=2) from None
+    resolved_root = runs_root.expanduser().resolve()
+    try:
+        run_id = resolve_run_id(read_index(resolved_root).records, run)
+    except LookupError as error:
+        typer.echo(f"Review refused: {error.args[0]}", err=True)
+        raise typer.Exit(code=2) from None
+    index_path = append_index_record(resolved_root, review_record(run_id, review))
+    typer.echo(
+        json.dumps(
+            {"status": "REVIEWED", "run_id": run_id, "index": str(index_path)},
+            ensure_ascii=True,
+        )
+    )
 
 
 @app.command()
