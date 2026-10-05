@@ -7,7 +7,6 @@ from dataclasses import FrozenInstanceError
 
 import httpx
 import pytest
-from vidsnap.providers.testing import assert_provider_contract
 
 from vidsnap.config import QWEN_MODEL, TOKEN_PLAN_BASE_URL
 from vidsnap.contracts import VideoGoal
@@ -19,6 +18,7 @@ from vidsnap.providers import (
     QwenProfile,
     QwenProvider,
 )
+from vidsnap.providers.testing import assert_provider_contract
 
 
 async def _mock_handler(request: httpx.Request) -> httpx.Response:
