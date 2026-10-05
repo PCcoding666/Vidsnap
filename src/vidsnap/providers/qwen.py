@@ -53,6 +53,8 @@ _AGENT_SYSTEM_MESSAGE = (
 )
 _MAX_IMAGE_BYTES = 5 * 1024 * 1024
 
+QWEN_PROVIDER_IDENTITY = ProviderIdentity(id="qwen", model=QWEN_MODEL, base_url=TOKEN_PLAN_BASE_URL)
+
 
 @dataclass(frozen=True, slots=True)
 class QwenProfile:

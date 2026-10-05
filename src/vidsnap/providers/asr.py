@@ -10,10 +10,11 @@ from typing import Protocol
 import httpx
 
 from vidsnap.config import TOKEN_PLAN_BASE_URL
-from vidsnap.providers.base import ProviderError, ProviderUnavailable
+from vidsnap.providers.base import ProviderError, ProviderIdentity, ProviderUnavailable
 from vidsnap.providers.failures import http_failure, invalid_response_failure
 
 QWEN_ASR_MODEL = "qwen3-asr-flash"
+QWEN_ASR_IDENTITY = ProviderIdentity(id="qwen", model=QWEN_ASR_MODEL, base_url=TOKEN_PLAN_BASE_URL)
 
 
 @dataclass(frozen=True, slots=True)

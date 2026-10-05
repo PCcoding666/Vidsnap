@@ -117,6 +117,15 @@ class ProviderIdentity:
     base_url: str
 
 
+def declared_identity(port: object) -> ProviderIdentity | None:
+    """Return the fixed identity a port declares, or ``None`` when it declares none."""
+    try:
+        identity = getattr(port, "identity", None)
+    except Exception:
+        return None
+    return identity if isinstance(identity, ProviderIdentity) else None
+
+
 @runtime_checkable
 class ProviderProtocol(AgentModelPort, ToolPlanningPort, VideoModelPort, Protocol):
     """Runtime conformance contract every complete bounded provider must satisfy."""

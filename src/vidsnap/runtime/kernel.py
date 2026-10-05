@@ -14,7 +14,8 @@ from typing import TYPE_CHECKING, Generic, TypeVar
 
 from pydantic import JsonValue, ValidationError
 
-from vidsnap.contracts import Evidence, TerminalState
+from vidsnap import __version__
+from vidsnap.contracts import Evidence, TerminalState, VideoGoal
 from vidsnap.contracts.agent import AgentDecision, ProviderUsage
 from vidsnap.contracts.failures import RUN_FAILURE_SCHEMA, FailureCategory, ProviderFailure
 from vidsnap.contracts.loopspec import default_loop_spec
@@ -28,10 +29,12 @@ from vidsnap.providers.base import (
     AgentDecisionResponse,
     AgentStepRequest,
     ProviderError,
+    ProviderIdentity,
     ProviderUnavailable,
 )
 from vidsnap.runtime.context import RunContext
 from vidsnap.tasks.base import TaskVerification
+from vidsnap.video.identity import FileIdentity, read_file_identity
 from vidsnap.video.probe import FFmpegError
 
 if TYPE_CHECKING:
@@ -39,6 +42,8 @@ if TYPE_CHECKING:
 
 OutputT = TypeVar("OutputT", bound=StrictModel)
 ModelT = TypeVar("ModelT")
+
+RUN_HEADER_SCHEMA = "vidsnap.run-header/v1"
 
 _SENSITIVE_KEY_PARTS = ("api_key", "authorization", "credential", "password", "secret", "token")
 _DIRECT_BASELINE_FPS = 2
@@ -80,16 +85,25 @@ class HarnessKernel(Generic[OutputT, ModelT]):
     async def run(self, context: RunContext[OutputT, ModelT]) -> KernelRunResult[OutputT]:
         """Drive one run to a truthful terminal state with exactly one finalization."""
         self._repair_rounds = 0
+        # Hash the input before the wall clock starts so identity never spends budget.
+        cancelled_before_start = False
+        try:
+            input_identity = await read_file_identity(context.source.path)
+        except asyncio.CancelledError:
+            input_identity = None
+            cancelled_before_start = True
         self._started_at = self._clock()
         run_span = context.trace.start(
             "run",
             phase="run",
-            payload={"policy": type(self._policy).__name__},
+            payload=self._run_header(context, input_identity),
         )
         failure_reason: str | None = None
         failure: ProviderFailure | None = None
         terminal_state: TerminalState | None = None
         try:
+            if cancelled_before_start:
+                raise asyncio.CancelledError()
             await self._policy.execute(context, self)
         except asyncio.CancelledError as error:
             terminal_state = TerminalState.FAILED
@@ -138,6 +152,9 @@ class HarnessKernel(Generic[OutputT, ModelT]):
             payload={
                 "terminal_state": terminal_state.value,
                 "failure": _run_failure_payload(failure, failure_reason),
+                "input_duration_seconds": (
+                    context.probe.duration_seconds if context.probe is not None else None
+                ),
             },
         )
         context.bundle.finalize(terminal_state)
@@ -486,6 +503,38 @@ class HarnessKernel(Generic[OutputT, ModelT]):
         self._emit_budget(context)
         return feedback
 
+    def _run_header(
+        self,
+        context: RunContext[OutputT, ModelT],
+        input_identity: FileIdentity | None,
+    ) -> dict[str, JsonValue]:
+        """The ``vidsnap.run-header/v1`` payload; unknown values stay null."""
+        goal = getattr(context.task_adapter, "goal", None)
+        plugins: list[JsonValue] = [
+            {"id": plugin.manifest.id, "version": plugin.manifest.version}
+            for plugin in self._registry.resolve()
+        ]
+        required_sections: list[JsonValue] = (
+            list(goal.required_sections) if isinstance(goal, VideoGoal) else []
+        )
+        return {
+            "schema_version": RUN_HEADER_SCHEMA,
+            "policy": type(self._policy).__name__,
+            "goal": goal.objective if isinstance(goal, VideoGoal) else None,
+            "required_sections": required_sections,
+            "input_sha256": input_identity.sha256 if input_identity is not None else None,
+            "input_size_bytes": (input_identity.size_bytes if input_identity is not None else None),
+            "provider": _identity_payload(context.provider_identity),
+            "speech_recognizer": _identity_payload(context.speech_recognizer_identity),
+            "recipe": (
+                {"id": context.recipe.id, "version": context.recipe.version}
+                if context.recipe is not None
+                else None
+            ),
+            "plugins": plugins,
+            "package_version": __version__,
+        }
+
     def _emit_budget(self, context: RunContext[OutputT, ModelT]) -> None:
         """Append one numeric budget.updated snapshot after a counter changed."""
         context.bundle.append_event(
@@ -569,6 +618,13 @@ def _error_usage(error: BaseException) -> ProviderUsage | None:
         output_tokens=counters["output_tokens"],
         reported=False,
     )
+
+
+def _identity_payload(identity: ProviderIdentity | None) -> JsonValue:
+    """Provider id and model only; the redacted base URL stays in the manifest."""
+    if identity is None:
+        return None
+    return {"id": identity.id, "model": identity.model}
 
 
 def _failure_category(error: BaseException) -> FailureCategory:

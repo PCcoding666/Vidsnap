@@ -49,7 +49,11 @@ _SENSITIVE_KEY_PARTS = (
     "thoughts",
     "header",
 )
-_SENSITIVE_EXACT_KEYS = frozenset({"env", "environ", "environment", "pat", "pwd", "auth"})
+# Provider identity stays in the raw ledger and the run index; a projected
+# trace never carries it (see TraceDocument), so run-header identities drop here.
+_SENSITIVE_EXACT_KEYS = frozenset(
+    {"env", "environ", "environment", "pat", "pwd", "auth", "provider", "speech_recognizer"}
+)
 _TOKEN_USAGE_KEYS = frozenset(
     {
         "cached_tokens",

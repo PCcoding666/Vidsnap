@@ -23,7 +23,7 @@ from vidsnap.loop.run_bundle import RunBundle
 from vidsnap.loop.state_machine import BudgetExceeded, LoopController, LoopState
 from vidsnap.loop.verifier import VerificationReport, verify_claims
 from vidsnap.plugins.base import SpeechRecognizerAdapter
-from vidsnap.providers.asr import QwenAsrRecognizer, SpeechRecognizer
+from vidsnap.providers.asr import QWEN_ASR_IDENTITY, QwenAsrRecognizer, SpeechRecognizer
 from vidsnap.providers.base import (
     AgentModelPort,
     ModelResponse,
@@ -33,8 +33,9 @@ from vidsnap.providers.base import (
     ProviderUnavailable,
     ToolPlanningPort,
     VideoModelPort,
+    declared_identity,
 )
-from vidsnap.providers.qwen import QwenCompatibleClient
+from vidsnap.providers.qwen import QWEN_PROVIDER_IDENTITY, QwenCompatibleClient
 from vidsnap.runtime import AgenticPolicy, FixedPolicy, HarnessKernel, default_plugin_registry
 from vidsnap.runtime.context import RunContext as KernelRunContext
 from vidsnap.runtime.kernel import KernelRunResult
@@ -109,6 +110,8 @@ class VideoHarness:
         self.recognizer: SpeechRecognizer | None
         self.agent_model: AgentModelPort | None
         self._provider_identity: ProviderIdentity | None
+        self._default_client: QwenCompatibleClient | None = None
+        self._default_recognizer: SpeechRecognizer | None = None
         if provider is not None:
             self.model = provider
             self.planner = provider
@@ -124,6 +127,7 @@ class VideoHarness:
                 )
                 self.model = default_client
                 self.planner = planner or default_client
+                self._default_client = default_client
             else:
                 self.model = model
                 self.planner = planner
@@ -134,6 +138,8 @@ class VideoHarness:
             )
             self._provider_identity = None
             self.recognizer = recognizer or QwenAsrRecognizer(api_key=self.config.api_key)
+            if self.recognizer is not recognizer:
+                self._default_recognizer = self.recognizer
         self.sampler = sampler or AdaptiveSampler()
         self.loop_spec = default_loop_spec()
         self.skills = self._build_skill_registry()
@@ -224,6 +230,8 @@ class VideoHarness:
                 SpeechRecognizerAdapter(self.recognizer) if self.recognizer is not None else None
             ),
             result_writer=bundle.write_result,
+            provider_identity=self._header_identity(self.model),
+            speech_recognizer_identity=self._recognizer_header_identity(),
         )
         kernel: HarnessKernel[VideoAnalysisResult, VideoModelPort] = HarnessKernel(
             policy=FixedPolicy(),
@@ -261,6 +269,8 @@ class VideoHarness:
             ),
             result_writer=bundle.write_result,
             agent_model=agent_model,
+            provider_identity=self._header_identity(agent_model),
+            speech_recognizer_identity=self._recognizer_header_identity(),
         )
         kernel: HarnessKernel[VideoAnalysisResult, VideoModelPort] = HarnessKernel(
             policy=AgenticPolicy(),
@@ -287,6 +297,22 @@ class VideoHarness:
             failed_gates=tuple(gate for gate, passed in verification.gates.items() if not passed),
             targeted_resample_seconds=verification.targeted_windows,
         )
+
+    def _header_identity(self, port: object | None) -> ProviderIdentity | None:
+        """Identify the model port serving this run for the run header, if known."""
+        if port is None:
+            return None
+        if self._default_client is not None and port is self._default_client:
+            return QWEN_PROVIDER_IDENTITY
+        return declared_identity(port)
+
+    def _recognizer_header_identity(self) -> ProviderIdentity | None:
+        """Identify the configured speech recognizer for the run header, if known."""
+        if self.recognizer is None:
+            return None
+        if self._default_recognizer is not None and self.recognizer is self._default_recognizer:
+            return QWEN_ASR_IDENTITY
+        return declared_identity(self.recognizer)
 
     def _create_bundle(self, run_path: Path) -> RunBundle:
         """Create one run bundle, recording a known provider identity when present."""
