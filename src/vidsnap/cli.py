@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+import os
 import uuid
 from pathlib import Path
 from typing import Annotated
@@ -62,6 +63,39 @@ PriceTableOption = Annotated[
     Path | None,
     typer.Option("--price-table", envvar="VIDSNAP_PRICE_TABLE", help=_PRICE_TABLE_HELP),
 ]
+
+
+# Fixed failure reasons VidSnap itself produces; free text from injected ports is never echoed.
+_PRINTABLE_FAILURE_REASONS = frozenset(
+    {
+        "cancelled",
+        "provider unavailable",
+        "provider error",
+        "unexpected kernel error",
+        "policy exited without a terminal state",
+        "result persistence failed",
+        "wall-clock budget exceeded",
+        "tool-call budget exceeded",
+        "model-call budget exceeded",
+        "iteration budget exceeded",
+        "evidence-frame budget exceeded",
+        "unexpected recipe runner error",
+    }
+)
+
+
+def _prepare_runs_root(runs_root: Path) -> Path:
+    """Create the runs root before any run starts; exit 2 when it cannot be written."""
+    resolved = runs_root.expanduser().resolve()
+    try:
+        resolved.mkdir(parents=True, exist_ok=True)
+        writable = os.access(resolved, os.W_OK | os.X_OK)
+    except OSError:
+        writable = False
+    if not writable:
+        typer.echo(f"runs root not writable: {resolved}; pass --runs-root", err=True)
+        raise typer.Exit(code=2)
+    return resolved
 
 
 def _load_prices(path: Path | None) -> LoadedPriceTable | None:
@@ -194,8 +228,12 @@ def analyze(
     root; either way the finished run is appended to the run index.
     """
     prices = _load_prices(price_table)
-    resolved_root = runs_root.expanduser().resolve()
-    run_dir = output_dir if output_dir is not None else resolved_root / str(uuid.uuid4())
+    if output_dir is None:
+        resolved_root = _prepare_runs_root(runs_root)
+        run_dir = resolved_root / str(uuid.uuid4())
+    else:
+        resolved_root = runs_root.expanduser().resolve()
+        run_dir = output_dir
     result = asyncio.run(
         VideoHarness().run(
             VideoSource(path=video),
@@ -258,7 +296,7 @@ def recipe_interview(
     ):
         typer.echo(f"Output directory is not empty: {resolved_output}", err=True)
         raise typer.Exit(code=2)
-    resolved_root = runs_root.expanduser().resolve()
+    resolved_root = _prepare_runs_root(runs_root)
     run_dir = resolved_root / str(uuid.uuid4())
     result = asyncio.run(
         InterviewRecipeRunner().run(
@@ -286,6 +324,8 @@ def recipe_interview(
         ]
     if result.run_path is not None:
         payload["run_path"] = str(result.run_path)
+    if result.failure_reason in _PRINTABLE_FAILURE_REASONS:
+        payload["failure_reason"] = result.failure_reason
     typer.echo(json.dumps(payload, ensure_ascii=True))
     if not succeeded:
         raise typer.Exit(code=1)

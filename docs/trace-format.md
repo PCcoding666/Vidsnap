@@ -22,6 +22,11 @@ the runs root, whatever the outcome, and prints its location as `run_path`.
 It refuses a non-empty `--output-dir` before the run starts, so no model call
 is spent on output it could not write.
 The runs root is `--runs-root`, else `VIDSNAP_RUNS_ROOT`, else `./run`.
+A command that needs the runs root creates it before the run starts and
+refuses with `runs root not writable: <path>; pass --runs-root` (exit 2) if
+it cannot; `analyze --output-dir` still runs and only warns that the index
+was not updated. When a recipe run fails, its JSON output includes
+`failure_reason` if the reason is one of VidSnap's own fixed reasons.
 The bundle directory name is not the run id; the run id is in `manifest.json`
 and in the run index.
 
