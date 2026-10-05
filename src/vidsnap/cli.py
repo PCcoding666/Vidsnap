@@ -348,7 +348,12 @@ def recipe_interview(
 def runs_list(runs_root: RunsRootOption = Path("run")) -> None:
     """Print every indexed run, oldest first, with its latest review."""
     resolved_root = runs_root.expanduser().resolve()
-    contents = read_index(resolved_root)
+    try:
+        contents = read_index(resolved_root)
+    except OSError as error:
+        reason = error.strerror or type(error).__name__
+        typer.echo(f"Cannot read run index {resolved_root / INDEX_FILE_NAME}: {reason}", err=True)
+        raise typer.Exit(code=2) from None
     if not any(record.get("record") == "run" for record in contents.records):
         typer.echo(f"No runs indexed in {resolved_root / INDEX_FILE_NAME}")
     else:
@@ -361,7 +366,9 @@ def runs_list(runs_root: RunsRootOption = Path("run")) -> None:
 def runs_review(
     run: Annotated[
         str,
-        typer.Argument(help="Run id, a unique run-id prefix (4+ characters), or a bundle path."),
+        typer.Argument(
+            help="Run id, bundle path or folder name, or a unique prefix of 8+ characters."
+        ),
     ],
     edit_minutes: Annotated[
         float | None,
@@ -399,12 +406,20 @@ def runs_review(
         typer.echo(f"Review refused: {reason}", err=True)
         raise typer.Exit(code=2) from None
     resolved_root = runs_root.expanduser().resolve()
+    index_path = resolved_root / INDEX_FILE_NAME
     try:
         run_id = resolve_run_id(read_index(resolved_root).records, run)
     except LookupError as error:
         typer.echo(f"Review refused: {error.args[0]}", err=True)
         raise typer.Exit(code=2) from None
-    index_path = append_index_record(resolved_root, review_record(run_id, review))
+    except OSError:
+        typer.echo(f"Review refused: cannot read run index: {index_path}", err=True)
+        raise typer.Exit(code=2) from None
+    try:
+        append_index_record(resolved_root, review_record(run_id, review))
+    except OSError:
+        typer.echo(f"Review refused: run index not writable: {index_path}", err=True)
+        raise typer.Exit(code=2) from None
     typer.echo(
         json.dumps(
             {"status": "REVIEWED", "run_id": run_id, "index": str(index_path)},

@@ -194,22 +194,24 @@ def test_latest_review_per_run_wins() -> None:
     assert reviews["a"]["factual_errors"] == 1
 
 
-def test_run_references_resolve_by_id_prefix_or_bundle_path(tmp_path: Path) -> None:
-    bundle = write_v010_failed_bundle(tmp_path / "v010")
+def test_run_references_resolve_by_id_folder_name_prefix_or_bundle_path(tmp_path: Path) -> None:
+    bundle = write_v010_failed_bundle(tmp_path / "3f0c9a1e-bundle-folder")
     records = [
         {"record": "run", "run_id": V010_RUN_ID, "bundle_path": str(bundle)},
-        {"record": "run", "run_id": "11112222-0000-4000-8000-000000000000"},
+        {"record": "run", "run_id": "11111111-9999-4000-8000-000000000000"},
     ]
 
     assert resolve_run_id(records, V010_RUN_ID) == V010_RUN_ID
-    assert resolve_run_id(records, "11111111") == V010_RUN_ID
+    assert resolve_run_id(records, "11111111-2") == V010_RUN_ID
     assert resolve_run_id(records, str(bundle)) == V010_RUN_ID
+    assert resolve_run_id(records, "3f0c9a1e-bundle-folder") == V010_RUN_ID
+    assert resolve_run_id(records, "3f0c9a1e") == V010_RUN_ID
     with pytest.raises(LookupError, match="ambiguous"):
-        resolve_run_id(records, "1111")
+        resolve_run_id(records, "11111111")
     with pytest.raises(LookupError, match="no indexed run"):
-        resolve_run_id(records, "ffff")
-    with pytest.raises(LookupError):
-        resolve_run_id(records, "111")  # prefixes shorter than four characters are refused
+        resolve_run_id(records, "ffffffff")
+    with pytest.raises(LookupError, match="at least 8"):
+        resolve_run_id(records, "1111111")
 
 
 def _run_line(run_id: str) -> str:
@@ -247,3 +249,24 @@ def test_reading_counts_a_non_utf8_line_instead_of_failing(tmp_path: Path) -> No
 
     assert [record["run_id"] for record in contents.records] == ["before", "after"]
     assert contents.invalid_lines == 1
+
+
+@pytest.mark.skipif(not hasattr(Path, "symlink_to"), reason="needs symbolic links")
+def test_a_symlinked_index_is_refused_for_append_and_read(tmp_path: Path) -> None:
+    runs_root = tmp_path / "runs"
+    runs_root.mkdir()
+    target = tmp_path / "elsewhere.txt"
+    target.write_text("not an index\n", encoding="utf-8")
+    (runs_root / INDEX_FILE_NAME).symlink_to(target)
+
+    with pytest.raises(OSError):
+        append_index_record(runs_root, json.loads(_run_line("x")))
+    with pytest.raises(OSError):
+        read_index(runs_root)
+    assert target.read_text(encoding="utf-8") == "not an index\n"
+
+
+def test_new_index_files_are_private_to_the_user(tmp_path: Path) -> None:
+    index_path = append_index_record(tmp_path / "runs", json.loads(_run_line("x")))
+
+    assert index_path.stat().st_mode & 0o077 == 0

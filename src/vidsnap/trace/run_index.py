@@ -9,6 +9,7 @@ Fields a bundle never recorded stay ``None``.
 
 from __future__ import annotations
 
+import errno
 import json
 import os
 from collections.abc import Mapping, Sequence
@@ -26,7 +27,8 @@ from vidsnap.trace.pricing import LoadedPriceTable, price_run
 
 RUN_INDEX_SCHEMA = "vidsnap.run-index/v1"
 INDEX_FILE_NAME = "index.jsonl"
-_MIN_PREFIX_LENGTH = 4
+_MIN_PREFIX_LENGTH = 8
+_NO_FOLLOW = getattr(os, "O_NOFOLLOW", 0)
 
 
 @dataclass(frozen=True, slots=True)
@@ -152,7 +154,8 @@ def append_index_record(runs_root: Path, record: Mapping[str, JsonValue]) -> Pat
     runs_root.mkdir(parents=True, exist_ok=True)
     index_path = runs_root / INDEX_FILE_NAME
     line = json.dumps(dict(record), ensure_ascii=True, separators=(",", ":"), sort_keys=True)
-    with index_path.open("a+b") as handle:
+    descriptor = _open_index(index_path, os.O_RDWR | os.O_APPEND | os.O_CREAT)
+    with os.fdopen(descriptor, "a+b") as handle:
         handle.seek(0, os.SEEK_END)
         size = handle.tell()
         prefix = b""
@@ -174,9 +177,11 @@ def read_index(runs_root: Path) -> IndexContents:
     """
     index_path = runs_root / INDEX_FILE_NAME
     try:
-        lines = index_path.read_text(encoding="utf-8", errors="replace").splitlines()
+        descriptor = _open_index(index_path, os.O_RDONLY)
     except FileNotFoundError:
         return IndexContents()
+    with os.fdopen(descriptor, "rb") as handle:
+        lines = handle.read().decode("utf-8", errors="replace").splitlines()
     records: list[dict[str, Any]] = []
     invalid = 0
     for line in lines:
@@ -212,25 +217,46 @@ def latest_reviews(records: Sequence[Mapping[str, Any]]) -> dict[str, Mapping[st
 
 
 def resolve_run_id(records: Sequence[Mapping[str, Any]], reference: str) -> str:
-    """Resolve a run id, a unique run-id prefix, or a bundle path to an indexed run id."""
+    """Resolve a run reference to an indexed run id.
+
+    A reference is a run id, a bundle path, a bundle folder name, or a unique
+    prefix of at least eight characters of a run id or bundle folder name.
+    """
     run_records = [record for record in records if record.get("record") == "run"]
     run_ids = list(dict.fromkeys(str(record.get("run_id")) for record in run_records))
     if reference in run_ids:
         return reference
+    folders: dict[str, str] = {}
+    for record in run_records:
+        bundle_path = record.get("bundle_path")
+        if isinstance(bundle_path, str) and bundle_path:
+            folders[Path(bundle_path).name] = str(record.get("run_id"))
     candidate = Path(reference).expanduser()
     if candidate.is_dir():
         resolved = str(candidate.resolve())
         for record in run_records:
             if record.get("bundle_path") == resolved:
                 return str(record.get("run_id"))
+    if reference in folders:
+        return folders[reference]
     if len(reference) < _MIN_PREFIX_LENGTH:
-        raise LookupError(f"no indexed run matches {reference!r}")
-    matches = [run_id for run_id in run_ids if run_id.startswith(reference)]
+        raise LookupError(
+            f"run reference {reference!r} must be at least {_MIN_PREFIX_LENGTH} characters"
+        )
+    matches = {run_id for run_id in run_ids if run_id.startswith(reference)}
+    matches.update(run_id for name, run_id in folders.items() if name.startswith(reference))
     if len(matches) > 1:
         raise LookupError(f"{reference!r} is ambiguous; use more of the run id")
     if not matches:
         raise LookupError(f"no indexed run matches {reference!r}")
-    return matches[0]
+    return matches.pop()
+
+
+def _open_index(index_path: Path, flags: int) -> int:
+    """Open the index without following a symbolic link; new files are owner-only."""
+    if not _NO_FOLLOW and index_path.is_symlink():
+        raise OSError(errno.ELOOP, "run index must not be a symbolic link", str(index_path))
+    return os.open(index_path, flags | _NO_FOLLOW, 0o600)
 
 
 _TABLE_COLUMNS = (

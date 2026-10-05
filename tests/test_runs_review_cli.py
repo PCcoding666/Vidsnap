@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import os
+import stat
 from pathlib import Path
 
 import pytest
@@ -151,12 +153,12 @@ def test_ambiguous_prefix_is_refused(tmp_path: Path) -> None:
         {
             "schema_version": "vidsnap.run-index/v1",
             "record": "run",
-            "run_id": "5e1f9999-0000-4000-8000-000000000000",
+            "run_id": "5e1f0c2a-0000-4000-8000-000000000000",
         },
     )
 
     result = CliRunner().invoke(
-        app, ["runs", "review", "5e1f", "--runs-root", str(runs_root), "--published"]
+        app, ["runs", "review", "5e1f0c2a", "--runs-root", str(runs_root), "--published"]
     )
 
     assert result.exit_code == 2
@@ -178,3 +180,51 @@ def test_review_help_lists_every_field() -> None:
         "--runs-root",
     ):
         assert option in help_text
+
+
+def test_review_by_bundle_folder_name(tmp_path: Path) -> None:
+    runs_root, bundle = _seed(tmp_path)
+
+    result = CliRunner().invoke(
+        app, ["runs", "review", bundle.name, "--runs-root", str(runs_root), "--published"]
+    )
+
+    assert result.exit_code == 0, result.output
+    assert _lines(runs_root)[-1]["run_id"] == _RUN_ID
+
+
+@pytest.mark.skipif(
+    hasattr(os, "geteuid") and os.geteuid() == 0, reason="root ignores file permissions"
+)
+def test_review_on_a_read_only_index_fails_with_one_line(tmp_path: Path) -> None:
+    runs_root, _ = _seed(tmp_path)
+    index_path = runs_root / INDEX_FILE_NAME
+    index_path.chmod(stat.S_IRUSR)
+    try:
+        result = CliRunner().invoke(
+            app, ["runs", "review", _RUN_ID, "--runs-root", str(runs_root), "--published"]
+        )
+    finally:
+        index_path.chmod(stat.S_IRUSR | stat.S_IWUSR)
+
+    assert result.exit_code == 2
+    assert result.exception is None or isinstance(result.exception, SystemExit)
+    assert "Traceback" not in result.output
+    assert result.output.strip().splitlines() == [
+        f"Review refused: run index not writable: {index_path.resolve()}"
+    ]
+
+
+def test_runs_list_refuses_a_symlinked_index_with_one_line(tmp_path: Path) -> None:
+    runs_root = tmp_path / "runs"
+    runs_root.mkdir()
+    target = tmp_path / "elsewhere.jsonl"
+    target.write_text("", encoding="utf-8")
+    (runs_root / INDEX_FILE_NAME).symlink_to(target)
+
+    result = CliRunner().invoke(app, ["runs", "list", "--runs-root", str(runs_root)])
+
+    assert result.exit_code == 2
+    assert "Traceback" not in result.output
+    assert len(result.output.strip().splitlines()) == 1
+    assert "run index" in result.output

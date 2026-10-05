@@ -148,7 +148,9 @@ JSON line with `"schema_version": "vidsnap.run-index/v1"` and
 index can be rebuilt from bundles; fields a bundle never recorded are `null`.
 If indexing fails, the run's outcome is unchanged and a warning goes to
 stderr. Readers skip and count lines they cannot decode or parse, and a new
-line always starts after a damaged last line.
+line always starts after a damaged last line. `index.jsonl` must be a regular
+file: a symbolic link is refused for reading and writing, and a new index is
+created readable and writable by its owner only.
 
 | Field | Meaning |
 |---|---|
@@ -175,8 +177,8 @@ tool, and the built-in recognizer reports no usage, so its cost is not in
 these totals.
 
 `vidsnap runs review RUN` appends a `"record": "review"` line for an indexed
-run, where `RUN` is a run id, a unique prefix of at least four characters, or
-a bundle path:
+run, where `RUN` is a run id, a bundle path, a bundle folder name, or a unique
+prefix of at least eight characters of a run id or folder name:
 
 | Field | Meaning |
 |---|---|
