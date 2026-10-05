@@ -41,4 +41,4 @@ Evidence:
 
 - [ ] Public contracts, recipe and RunBundle formats, CLI behavior, and conformance checks are unchanged; any change to them is an explicit, versioned, tested update.
 - [ ] Any contract or format change documents its migration path and includes tests.
-- [ ] The change does not add out-of-scope components (no SaaS, accounts, databases, queues, frontend code, or job/history state).
+- [ ] The change does not add out-of-scope components (no SaaS, accounts, databases, queues, frontend code, job state, or server-side/shared run history).
