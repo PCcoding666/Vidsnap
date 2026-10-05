@@ -226,13 +226,22 @@ class HarnessKernel(Generic[OutputT, ModelT]):
         except ValidationError as exc:
             raise ValueError(f"invalid arguments for tool '{name}': {exc}") from exc
 
-        fingerprint = _call_fingerprint(plugin.name, validated.model_dump(mode="json"))
+        validated_arguments: dict[str, JsonValue] = validated.model_dump(mode="json")
+        fingerprint = _call_fingerprint(plugin.name, validated_arguments)
         if fingerprint in context.call_fingerprints:
             raise ValueError(f"duplicate canonical call rejected for tool '{name}'")
         context.call_fingerprints.add(fingerprint)
 
         context.tool_calls += 1
-        span = context.trace.start("tool.call", phase=name, payload={"name": name})
+        span = context.trace.start(
+            "tool.call",
+            phase=name,
+            payload={
+                "name": name,
+                "arguments": _redact(validated_arguments),
+                "fingerprint": fingerprint,
+            },
+        )
         try:
             execution = ToolExecutionContext(
                 source_path=context.source.path,
