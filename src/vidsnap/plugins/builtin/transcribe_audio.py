@@ -7,7 +7,7 @@ from typing_extensions import Self
 
 from vidsnap.contracts import Evidence, ProviderUsage
 from vidsnap.contracts.models import StrictModel
-from vidsnap.plugins.base import ToolExecutionContext, ToolResult
+from vidsnap.plugins.base import ToolArgumentError, ToolExecutionContext, ToolResult
 from vidsnap.plugins.manifest import PluginManifest
 
 
@@ -34,7 +34,7 @@ def windows_within_duration(windows: tuple[TimeWindow, ...], duration_seconds: f
     """Reject any requested window that escapes the probed local duration."""
     for window in windows:
         if window.start_seconds >= duration_seconds or window.end_seconds > duration_seconds:
-            raise ValueError(
+            raise ToolArgumentError(
                 "requested window exceeds the probed media duration: "
                 f"[{window.start_seconds}, {window.end_seconds}] > {duration_seconds}"
             )

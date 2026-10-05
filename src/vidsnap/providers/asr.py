@@ -11,6 +11,7 @@ import httpx
 
 from vidsnap.config import TOKEN_PLAN_BASE_URL
 from vidsnap.providers.base import ProviderError, ProviderUnavailable
+from vidsnap.providers.failures import http_failure, invalid_response_failure
 
 QWEN_ASR_MODEL = "qwen3-asr-flash"
 
@@ -110,13 +111,21 @@ class QwenAsrRecognizer:
                     )
                     response.raise_for_status()
                 except httpx.HTTPError as error:
-                    raise ProviderError("Qwen ASR request failed") from error
+                    raise ProviderError(
+                        "Qwen ASR request failed", failure=http_failure(error, input_bytes=None)
+                    ) from error
                 try:
                     content = response.json()["choices"][0]["message"]["content"]
                 except (IndexError, KeyError, TypeError) as error:
-                    raise ProviderError("provider response did not contain ASR text") from error
+                    raise ProviderError(
+                        "provider response did not contain ASR text",
+                        failure=invalid_response_failure(None, input_bytes=None),
+                    ) from error
                 if not isinstance(content, str):
-                    raise ProviderError("provider ASR content must be a string")
+                    raise ProviderError(
+                        "provider ASR content must be a string",
+                        failure=invalid_response_failure(None, input_bytes=None),
+                    )
                 texts.append(content)
         return "\n".join(texts)
 

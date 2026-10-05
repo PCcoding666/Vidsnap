@@ -10,11 +10,23 @@ from pydantic import JsonValue
 
 from vidsnap.contracts import Evidence, ToolPlan, VideoAnalysisResult, VideoGoal
 from vidsnap.contracts.agent import AgentDecision, ProviderUsage
+from vidsnap.contracts.failures import ProviderFailure
 from vidsnap.video.probe import MediaProbe
 
 
 class ProviderError(RuntimeError):
-    """Raised for an unavailable or malformed model-provider response."""
+    """Raised for an unavailable or malformed model-provider response.
+
+    ``failure`` optionally carries an allow-listed ``ProviderFailure`` record the
+    kernel writes to the trace; it is ``None`` when the provider gave no detail.
+    """
+
+    failure: ProviderFailure | None = None
+
+    def __init__(self, *args: object, failure: ProviderFailure | None = None) -> None:
+        super().__init__(*args)
+        if failure is not None:
+            self.failure = failure
 
 
 class ProviderUnavailable(ProviderError):

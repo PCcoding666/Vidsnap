@@ -115,3 +115,31 @@ def test_run_bundle_preserves_numeric_usage_counts_but_redacts_credentials(tmp_p
         "output_tokens": 3,
         "api_token": "***REDACTED***",
     }
+
+
+def test_run_bundle_keeps_unreported_usage_counters_null_but_redacts_other_values(
+    tmp_path,
+) -> None:
+    """An unreported counter stays null ("unknown"), never a redaction marker or zero."""
+    bundle = RunBundle.create(
+        tmp_path / "run",
+        loop_spec=default_loop_spec(),
+        provider_url="https://host/v1",
+    )
+
+    event = bundle.append_event(
+        "usage",
+        {
+            "failure": {"input_tokens": None, "output_tokens": None},
+            "input_tokens": "must-not-appear",
+            "output_tokens": -1,
+            "api_token": None,
+        },
+    )
+
+    assert event.payload == {
+        "failure": {"input_tokens": None, "output_tokens": None},
+        "input_tokens": "***REDACTED***",
+        "output_tokens": "***REDACTED***",
+        "api_token": "***REDACTED***",
+    }

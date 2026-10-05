@@ -1,6 +1,7 @@
 """Versioned public contracts for the VidSnap Harness."""
 
 from vidsnap.contracts.agent import AgentDecision, ProviderUsage, ToolCallRequest
+from vidsnap.contracts.failures import FailureCategory, ProviderFailure
 from vidsnap.contracts.loopspec import LoopBudgets, LoopSpec, default_loop_spec
 from vidsnap.contracts.models import (
     Claim,
@@ -20,9 +21,11 @@ __all__ = [
     "Claim",
     "Evidence",
     "EvidenceReference",
+    "FailureCategory",
     "HarnessPolicy",
     "LoopBudgets",
     "LoopSpec",
+    "ProviderFailure",
     "ProviderUsage",
     "TerminalState",
     "ToolCallRequest",

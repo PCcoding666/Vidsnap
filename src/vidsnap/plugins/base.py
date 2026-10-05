@@ -17,6 +17,14 @@ from vidsnap.video.probe import MediaProbe
 from vidsnap.video.sampling import AdaptiveSampler
 
 
+class ToolArgumentError(ValueError):
+    """A requested tool call was rejected: unknown tool, invalid, or duplicate arguments.
+
+    It subclasses ``ValueError`` so existing handlers keep working; the kernel
+    records it with the ``validation`` failure category.
+    """
+
+
 class EvidenceSink(Protocol):
     """Kernel-owned allocation and storage of structured evidence items."""
 
