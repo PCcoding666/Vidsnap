@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+import uuid
 from pathlib import Path
 from typing import Annotated
 
@@ -30,6 +31,11 @@ recipe_app = typer.Typer(help="Run grounded editorial recipes.")
 app.add_typer(recipe_app, name="recipe")
 plugin_app = typer.Typer(help="Validate and test local plugin projects.")
 app.add_typer(plugin_app, name="plugin")
+
+
+_RUNS_ROOT_HELP = (
+    "Directory that keeps each RunBundle and the run index (index.jsonl); defaults to ./run."
+)
 
 
 def _plugin_error() -> None:
@@ -162,12 +168,22 @@ def demo(output_dir: Path = typer.Option(Path("vidsnap-demo"), "--output-dir")) 
 def recipe_interview(
     video: Path = typer.Argument(..., exists=True, readable=True),
     output_dir: Path = typer.Option(..., "--output-dir"),
+    runs_root: Path = typer.Option(
+        Path("run"), "--runs-root", envvar="VIDSNAP_RUNS_ROOT", help=_RUNS_ROOT_HELP
+    ),
 ) -> None:
-    """Produce the grounded interview record for one local video."""
+    """Produce the grounded interview record for one local video.
+
+    The run's RunBundle is kept under the runs root whatever the outcome, and
+    its location is printed as run_path.
+    """
     resolved_video = video.expanduser().resolve()
     resolved_output = output_dir.expanduser().resolve()
+    run_dir = runs_root.expanduser().resolve() / str(uuid.uuid4())
     result = asyncio.run(
-        InterviewRecipeRunner().run(VideoSource(path=resolved_video), resolved_output)
+        InterviewRecipeRunner().run(
+            VideoSource(path=resolved_video), resolved_output, run_dir=run_dir
+        )
     )
     payload: dict[str, object] = {"terminal_state": result.terminal_state.value}
     artifacts = result.artifacts
@@ -180,6 +196,8 @@ def recipe_interview(
             str(artifacts.brief_path),
             str(artifacts.trace_path),
         ]
+    if result.run_path is not None:
+        payload["run_path"] = str(result.run_path)
     typer.echo(json.dumps(payload, ensure_ascii=True))
     if not succeeded:
         raise typer.Exit(code=1)

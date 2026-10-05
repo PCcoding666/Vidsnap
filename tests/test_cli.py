@@ -21,9 +21,13 @@ class _FakeRecipeRunner:
     def __init__(self, result: InterviewRecipeRunResult, calls: list[tuple[VideoSource, Path]]):
         self._result = result
         self.calls = calls
+        self.run_dirs: list[Path | None] = []
 
-    async def run(self, source: VideoSource, output_dir: Path) -> InterviewRecipeRunResult:
+    async def run(
+        self, source: VideoSource, output_dir: Path, *, run_dir: Path | None = None
+    ) -> InterviewRecipeRunResult:
         self.calls.append((source, output_dir))
+        self.run_dirs.append(run_dir)
         return self._result
 
 
