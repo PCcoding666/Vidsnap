@@ -5,7 +5,7 @@ Keep a Changelog style.
 
 ## [Unreleased]
 
-## [0.1.1] - Unreleased
+## [0.1.1] - 2026-10-08
 
 Every run now leaves a trace that can be evaluated afterwards. All trace
 changes are additive payload keys within `vidsnap.trace/v1`; bundles written
