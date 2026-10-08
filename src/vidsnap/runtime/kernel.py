@@ -14,23 +14,28 @@ from typing import TYPE_CHECKING, Generic, TypeVar
 
 from pydantic import JsonValue, ValidationError
 
-from vidsnap.contracts import Evidence, TerminalState
+from vidsnap import __version__
+from vidsnap.contracts import Evidence, TerminalState, VideoGoal
 from vidsnap.contracts.agent import AgentDecision, ProviderUsage
+from vidsnap.contracts.failures import RUN_FAILURE_SCHEMA, FailureCategory, ProviderFailure
 from vidsnap.contracts.loopspec import default_loop_spec
 from vidsnap.contracts.models import StrictModel
 from vidsnap.loop.events import EventStatus
 from vidsnap.loop.state_machine import BudgetExceeded
-from vidsnap.plugins.base import ToolExecutionContext, ToolResult
+from vidsnap.plugins.base import ToolArgumentError, ToolExecutionContext, ToolResult
 from vidsnap.plugins.registry import PluginRegistry
 from vidsnap.providers.base import (
     AgentDecisionFormatError,
     AgentDecisionResponse,
     AgentStepRequest,
     ProviderError,
+    ProviderIdentity,
     ProviderUnavailable,
 )
 from vidsnap.runtime.context import RunContext
 from vidsnap.tasks.base import TaskVerification
+from vidsnap.video.identity import FileIdentity, read_file_identity
+from vidsnap.video.probe import FFmpegError
 
 if TYPE_CHECKING:
     from vidsnap.runtime.policies import ExecutionPolicy
@@ -38,8 +43,14 @@ if TYPE_CHECKING:
 OutputT = TypeVar("OutputT", bound=StrictModel)
 ModelT = TypeVar("ModelT")
 
+RUN_HEADER_SCHEMA = "vidsnap.run-header/v1"
+
 _SENSITIVE_KEY_PARTS = ("api_key", "authorization", "credential", "password", "secret", "token")
 _DIRECT_BASELINE_FPS = 2
+
+
+class WallClockExceeded(BudgetExceeded):
+    """The run exceeded its wall-clock budget; recorded as the ``run_deadline`` category."""
 
 
 @dataclass(slots=True)
@@ -74,31 +85,48 @@ class HarnessKernel(Generic[OutputT, ModelT]):
     async def run(self, context: RunContext[OutputT, ModelT]) -> KernelRunResult[OutputT]:
         """Drive one run to a truthful terminal state with exactly one finalization."""
         self._repair_rounds = 0
+        # Hash the input before the wall clock starts so identity never spends budget.
+        cancelled_before_start = False
+        input_identity: FileIdentity | None = None
+        try:
+            input_identity = await read_file_identity(context.source.path)
+        except asyncio.CancelledError:
+            cancelled_before_start = True
+        except Exception:
+            input_identity = None
         self._started_at = self._clock()
         run_span = context.trace.start(
             "run",
             phase="run",
-            payload={"policy": type(self._policy).__name__},
+            payload=self._run_header(context, input_identity),
         )
         failure_reason: str | None = None
+        failure: ProviderFailure | None = None
         terminal_state: TerminalState | None = None
         try:
+            if cancelled_before_start:
+                raise asyncio.CancelledError()
             await self._policy.execute(context, self)
-        except asyncio.CancelledError:
+        except asyncio.CancelledError as error:
             terminal_state = TerminalState.FAILED
             failure_reason = "cancelled"
+            failure = _failure_record(error)
         except BudgetExceeded as exc:
             terminal_state = TerminalState.EXHAUSTED
             failure_reason = str(exc)
-        except ProviderUnavailable:
+            failure = _failure_record(exc)
+        except ProviderUnavailable as error:
             terminal_state = TerminalState.BLOCKED
             failure_reason = "provider unavailable"
-        except ProviderError:
+            failure = _failure_record(error)
+        except ProviderError as error:
             terminal_state = TerminalState.FAILED
             failure_reason = "provider error"
-        except Exception:
+            failure = _failure_record(error)
+        except Exception as error:
             terminal_state = TerminalState.FAILED
             failure_reason = "unexpected kernel error"
+            failure = _failure_record(error)
 
         if terminal_state is None:
             terminal_state = context.terminal_state
@@ -123,7 +151,13 @@ class HarnessKernel(Generic[OutputT, ModelT]):
         context.trace.finish(
             run_span,
             status=_trace_status(terminal_state),
-            payload={"terminal_state": terminal_state.value},
+            payload={
+                "terminal_state": terminal_state.value,
+                "failure": _run_failure_payload(failure, failure_reason),
+                "input_duration_seconds": (
+                    context.probe.duration_seconds if context.probe is not None else None
+                ),
+            },
         )
         context.bundle.finalize(terminal_state)
         return KernelRunResult(
@@ -220,19 +254,31 @@ class HarnessKernel(Generic[OutputT, ModelT]):
         self._enforce_wall(context)
         if context.tool_calls >= context.policy.max_tool_calls:
             raise BudgetExceeded("tool-call budget exceeded")
-        plugin = self._registry.tool_by_name(name)
+        try:
+            plugin = self._registry.tool_by_name(name)
+        except ValueError as exc:
+            raise ToolArgumentError(str(exc)) from exc
         try:
             validated = plugin.input_model.model_validate(dict(arguments or {}))
         except ValidationError as exc:
-            raise ValueError(f"invalid arguments for tool '{name}': {exc}") from exc
+            raise ToolArgumentError(f"invalid arguments for tool '{name}': {exc}") from exc
 
-        fingerprint = _call_fingerprint(plugin.name, validated.model_dump(mode="json"))
+        validated_arguments: dict[str, JsonValue] = validated.model_dump(mode="json")
+        fingerprint = _call_fingerprint(plugin.name, validated_arguments)
         if fingerprint in context.call_fingerprints:
-            raise ValueError(f"duplicate canonical call rejected for tool '{name}'")
+            raise ToolArgumentError(f"duplicate canonical call rejected for tool '{name}'")
         context.call_fingerprints.add(fingerprint)
 
         context.tool_calls += 1
-        span = context.trace.start("tool.call", phase=name, payload={"name": name})
+        span = context.trace.start(
+            "tool.call",
+            phase=name,
+            payload={
+                "name": name,
+                "arguments": _redact(validated_arguments),
+                "fingerprint": fingerprint,
+            },
+        )
         try:
             execution = ToolExecutionContext(
                 source_path=context.source.path,
@@ -293,7 +339,12 @@ class HarnessKernel(Generic[OutputT, ModelT]):
                 context.probe,
             )
         except BaseException as error:
-            context.trace.finish(span, status="failed", usage=_error_usage(error))
+            context.trace.finish(
+                span,
+                status="failed",
+                payload=_model_failure_payload(error),
+                usage=_error_usage(error),
+            )
             self._emit_budget(context)
             raise
         context.trace.finish(span, status="completed", usage=usage)
@@ -316,7 +367,11 @@ class HarnessKernel(Generic[OutputT, ModelT]):
             raise BudgetExceeded("model-call budget exceeded")
         if context.agent_model is None:
             span = context.trace.start("model.request", phase="agent_decision")
-            context.trace.finish(span, status="blocked")
+            context.trace.finish(
+                span,
+                status="blocked",
+                payload={"failure": ProviderFailure(category="provider_unavailable").as_payload()},
+            )
             self._emit_budget(context)
             raise ProviderUnavailable("agentic runs require an agent model")
         context.model_calls += 1
@@ -337,7 +392,12 @@ class HarnessKernel(Generic[OutputT, ModelT]):
         try:
             response = await context.agent_model.decide_next(request)
         except AgentDecisionFormatError as error:
-            context.trace.finish(span, status="failed", usage=_error_usage(error))
+            context.trace.finish(
+                span,
+                status="failed",
+                payload=_model_failure_payload(error),
+                usage=_error_usage(error),
+            )
             context.bundle.append_event(
                 "agent.decision",
                 {"reason": "format_error"},
@@ -348,7 +408,12 @@ class HarnessKernel(Generic[OutputT, ModelT]):
             self._emit_budget(context)
             raise
         except BaseException as error:
-            context.trace.finish(span, status="failed", usage=_error_usage(error))
+            context.trace.finish(
+                span,
+                status="failed",
+                payload=_model_failure_payload(error),
+                usage=_error_usage(error),
+            )
             self._emit_budget(context)
             raise
         context.trace.finish(span, status="completed", usage=response.usage)
@@ -440,6 +505,38 @@ class HarnessKernel(Generic[OutputT, ModelT]):
         self._emit_budget(context)
         return feedback
 
+    def _run_header(
+        self,
+        context: RunContext[OutputT, ModelT],
+        input_identity: FileIdentity | None,
+    ) -> dict[str, JsonValue]:
+        """The ``vidsnap.run-header/v1`` payload; unknown values stay null."""
+        goal = getattr(context.task_adapter, "goal", None)
+        plugins: list[JsonValue] = [
+            {"id": plugin.manifest.id, "version": plugin.manifest.version}
+            for plugin in self._registry.resolve()
+        ]
+        required_sections: list[JsonValue] = (
+            list(goal.required_sections) if isinstance(goal, VideoGoal) else []
+        )
+        return {
+            "schema_version": RUN_HEADER_SCHEMA,
+            "policy": type(self._policy).__name__,
+            "goal": goal.objective if isinstance(goal, VideoGoal) else None,
+            "required_sections": required_sections,
+            "input_sha256": input_identity.sha256 if input_identity is not None else None,
+            "input_size_bytes": (input_identity.size_bytes if input_identity is not None else None),
+            "provider": _identity_payload(context.provider_identity),
+            "speech_recognizer": _identity_payload(context.speech_recognizer_identity),
+            "recipe": (
+                {"id": context.recipe.id, "version": context.recipe.version}
+                if context.recipe is not None
+                else None
+            ),
+            "plugins": plugins,
+            "package_version": __version__,
+        }
+
     def _emit_budget(self, context: RunContext[OutputT, ModelT]) -> None:
         """Append one numeric budget.updated snapshot after a counter changed."""
         context.bundle.append_event(
@@ -473,7 +570,7 @@ class HarnessKernel(Generic[OutputT, ModelT]):
         if self._started_at is None:
             raise RuntimeError("kernel budgets are only enforced inside run()")
         if self._clock() - self._started_at > context.policy.max_wall_seconds:
-            raise BudgetExceeded("wall-clock budget exceeded")
+            raise WallClockExceeded("wall-clock budget exceeded")
 
     @staticmethod
     def _frame_count(context: RunContext[OutputT, ModelT]) -> int:
@@ -493,6 +590,18 @@ def _registered_subtitle(adapter: object) -> str | None:
 
 def _error_usage(error: BaseException) -> ProviderUsage | None:
     """Map safe aggregate counters from one failed provider attempt into usage."""
+    failure = getattr(error, "failure", None)
+    if isinstance(failure, ProviderFailure) and any(
+        value is not None
+        for value in (failure.input_bytes, failure.input_tokens, failure.output_tokens)
+    ):
+        return ProviderUsage(
+            model_calls=1,
+            input_bytes=failure.input_bytes or 0,
+            input_tokens=failure.input_tokens or 0,
+            output_tokens=failure.output_tokens or 0,
+            reported=failure.input_tokens is not None and failure.output_tokens is not None,
+        )
     counters: dict[str, int] = {}
     for attribute in ("input_bytes", "input_tokens", "output_tokens"):
         value = getattr(error, attribute, None)
@@ -511,6 +620,59 @@ def _error_usage(error: BaseException) -> ProviderUsage | None:
         output_tokens=counters["output_tokens"],
         reported=False,
     )
+
+
+def _identity_payload(identity: ProviderIdentity | None) -> JsonValue:
+    """Provider id and model only; the redacted base URL stays in the manifest."""
+    if identity is None:
+        return None
+    return {"id": identity.id, "model": identity.model}
+
+
+def _failure_category(error: BaseException) -> FailureCategory:
+    """Classify one exception into the fixed category allow-list by type only."""
+    if isinstance(error, asyncio.CancelledError):
+        return "cancelled"
+    if isinstance(error, WallClockExceeded):
+        return "run_deadline"
+    if isinstance(error, BudgetExceeded):
+        return "budget_exhausted"
+    if isinstance(error, ProviderUnavailable):
+        return "provider_unavailable"
+    if isinstance(error, AgentDecisionFormatError):
+        return "invalid_response"
+    if isinstance(error, ProviderError):
+        return "provider_error"
+    if isinstance(error, (ToolArgumentError, ValidationError)):
+        return "validation"
+    if isinstance(error, FFmpegError):
+        return "media_error"
+    return "unknown"
+
+
+def _failure_record(error: BaseException) -> ProviderFailure:
+    """Prefer a provider-attached record; otherwise categorize by exception type."""
+    failure = getattr(error, "failure", None)
+    if isinstance(failure, ProviderFailure):
+        return failure
+    return ProviderFailure(category=_failure_category(error))
+
+
+def _model_failure_payload(error: BaseException) -> dict[str, JsonValue]:
+    """The ``vidsnap.provider-failure/v1`` payload for one failed model request."""
+    return {"failure": _failure_record(error).as_payload()}
+
+
+def _run_failure_payload(failure: ProviderFailure | None, failure_reason: str | None) -> JsonValue:
+    """The ``vidsnap.run-failure/v1`` record for a run that ended with a failure reason."""
+    if failure_reason is None:
+        return None
+    return {
+        "schema_version": RUN_FAILURE_SCHEMA,
+        "category": failure.category if failure is not None else "unknown",
+        "http_status": failure.http_status if failure is not None else None,
+        "reason": failure_reason,
+    }
 
 
 def _repair_feedback(verification: TaskVerification) -> dict[str, JsonValue]:

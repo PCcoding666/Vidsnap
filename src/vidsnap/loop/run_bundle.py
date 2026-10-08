@@ -51,10 +51,7 @@ def _redact_payload(value: JsonValue) -> JsonValue:
         return {
             key: (
                 item
-                if key.lower() in _SAFE_USAGE_COUNTERS
-                and isinstance(item, int)
-                and not isinstance(item, bool)
-                and item >= 0
+                if key.lower() in _SAFE_USAGE_COUNTERS and _is_safe_counter_value(item)
                 else "***REDACTED***"
             )
             if any(part in key.lower() for part in _SENSITIVE_KEY_PARTS)
@@ -64,6 +61,13 @@ def _redact_payload(value: JsonValue) -> JsonValue:
     if isinstance(value, list):
         return [_redact_payload(item) for item in value]
     return value
+
+
+def _is_safe_counter_value(item: JsonValue) -> bool:
+    """A usage counter is a non-negative integer, or null when it was not reported."""
+    if item is None:
+        return True
+    return isinstance(item, int) and not isinstance(item, bool) and item >= 0
 
 
 def _utc_now() -> str:

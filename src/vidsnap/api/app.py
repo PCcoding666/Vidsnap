@@ -13,6 +13,7 @@ from fastapi import FastAPI
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field
 
+from vidsnap import __version__
 from vidsnap.contracts import HarnessPolicy, VideoGoal, VideoSource, default_loop_spec
 from vidsnap.harness import HarnessRunResult, VideoHarness
 
@@ -63,7 +64,7 @@ def create_app(
     harness_factory: Callable[[], VideoHarness] = VideoHarness,
 ) -> FastAPI:
     """Create the no-users, no-jobs, local FastAPI surface."""
-    app = FastAPI(title="VidSnap Harness", version="0.1.0")
+    app = FastAPI(title="VidSnap Harness", version=__version__)
 
     @app.get("/health")
     async def health() -> dict[str, object]:

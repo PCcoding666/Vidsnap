@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import cast
 
+from vidsnap import __version__
 from vidsnap.config import TOKEN_PLAN_BASE_URL, HarnessConfig
 from vidsnap.contracts import (
     HarnessPolicy,
@@ -17,13 +18,24 @@ from vidsnap.contracts import (
 )
 from vidsnap.loop.run_bundle import RunBundle
 from vidsnap.plugins.base import SpeechRecognizerAdapter, TranscriptionPort
-from vidsnap.providers.asr import QwenAsrRecognizer
-from vidsnap.providers.base import AgentModelPort, ProviderIdentity, ProviderProtocol
-from vidsnap.providers.qwen import QwenCompatibleClient
+from vidsnap.providers.asr import QWEN_ASR_IDENTITY, QwenAsrRecognizer
+from vidsnap.providers.base import (
+    AgentModelPort,
+    ProviderIdentity,
+    ProviderProtocol,
+    declared_identity,
+)
+from vidsnap.providers.qwen import QWEN_PROVIDER_IDENTITY, QwenCompatibleClient
 from vidsnap.recipes.interview import InterviewRecipeResult
 from vidsnap.recipes.render import InterviewRecipeArtifacts, render_interview_recipe
 from vidsnap.recipes.task import InterviewRecipeTaskAdapter
-from vidsnap.runtime import AgenticPolicy, HarnessKernel, RunContext, default_plugin_registry
+from vidsnap.runtime import (
+    AgenticPolicy,
+    HarnessKernel,
+    RecipeIdentity,
+    RunContext,
+    default_plugin_registry,
+)
 from vidsnap.tasks.base import TaskAdapter, TaskVerification
 from vidsnap.trace.export import export_trace
 from vidsnap.video.ports import FFmpegPort
@@ -31,6 +43,8 @@ from vidsnap.video.probe import FFmpegMediaPort
 from vidsnap.video.sampling import AdaptiveSampler
 
 __all__ = ["InterviewRecipeRunner", "InterviewRecipeRunResult"]
+
+_RECIPE_ID = "interview"
 
 _INTERVIEW_OBJECTIVE = (
     "Produce a grounded interview record from the captured local transcript and "
@@ -48,6 +62,7 @@ class InterviewRecipeRunResult:
     artifacts: InterviewRecipeArtifacts | None = None
     failure_reason: str | None = None
     verification: TaskVerification | None = None
+    run_path: Path | None = None
 
 
 class InterviewRecipeRunner:
@@ -78,9 +93,22 @@ class InterviewRecipeRunner:
         self._provider = provider
         self._agent_model: AgentModelPort | None = provider if provider is not None else agent_model
 
-    async def run(self, source: VideoSource, output_dir: Path) -> InterviewRecipeRunResult:
-        """Execute the recipe for ``source`` into ``output_dir``."""
+    async def run(
+        self,
+        source: VideoSource,
+        output_dir: Path,
+        *,
+        run_dir: Path | None = None,
+    ) -> InterviewRecipeRunResult:
+        """Execute the recipe for ``source`` into ``output_dir``.
+
+        With ``run_dir``, the RunBundle is created there and kept whatever the
+        outcome, and its path is returned as ``run_path``. Without it, the
+        bundle lives in a private temporary directory removed on return.
+        """
         config = self._config or HarnessConfig.from_env()
+        kept_run_dir = run_dir.expanduser().resolve() if run_dir is not None else None
+        kept_bundle: RunBundle | None = None
         try:
             media = self._media or FFmpegMediaPort()
             sampler = self._sampler or AdaptiveSampler()
@@ -88,6 +116,8 @@ class InterviewRecipeRunner:
                 agent_model: AgentModelPort = self._provider
                 recognizer: TranscriptionPort | None = self._recognizer
                 provider_identity = self._provider.identity
+                header_provider: ProviderIdentity | None = provider_identity
+                header_recognizer = declared_identity(recognizer)
             else:
                 agent_model = self._agent_model or QwenCompatibleClient(
                     api_key=config.api_key,
@@ -98,19 +128,48 @@ class InterviewRecipeRunner:
                     QwenAsrRecognizer(api_key=config.api_key)
                 )
                 provider_identity = None
-            return await self._run_bounded(
-                source,
-                output_dir,
-                media=media,
-                sampler=sampler,
-                agent_model=agent_model,
-                recognizer=recognizer,
-                provider_identity=provider_identity,
-            )
+                header_provider = (
+                    QWEN_PROVIDER_IDENTITY
+                    if agent_model is not self._agent_model
+                    else declared_identity(agent_model)
+                )
+                header_recognizer = (
+                    QWEN_ASR_IDENTITY
+                    if recognizer is not self._recognizer
+                    else declared_identity(recognizer)
+                )
+            with tempfile.TemporaryDirectory(prefix="vidsnap-recipe-") as workspace:
+                workspace_path = Path(workspace)
+                bundle = RunBundle.create(
+                    kept_run_dir if kept_run_dir is not None else workspace_path / "run",
+                    loop_spec=default_loop_spec(),
+                    provider_url=(
+                        provider_identity.base_url
+                        if provider_identity is not None
+                        else TOKEN_PLAN_BASE_URL
+                    ),
+                    provider_identity=provider_identity,
+                )
+                if kept_run_dir is not None:
+                    kept_bundle = bundle
+                return await self._run_bounded(
+                    source,
+                    output_dir,
+                    bundle=bundle,
+                    workspace_path=workspace_path,
+                    media=media,
+                    sampler=sampler,
+                    agent_model=agent_model,
+                    recognizer=recognizer,
+                    header_provider=header_provider,
+                    header_recognizer=header_recognizer,
+                    run_path=kept_bundle.path if kept_bundle is not None else None,
+                )
         except Exception:
             return InterviewRecipeRunResult(
                 terminal_state=TerminalState.FAILED,
                 failure_reason="unexpected recipe runner error",
+                run_path=kept_bundle.path if kept_bundle is not None else None,
             )
 
     async def _run_bounded(
@@ -118,67 +177,64 @@ class InterviewRecipeRunner:
         source: VideoSource,
         output_dir: Path,
         *,
+        bundle: RunBundle,
+        workspace_path: Path,
         media: FFmpegPort,
         sampler: AdaptiveSampler,
         agent_model: AgentModelPort,
         recognizer: TranscriptionPort | None,
-        provider_identity: ProviderIdentity | None,
+        header_provider: ProviderIdentity | None,
+        header_recognizer: ProviderIdentity | None,
+        run_path: Path | None,
     ) -> InterviewRecipeRunResult:
-        """Drive one kernel-owned agentic run inside a private temporary workspace."""
-        with tempfile.TemporaryDirectory(prefix="vidsnap-recipe-") as workspace:
-            workspace_path = Path(workspace)
-            bundle = RunBundle.create(
-                workspace_path / "run",
-                loop_spec=default_loop_spec(),
-                provider_url=(
-                    provider_identity.base_url
-                    if provider_identity is not None
-                    else TOKEN_PLAN_BASE_URL
-                ),
-                provider_identity=provider_identity,
-            )
-            context: RunContext[InterviewRecipeResult, AgentModelPort] = RunContext(
-                source=source,
-                policy=HarnessPolicy(tool_mode="agentic"),
-                bundle=bundle,
-                task_adapter=cast(
-                    TaskAdapter[InterviewRecipeResult, AgentModelPort],
-                    InterviewRecipeTaskAdapter(_interview_goal()),
-                ),
-                task_model=agent_model,
-                media=media,
-                sampler=sampler,
-                recognizer=recognizer,
-                result_writer=bundle.write_result,
-                agent_model=agent_model,
-            )
-            kernel: HarnessKernel[InterviewRecipeResult, AgentModelPort] = HarnessKernel(
-                policy=AgenticPolicy(),
-                registry=default_plugin_registry(),
-            )
-            kernel_result = await kernel.run(context)
-            if not (
-                kernel_result.terminal_state is TerminalState.SUCCEEDED
-                and isinstance(kernel_result.output, InterviewRecipeResult)
-                and kernel_result.verification is not None
-                and kernel_result.verification.passed
-            ):
-                return InterviewRecipeRunResult(
-                    terminal_state=kernel_result.terminal_state,
-                    failure_reason=kernel_result.failure_reason,
-                    verification=kernel_result.verification,
-                )
-            trace_path = export_trace(bundle.path, workspace_path / "trace.html")
-            artifacts = render_interview_recipe(
-                kernel_result.output,
-                output_dir,
-                _ascii_safe_html(trace_path.read_text(encoding="utf-8")).encode("ascii"),
-            )
+        """Drive one kernel-owned agentic run, staging the trace in a private workspace."""
+        context: RunContext[InterviewRecipeResult, AgentModelPort] = RunContext(
+            source=source,
+            policy=HarnessPolicy(tool_mode="agentic"),
+            bundle=bundle,
+            task_adapter=cast(
+                TaskAdapter[InterviewRecipeResult, AgentModelPort],
+                InterviewRecipeTaskAdapter(_interview_goal()),
+            ),
+            task_model=agent_model,
+            media=media,
+            sampler=sampler,
+            recognizer=recognizer,
+            result_writer=bundle.write_result,
+            agent_model=agent_model,
+            provider_identity=header_provider,
+            speech_recognizer_identity=header_recognizer,
+            recipe=RecipeIdentity(id=_RECIPE_ID, version=__version__),
+        )
+        kernel: HarnessKernel[InterviewRecipeResult, AgentModelPort] = HarnessKernel(
+            policy=AgenticPolicy(),
+            registry=default_plugin_registry(),
+        )
+        kernel_result = await kernel.run(context)
+        if not (
+            kernel_result.terminal_state is TerminalState.SUCCEEDED
+            and isinstance(kernel_result.output, InterviewRecipeResult)
+            and kernel_result.verification is not None
+            and kernel_result.verification.passed
+        ):
             return InterviewRecipeRunResult(
-                terminal_state=TerminalState.SUCCEEDED,
-                artifacts=artifacts,
+                terminal_state=kernel_result.terminal_state,
+                failure_reason=kernel_result.failure_reason,
                 verification=kernel_result.verification,
+                run_path=run_path,
             )
+        trace_path = export_trace(bundle.path, workspace_path / "trace.html")
+        artifacts = render_interview_recipe(
+            kernel_result.output,
+            output_dir,
+            _ascii_safe_html(trace_path.read_text(encoding="utf-8")).encode("ascii"),
+        )
+        return InterviewRecipeRunResult(
+            terminal_state=TerminalState.SUCCEEDED,
+            artifacts=artifacts,
+            verification=kernel_result.verification,
+            run_path=run_path,
+        )
 
 
 def _interview_goal() -> VideoGoal:

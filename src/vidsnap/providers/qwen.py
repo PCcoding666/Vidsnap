@@ -6,7 +6,7 @@ import asyncio
 import base64
 import json
 import mimetypes
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -24,6 +24,11 @@ from vidsnap.providers.base import (
     ProviderIdentity,
     ProviderUnavailable,
     ToolPlanResponse,
+)
+from vidsnap.providers.failures import (
+    http_failure,
+    invalid_response_failure,
+    request_body_bytes,
 )
 from vidsnap.video.probe import MediaProbe
 
@@ -47,6 +52,8 @@ _AGENT_SYSTEM_MESSAGE = (
     "rules."
 )
 _MAX_IMAGE_BYTES = 5 * 1024 * 1024
+
+QWEN_PROVIDER_IDENTITY = ProviderIdentity(id="qwen", model=QWEN_MODEL, base_url=TOKEN_PLAN_BASE_URL)
 
 
 @dataclass(frozen=True, slots=True)
@@ -97,19 +104,17 @@ class QwenCompatibleClient:
             ],
             "response_format": {"type": "json_object"},
         }
-        async with self._semaphore:
-            async with httpx.AsyncClient(
-                base_url=f"{TOKEN_PLAN_BASE_URL}/",
-                timeout=self._timeout_seconds,
-                transport=self._transport,
-            ) as client:
-                response = await client.post(
-                    "chat/completions",
-                    headers={"Authorization": f"Bearer {self._api_key}"},
-                    json=request_payload,
-                )
-                response.raise_for_status()
-        return self._parse_response(response.json())
+        input_bytes = request_body_bytes(request_payload)
+        payload = await self._post_json(
+            request_payload,
+            input_bytes=input_bytes,
+            failure_message="Qwen analysis request failed",
+        )
+        try:
+            return self._parse_response(payload)
+        except ProviderError as error:
+            error.failure = invalid_response_failure(payload, input_bytes=input_bytes)
+            raise
 
     async def plan_tools(self, probe: MediaProbe, goal: VideoGoal) -> ToolPlanResponse:
         """Select only bounded acquisition tools from typed probe metadata."""
@@ -141,25 +146,17 @@ class QwenCompatibleClient:
             ],
             "response_format": {"type": "json_object"},
         }
-        async with self._semaphore:
-            async with httpx.AsyncClient(
-                base_url=f"{TOKEN_PLAN_BASE_URL}/",
-                timeout=self._timeout_seconds,
-                transport=self._transport,
-            ) as client:
-                try:
-                    response = await client.post(
-                        "chat/completions",
-                        headers={"Authorization": f"Bearer {self._api_key}"},
-                        json=request_payload,
-                    )
-                    response.raise_for_status()
-                except httpx.HTTPError as error:
-                    raise ProviderError("Qwen tool-planning request failed") from error
-        input_bytes = len(
-            json.dumps(request_payload, ensure_ascii=True, separators=(",", ":")).encode("utf-8")
+        input_bytes = request_body_bytes(request_payload)
+        payload = await self._post_json(
+            request_payload,
+            input_bytes=input_bytes,
+            failure_message="Qwen tool-planning request failed",
         )
-        return self._parse_tool_plan_response(response.json(), input_bytes=input_bytes)
+        try:
+            return self._parse_tool_plan_response(payload, input_bytes=input_bytes)
+        except ProviderError as error:
+            error.failure = invalid_response_failure(payload, input_bytes=input_bytes)
+            raise
 
     async def decide_next(self, request: AgentStepRequest) -> AgentDecisionResponse:
         """Ask the fixed model for exactly one bounded decision from typed state."""
@@ -209,6 +206,30 @@ class QwenCompatibleClient:
             ],
             "response_format": {"type": "json_object"},
         }
+        input_bytes = request_body_bytes(request_payload)
+        payload = await self._post_json(
+            request_payload,
+            input_bytes=input_bytes,
+            failure_message="Qwen agent-decision request failed",
+            body_error=AgentDecisionFormatError,
+            body_error_message="agent-decision response body was not valid JSON",
+        )
+        try:
+            return self._parse_agent_decision(payload, input_bytes=input_bytes)
+        except ProviderError as error:
+            error.failure = invalid_response_failure(payload, input_bytes=input_bytes)
+            raise
+
+    async def _post_json(
+        self,
+        request_payload: Mapping[str, object],
+        *,
+        input_bytes: int,
+        failure_message: str,
+        body_error: type[ProviderError] = ProviderError,
+        body_error_message: str = "provider response body was not valid JSON",
+    ) -> object:
+        """Send one request and decode its JSON body, attaching structured failures."""
         async with self._semaphore:
             async with httpx.AsyncClient(
                 base_url=f"{TOKEN_PLAN_BASE_URL}/",
@@ -223,17 +244,17 @@ class QwenCompatibleClient:
                     )
                     response.raise_for_status()
                 except httpx.HTTPError as error:
-                    raise ProviderError("Qwen agent-decision request failed") from error
-        input_bytes = len(
-            json.dumps(request_payload, ensure_ascii=True, separators=(",", ":")).encode("utf-8")
-        )
+                    raise ProviderError(
+                        failure_message, failure=http_failure(error, input_bytes=input_bytes)
+                    ) from error
         try:
-            payload = response.json()
+            payload: object = response.json()
         except ValueError as error:
-            raise AgentDecisionFormatError(
-                "agent-decision response body was not valid JSON"
+            raise body_error(
+                body_error_message,
+                failure=invalid_response_failure(None, input_bytes=input_bytes),
             ) from error
-        return self._parse_agent_decision(payload, input_bytes=input_bytes)
+        return payload
 
     @staticmethod
     def _evidence_content(

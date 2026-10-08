@@ -28,6 +28,7 @@ Topics: video-ai, agent-harness, multimodal, ai-agents, video-analysis, llm-eval
 ## Reference
 
 - [Migration from the legacy SaaS](migration-to-harness.md) — what was removed and how bounded runs work now.
+- [Trace format and run index](trace-format.md) — every field a run records, failure categories, the local run index, human reviews, and price tables.
 - [Default tools and data review](default-tools-and-data-review.md) — what the built-in tools read, their budgets, and what leaves the machine.
 - [Benchmark status](benchmark-status.md) — no live comparison is published; infrastructure validation is not proof that Harness beats Direct, and these pages make no performance claims.
 - [Benchmark methodology](benchmark-methodology.md) — the offline trust metrics, fairness registration rules, and the deterministic `vidsnap benchmark evaluate` command; no results are published.

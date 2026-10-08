@@ -2,10 +2,13 @@
 
 import asyncio
 import json
+import os
+import uuid
 from pathlib import Path
 from typing import Annotated
 
 import typer
+from pydantic import ValidationError
 
 from vidsnap.benchmark.trust import TrustEvaluationInput, evaluate_trust
 from vidsnap.config import HarnessConfig
@@ -16,6 +19,17 @@ from vidsnap.plugins import PluginRegistry, ToolPlugin, discovery
 from vidsnap.plugins.project import validate_plugin_project
 from vidsnap.recipes.runner import InterviewRecipeRunner
 from vidsnap.trace.export import export_trace
+from vidsnap.trace.pricing import LoadedPriceTable, load_price_table
+from vidsnap.trace.run_index import (
+    INDEX_FILE_NAME,
+    RunReview,
+    append_index_record,
+    read_index,
+    render_run_table,
+    resolve_run_id,
+    review_record,
+    summarize_run,
+)
 
 app = typer.Typer(
     name="vidsnap",
@@ -30,6 +44,96 @@ recipe_app = typer.Typer(help="Run grounded editorial recipes.")
 app.add_typer(recipe_app, name="recipe")
 plugin_app = typer.Typer(help="Validate and test local plugin projects.")
 app.add_typer(plugin_app, name="plugin")
+runs_app = typer.Typer(help="List and review runs in the local run index.")
+app.add_typer(runs_app, name="runs")
+
+
+_RUNS_ROOT_HELP = (
+    "Directory that keeps each RunBundle and the run index (index.jsonl); defaults to ./run."
+)
+_PRICE_TABLE_HELP = (
+    "Your vidsnap.price-table/v1 JSON file; without it the run index records cost as null."
+)
+
+
+RunsRootOption = Annotated[
+    Path, typer.Option("--runs-root", envvar="VIDSNAP_RUNS_ROOT", help=_RUNS_ROOT_HELP)
+]
+PriceTableOption = Annotated[
+    Path | None,
+    typer.Option("--price-table", envvar="VIDSNAP_PRICE_TABLE", help=_PRICE_TABLE_HELP),
+]
+
+
+# Fixed failure reasons VidSnap itself produces; free text from injected ports is never echoed.
+_PRINTABLE_FAILURE_REASONS = frozenset(
+    {
+        "cancelled",
+        "provider unavailable",
+        "provider error",
+        "unexpected kernel error",
+        "policy exited without a terminal state",
+        "result persistence failed",
+        "wall-clock budget exceeded",
+        "tool-call budget exceeded",
+        "model-call budget exceeded",
+        "iteration budget exceeded",
+        "evidence-frame budget exceeded",
+        "unexpected recipe runner error",
+    }
+)
+
+
+def _prepare_runs_root(runs_root: Path) -> Path:
+    """Create the runs root before any run starts; exit 2 when it cannot be written."""
+    resolved = runs_root.expanduser().resolve()
+    try:
+        resolved.mkdir(parents=True, exist_ok=True)
+        writable = os.access(resolved, os.W_OK | os.X_OK)
+    except OSError:
+        writable = False
+    if not writable:
+        typer.echo(f"runs root not writable: {resolved}; pass --runs-root", err=True)
+        raise typer.Exit(code=2)
+    return resolved
+
+
+def _load_prices(path: Path | None) -> LoadedPriceTable | None:
+    """Validate a supplied price table before any run starts; exit 2 when invalid."""
+    if path is None:
+        return None
+    try:
+        return load_price_table(path.expanduser())
+    except ValueError as error:
+        typer.echo(f"Price table refused: {error}", err=True)
+        raise typer.Exit(code=2) from None
+
+
+def _index_run(
+    run_path: Path | None,
+    runs_root: Path,
+    *,
+    command: str,
+    prices: LoadedPriceTable | None,
+    outcome: str | None = None,
+    outcome_reason: str | None = None,
+) -> None:
+    """Append the finished run to the run index; never change the run's outcome."""
+    if run_path is None or not (run_path / "manifest.json").is_file():
+        return
+    try:
+        append_index_record(
+            runs_root,
+            summarize_run(
+                run_path,
+                command=command,
+                price_table=prices,
+                outcome=outcome,
+                outcome_reason=outcome_reason,
+            ),
+        )
+    except (OSError, ValueError) as error:
+        typer.echo(f"Run index not updated: {type(error).__name__}", err=True)
 
 
 def _plugin_error() -> None:
@@ -115,15 +219,29 @@ def analyze(
     video: Path = typer.Argument(..., exists=True, readable=True),
     goal: str = typer.Option("Summarize the video.", "--goal", min=1),
     output_dir: Path | None = typer.Option(None, "--output-dir"),
+    runs_root: RunsRootOption = Path("run"),
+    price_table: PriceTableOption = None,
 ) -> None:
-    """Analyze one local video through the bounded evidence harness."""
+    """Analyze one local video through the bounded evidence harness.
+
+    The RunBundle goes to --output-dir, or to a new directory under the runs
+    root; either way the finished run is appended to the run index.
+    """
+    prices = _load_prices(price_table)
+    if output_dir is None:
+        resolved_root = _prepare_runs_root(runs_root)
+        run_dir = resolved_root / str(uuid.uuid4())
+    else:
+        resolved_root = runs_root.expanduser().resolve()
+        run_dir = output_dir
     result = asyncio.run(
         VideoHarness().run(
             VideoSource(path=video),
             VideoGoal(objective=goal),
-            HarnessPolicy(output_dir=output_dir),
+            HarnessPolicy(output_dir=run_dir),
         )
     )
+    _index_run(result.run_path, resolved_root, command="analyze", prices=prices)
     typer.echo(
         json.dumps(
             {
@@ -162,13 +280,50 @@ def demo(output_dir: Path = typer.Option(Path("vidsnap-demo"), "--output-dir")) 
 def recipe_interview(
     video: Path = typer.Argument(..., exists=True, readable=True),
     output_dir: Path = typer.Option(..., "--output-dir"),
+    runs_root: RunsRootOption = Path("run"),
+    price_table: PriceTableOption = None,
+    keep_bundle: Annotated[
+        bool,
+        typer.Option(
+            "--keep-bundle/--no-keep-bundle",
+            help=(
+                "Keep the RunBundle (audio, frames, transcripts, result) under the runs "
+                "root and index the run. --no-keep-bundle uses a temporary bundle that is "
+                "removed when the command ends, and writes no index line."
+            ),
+        ),
+    ] = True,
 ) -> None:
-    """Produce the grounded interview record for one local video."""
+    """Produce the grounded interview record for one local video.
+
+    By default the run's RunBundle is kept under the runs root whatever the
+    outcome, its location is printed as run_path, and the run is appended to
+    the run index.
+    """
+    prices = _load_prices(price_table)
     resolved_video = video.expanduser().resolve()
     resolved_output = output_dir.expanduser().resolve()
+    if resolved_output.exists() and (
+        not resolved_output.is_dir() or any(resolved_output.iterdir())
+    ):
+        typer.echo(f"Output directory is not empty: {resolved_output}", err=True)
+        raise typer.Exit(code=2)
+    resolved_root = _prepare_runs_root(runs_root) if keep_bundle else None
+    run_dir = resolved_root / str(uuid.uuid4()) if resolved_root is not None else None
     result = asyncio.run(
-        InterviewRecipeRunner().run(VideoSource(path=resolved_video), resolved_output)
+        InterviewRecipeRunner().run(
+            VideoSource(path=resolved_video), resolved_output, run_dir=run_dir
+        )
     )
+    if resolved_root is not None:
+        _index_run(
+            result.run_path,
+            resolved_root,
+            command="recipe interview",
+            prices=prices,
+            outcome=result.terminal_state.value,
+            outcome_reason=result.failure_reason,
+        )
     payload: dict[str, object] = {"terminal_state": result.terminal_state.value}
     artifacts = result.artifacts
     succeeded = False
@@ -180,9 +335,97 @@ def recipe_interview(
             str(artifacts.brief_path),
             str(artifacts.trace_path),
         ]
+    if result.run_path is not None:
+        payload["run_path"] = str(result.run_path)
+    if result.failure_reason in _PRINTABLE_FAILURE_REASONS:
+        payload["failure_reason"] = result.failure_reason
     typer.echo(json.dumps(payload, ensure_ascii=True))
     if not succeeded:
         raise typer.Exit(code=1)
+
+
+@runs_app.command("list")
+def runs_list(runs_root: RunsRootOption = Path("run")) -> None:
+    """Print every indexed run, oldest first, with its latest review."""
+    resolved_root = runs_root.expanduser().resolve()
+    try:
+        contents = read_index(resolved_root)
+    except OSError as error:
+        reason = error.strerror or type(error).__name__
+        typer.echo(f"Cannot read run index {resolved_root / INDEX_FILE_NAME}: {reason}", err=True)
+        raise typer.Exit(code=2) from None
+    if not any(record.get("record") == "run" for record in contents.records):
+        typer.echo(f"No runs indexed in {resolved_root / INDEX_FILE_NAME}")
+    else:
+        typer.echo(render_run_table(contents.records))
+    if contents.invalid_lines:
+        typer.echo(f"Skipped {contents.invalid_lines} unreadable index line(s).", err=True)
+
+
+@runs_app.command("review")
+def runs_review(
+    run: Annotated[
+        str,
+        typer.Argument(
+            help="Run id, bundle path or folder name, or a unique prefix of 8+ characters."
+        ),
+    ],
+    edit_minutes: Annotated[
+        float | None,
+        typer.Option("--edit-minutes", min=0, help="Minutes spent editing the output."),
+    ] = None,
+    published: Annotated[
+        bool | None,
+        typer.Option("--published/--not-published", help="Whether the output was published."),
+    ] = None,
+    factual_errors: Annotated[
+        int | None,
+        typer.Option("--factual-errors", min=0, help="Factual errors found in the output."),
+    ] = None,
+    images_replaced: Annotated[
+        int | None,
+        typer.Option("--images-replaced", min=0, help="Images replaced by hand."),
+    ] = None,
+    note: Annotated[str | None, typer.Option("--note", help="Free-text review note.")] = None,
+    runs_root: RunsRootOption = Path("run"),
+) -> None:
+    """Append one human review of an indexed run; fields left out stay null."""
+    try:
+        review = RunReview(
+            edit_minutes=edit_minutes,
+            published=published,
+            factual_errors=factual_errors,
+            images_replaced=images_replaced,
+            note=note,
+        )
+    except ValidationError as error:
+        fields = sorted({str(item["loc"][0]) for item in error.errors() if item["loc"]})
+        reason = (
+            f"invalid {', '.join(fields)}" if fields else "a review must record at least one field"
+        )
+        typer.echo(f"Review refused: {reason}", err=True)
+        raise typer.Exit(code=2) from None
+    resolved_root = runs_root.expanduser().resolve()
+    index_path = resolved_root / INDEX_FILE_NAME
+    try:
+        run_id = resolve_run_id(read_index(resolved_root).records, run)
+    except LookupError as error:
+        typer.echo(f"Review refused: {error.args[0]}", err=True)
+        raise typer.Exit(code=2) from None
+    except OSError:
+        typer.echo(f"Review refused: cannot read run index: {index_path}", err=True)
+        raise typer.Exit(code=2) from None
+    try:
+        append_index_record(resolved_root, review_record(run_id, review))
+    except OSError:
+        typer.echo(f"Review refused: run index not writable: {index_path}", err=True)
+        raise typer.Exit(code=2) from None
+    typer.echo(
+        json.dumps(
+            {"status": "REVIEWED", "run_id": run_id, "index": str(index_path)},
+            ensure_ascii=True,
+        )
+    )
 
 
 @app.command()

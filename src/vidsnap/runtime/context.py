@@ -15,7 +15,7 @@ from vidsnap.contracts.models import StrictModel
 from vidsnap.loop.run_bundle import RunBundle
 from vidsnap.loop.trace_recorder import TraceRecorder
 from vidsnap.plugins.base import TranscriptionPort
-from vidsnap.providers.base import AgentModelPort
+from vidsnap.providers.base import AgentModelPort, ProviderIdentity
 from vidsnap.tasks.base import TaskAdapter, TaskVerification
 from vidsnap.video.ports import FFmpegPort
 from vidsnap.video.probe import MediaProbe
@@ -23,6 +23,14 @@ from vidsnap.video.sampling import AdaptiveSampler
 
 OutputT = TypeVar("OutputT", bound=StrictModel)
 ModelT = TypeVar("ModelT")
+
+
+@dataclass(frozen=True, slots=True)
+class RecipeIdentity:
+    """The recipe a run executes, recorded in the run header."""
+
+    id: str
+    version: str
 
 
 @dataclass(slots=True)
@@ -39,6 +47,9 @@ class RunContext(Generic[OutputT, ModelT]):
     agent_model: AgentModelPort | None = None
     recognizer: TranscriptionPort | None = None
     result_writer: Callable[[OutputT], object] | None = None
+    provider_identity: ProviderIdentity | None = None
+    speech_recognizer_identity: ProviderIdentity | None = None
+    recipe: RecipeIdentity | None = None
     probe: MediaProbe | None = None
     evidence: list[Evidence] = field(default_factory=list)
     output: OutputT | None = None

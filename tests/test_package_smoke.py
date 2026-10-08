@@ -11,7 +11,7 @@ from vidsnap.cli import app
 
 
 def test_package_exposes_version_and_cli_app() -> None:
-    assert __version__ == "0.1.0"
+    assert __version__ == "0.1.1"
     assert app.info.name == "vidsnap"
 
 

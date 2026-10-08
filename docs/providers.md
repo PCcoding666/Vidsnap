@@ -161,6 +161,11 @@ The runner wires the provider in as its `agent_model`. `provider=` and
 budgets, and tool registry stay fixed recipe constants regardless of which
 provider is injected.
 
+Pass `run_dir=` to keep the run's RunBundle there whatever the outcome; the
+result reports it as `run_path`. Without it the bundle lives in a private
+temporary directory removed when `run()` returns. `vidsnap recipe interview`
+always passes a directory under its runs root.
+
 ## Entry-point discovery
 
 Provider entry points use an explicit allow-list. Third-party packages
@@ -227,6 +232,20 @@ values, and fragments. Built-in providers keep credentials out of bundles: the
 API key lives only in the provider client for the duration of a request, event
 payloads are passed through key-based redaction before being appended to
 `events.jsonl`, and no database or remote store is involved.
+
+Each run's `run.started` event records the `id` and `model` of the provider
+serving it when that is known: the built-in Qwen stack, or any port that
+declares a `ProviderIdentity`. The URL is never repeated there, and exported
+HTML traces omit the provider entirely.
+
+When a call fails, a provider may raise
+`ProviderError(message, failure=ProviderFailure(...))`, with `ProviderFailure`
+from `vidsnap.contracts`, to record an allow-listed failure category, the HTTP
+status, the request size, and any token counts the provider reported. The
+built-in Qwen provider does this for its transport, HTTP-status, and
+unusable-response failures. Without a record the kernel
+categorizes the failure by exception type. See the
+[trace format](trace-format.md) for the categories.
 
 ## What providers do not do
 
