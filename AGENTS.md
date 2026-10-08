@@ -25,7 +25,7 @@ VidSnap Harness is a local, single-user harness for bounded video analysis runs 
 
 - Users, authentication, accounts, multi-tenancy, or SaaS integration.
 - Databases, queues, Redis, Celery, or OSS persistence.
-- Frontend code or job/history state.
+- Frontend code, job queues, or server-side or shared run history. The CLI's local, append-only run index (`<runs-root>/index.jsonl`), rebuildable from RunBundles and never written by the API adapter, is in scope.
 - Arbitrary prompt/model/provider proxy endpoints.
 
 Stay within this scope. Changes outside it require an explicit, separate decision; do not fold them into unrelated work.
@@ -51,7 +51,7 @@ Four-space Python indentation and strict typed public contracts are enforced by 
 
 ## Security
 
-Never commit, publish, or embed in artifacts or fixtures: credentials, API keys, cookies, .env files, media, datasets, RunBundles, benchmark results, or raw provider requests/responses.
+Never commit, publish, or embed in artifacts or fixtures: credentials, API keys, cookies, .env files, media, datasets, RunBundles, run indexes (`index.jsonl`), benchmark results, or raw provider requests/responses.
 
 - Keys come only from local environment variables; never log them, serialize them into traces, or hard-code them.
 - Never weaken, bypass, or rewrite gates, conformance checks, or security tooling to make a change pass.
@@ -69,4 +69,4 @@ Never commit, publish, or embed in artifacts or fixtures: credentials, API keys,
 - Arbitrary shell, browser, URL, model, prompt, or provider execution — anything not routed through an allow-listed, budgeted tool.
 - Silent contract changes: altering contracts, formats, defaults, or conformance behavior without tests and a versioned change.
 - Networked unit tests: any test requiring network, model endpoints, or credentials.
-- SaaS, accounts, databases, queues, frontend code, or job/history state.
+- SaaS, accounts, databases, queues, frontend code, job state, or server-side or shared run history (the local CLI run index is the only permitted cross-run record).
