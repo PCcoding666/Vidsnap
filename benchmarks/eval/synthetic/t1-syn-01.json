@@ -1,0 +1,104 @@
+{
+  "schema_version": "vidsnap.eval-synthetic/v1",
+  "id": "t1-syn-01",
+  "language": "zh",
+  "voice": "Tingting",
+  "width": 1280,
+  "height": 720,
+  "output": "synthetic/t1-syn-01.mp4",
+  "slides": [
+    {
+      "lines": [
+        "大模型推理的两个阶段",
+        "Prefill 与 Decode",
+        "主讲：示例讲师"
+      ],
+      "narration": "大家好。今天我们讲大模型推理的两个阶段：Prefill 和 Decode，以及为什么现在很多推理系统要把它们分开部署。",
+      "duration_seconds": 16.5
+    },
+    {
+      "lines": [
+        "两个阶段",
+        "Prefill：一次处理整段提示词",
+        "Decode：每次只生成一个词元"
+      ],
+      "narration": "用户发来一段提示词，模型先用 Prefill 阶段一次性处理整段提示词，算出每个位置的 K 和 V。之后进入 Decode 阶段，每一步只生成一个新的词元，一直重复到回答结束。",
+      "duration_seconds": 22.5
+    },
+    {
+      "lines": [
+        "用真实维度算一笔账",
+        "模型：Llama 3 8B",
+        "隐藏维度 d = 4096",
+        "提示词长度 S = 2048"
+      ],
+      "narration": "我们用真实的模型来算。以 Llama 3 8B 为例，隐藏维度是 4096，假设提示词长度是 2048 个词元。",
+      "duration_seconds": 14.5
+    },
+    {
+      "lines": [
+        "运算量与读取量",
+        "运算量 ≈ 2 × S × d²",
+        "读取权重 ≈ 2 × d² 字节",
+        "两者相除，只剩下 S"
+      ],
+      "narration": "一个线性层的运算量大约是 2 乘以 S 乘以 d 的平方，而读取的权重字节数大约是 2 乘以 d 的平方。两者一除，公共项约掉，只剩下 S。所以 Prefill 每读一个字节可以做两千多次运算，它是计算受限的。",
+      "duration_seconds": 25.0
+    },
+    {
+      "lines": [
+        "Decode 为什么慢",
+        "S = 1：每读一个字节只做约 1 次运算",
+        "瓶颈在显存带宽"
+      ],
+      "narration": "到了 Decode 阶段，每一步只处理一个词元，S 等于 1。每读一个字节只能做大约一次运算，算力大部分时间在等数据，瓶颈变成了显存带宽。",
+      "duration_seconds": 18.5
+    },
+    {
+      "lines": [
+        "Roofline 拐点",
+        "H100：约 1000 TFLOPS，3.35 TB/s",
+        "拐点 ≈ 300 次运算/字节"
+      ],
+      "narration": "看屏幕上的这组硬件数字。用峰值算力除以显存带宽，就得到 roofline 的拐点。Decode 远在拐点左边，所以要靠增大批量来提高利用率。",
+      "duration_seconds": 19.0
+    },
+    {
+      "lines": [
+        "两种延迟",
+        "TTFT：首个词元延迟，由 Prefill 决定",
+        "TPOT：每个输出词元的时间，由 Decode 决定"
+      ],
+      "narration": "用户感受到两种慢。第一种叫 TTFT，也就是首个词元出来之前的等待，主要由 Prefill 决定。第二种叫 TPOT，就是之后每个词元的间隔，主要由 Decode 决定。",
+      "duration_seconds": 22.0
+    },
+    {
+      "lines": [
+        "混在一起的问题",
+        "长提示词的 Prefill 会插队",
+        "正在 Decode 的请求被卡住"
+      ],
+      "narration": "如果两个阶段跑在同一组 GPU 上，一个很长的 Prefill 会占满算力，正在 Decode 的请求就会被卡住，TPOT 突然变长。",
+      "duration_seconds": 17.0
+    },
+    {
+      "lines": [
+        "分离部署",
+        "Prefill 池：按算力配置",
+        "Decode 池：按显存和带宽配置",
+        "代价：在两个池之间传输 KV Cache"
+      ],
+      "narration": "解决办法是分离部署：Prefill 池按算力来配置，Decode 池按显存和带宽来配置。代价是需要把 KV Cache 从 Prefill 池传到 Decode 池。",
+      "duration_seconds": 20.5
+    },
+    {
+      "lines": [
+        "总结",
+        "根本原因：算力与带宽的错配",
+        "分离部署是结果，不是原因"
+      ],
+      "narration": "总结一下，Prefill 和 Decode 分开，根本原因是两个阶段对算力和带宽的需求错配。分离部署只是这个原因的结果。",
+      "duration_seconds": 16.5
+    }
+  ]
+}

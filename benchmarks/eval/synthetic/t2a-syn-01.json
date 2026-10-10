@@ -1,0 +1,63 @@
+{
+  "schema_version": "vidsnap.eval-synthetic/v1",
+  "id": "t2a-syn-01",
+  "language": "zh",
+  "voice": "Tingting",
+  "width": 1280,
+  "height": 720,
+  "output": "synthetic/t2a-syn-01.mp4",
+  "slides": [
+    {
+      "lines": [
+        "KV Cache 是怎么加速生成的",
+        "素材讲座"
+      ],
+      "narration": "这一讲我们看 KV Cache 是怎么让大模型生成变快的。",
+      "duration_seconds": 8.5
+    },
+    {
+      "lines": [
+        "注意力需要什么",
+        "第 t 步：新词元的 Q 要和之前所有词元的 K、V 计算"
+      ],
+      "narration": "生成第 t 个词元时，新词元的查询向量 Q 要和之前所有词元的 K 和 V 做注意力计算。",
+      "duration_seconds": 11.5
+    },
+    {
+      "lines": [
+        "没有缓存会怎样",
+        "每一步都重新计算全部 K、V",
+        "总计算量随长度平方增长"
+      ],
+      "narration": "如果不缓存，每一步都要把之前所有词元的 K 和 V 重新算一遍，总计算量会随序列长度平方增长。",
+      "duration_seconds": 13.0
+    },
+    {
+      "lines": [
+        "有了 KV Cache",
+        "把算过的 K、V 存进显存",
+        "每一步只算新词元的 K、V"
+      ],
+      "narration": "有了 KV Cache，我们把已经算过的 K 和 V 存在显存里，每一步只需要计算新词元自己的 K 和 V。",
+      "duration_seconds": 13.5
+    },
+    {
+      "lines": [
+        "代价：显存",
+        "大小 = 2 × 层数 × 隐藏维度 × 序列长度 × 每个数的字节数",
+        "例：32 层，4096 维，序列 4096，FP16 → 2 GiB"
+      ],
+      "narration": "代价是显存。缓存大小等于 2 乘以层数、隐藏维度、序列长度和每个数的字节数。屏幕上的例子算出来是 2 GiB。",
+      "duration_seconds": 15.0
+    },
+    {
+      "lines": [
+        "总结",
+        "用显存换计算",
+        "长上下文时显存成为瓶颈"
+      ],
+      "narration": "总结：KV Cache 是用显存换计算。上下文越长，显存越可能成为瓶颈。",
+      "duration_seconds": 10.5
+    }
+  ]
+}
