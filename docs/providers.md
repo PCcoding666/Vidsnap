@@ -105,14 +105,62 @@ environment variable, and `HarnessConfig.base_url` still accepts only the Token
 Plan URL. `QWEN_ASR_IDENTITY.base_url` is the speech endpoint; the run header
 records the recognizer's id and model only.
 
-Audio is sent as Base64 data URIs, never uploaded to object storage. Audio that
+Audio is sent as Base64 data URIs, never uploaded to object storage.
+
+**What is sent.** The harness extracts the video's audio through the media port as
+16 kHz mono MP3 at 48 kbps (`libmp3lame`) and cuts it by duration into standalone
+files of at most 240 s (`ASR_SEGMENT_SECONDS`), one request per file, with
+`data:audio/mpeg;base64,...` in the request. Transcripts are joined in order with
+a newline. If the installed FFmpeg has no LAME encoder, the files are ADTS AAC
+(`.aac`, `audio/aac`) instead; the run records which. A final segment shorter than
+1 s is merged into the others rather than sent alone, and the source video's
+metadata (title, location) is not copied into the files.
+
+| | Size |
+| --- | --- |
+| MP3, 48 kbps (sent) | about 6 KB per second, 360 KB per minute, 21.6 MB per hour |
+| Base64 of that (on the wire) | about 480 KB per minute |
+| A 240 s segment, Base64 | about 1.9 MB |
+| WAV, 16 kHz mono 16-bit (before) | 32 KB per second, 1.9 MB per minute; 2.56 MB per minute as Base64 |
+
+MP3 at 48 kbps is 5.3 times smaller than the WAV it replaces. A 192 s synthetic
+clip went from 8.2 MB of Base64 WAV to 1.5 MB of Base64 MP3. The 240 s segment
+length keeps 60 s under the provider's documented limits for `qwen3-asr-flash`
+(at most 5 minutes and 10 MB per request, Base64 included); at this bitrate the
+duration limit binds long before the size limit does. Each cut can cost the
+decoder about 33 ms of audio at the start of a segment.
+
+Only recognizers that set `accepts_compressed_audio = True` are sent compressed
+audio; `QwenAsrRecognizer` and the evaluation recognizer do. A recognizer without
+it, including the benchmark transcriber and a custom `local_fallback`, still gets
+one mono WAV file with `audio/wav`, as before. A `QwenAsrRecognizer` with a
+`local_fallback` sends compressed audio only when that fallback also declares it,
+because the fallback is handed the same bytes and MIME type.
+
+**WAV and the chunker.** `Base64AudioChunker` now applies only to WAV. Audio that
 fits in one chunk (7,000,000 bytes by default, about 9.3 MB once Base64-encoded,
 under the provider's documented 10 MB request limit) is sent unchanged. A
 longer PCM WAV file is cut on sample-frame boundaries, and every piece gets its
 own header with the original sample rate, channel count and bit depth, so each
 request carries a valid WAV file. Longer audio in any other format cannot be
 cut without a decoder, so the recognizer raises `ProviderError` (and uses the
-explicit `local_fallback`, if one was given).
+explicit `local_fallback`, if one was given). Compressed audio is never cut by
+bytes: it is sent whole, or refused with `ProviderError` if its Base64 form
+would exceed 10 MB.
+
+**What the trace records.** The `transcribe_audio` phase event carries
+`audio_format` (`mp3`, `aac`, or `wav` for the whole-file fallback),
+`audio_segments`, `audio_bytes` (file bytes sent, before Base64) and
+`audio_segment_seconds` (`null` for WAV) in its existing summary payload. No
+event kind was added. `vidsnap eval` counts MP3 and AAC artifacts in
+`asr_upload_bytes`.
+
+Format check (Bailian documentation snapshot, `asr-model.md` and the Qwen ASR API
+reference): for `qwen3-asr-flash` the documented input formats include `mp3`,
+`aac` and `wav`, up to 10 MB and 5 minutes, and the documented Base64 MIME types
+are `audio/wav` and `audio/mpeg`. `m4a` is not in that model's list, so the
+fallback is ADTS AAC rather than M4A. `audio/aac` is the standard MIME type for
+ADTS but is not among the documented examples.
 
 ### MockProvider
 

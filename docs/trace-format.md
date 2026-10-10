@@ -30,9 +30,11 @@ was not updated. When a recipe run fails, its JSON output includes
 The bundle directory name is not the run id; the run id is in `manifest.json`
 and in the run index.
 
-A kept bundle holds your data: a full-length 16 kHz mono WAV of the video's
-audio (about 115 MB per hour), the sampled frame JPEGs, the transcripts, and
-the structured result. Delete a bundle folder whenever you no longer need it.
+A kept bundle holds your data: a full-length 16 kHz mono recording of the
+video's audio (MP3 segments, about 22 MB per hour, when the speech recognizer
+takes compressed audio, as the built-in one does; otherwise one WAV, about
+115 MB per hour), the sampled frame JPEGs, the transcripts, and the structured
+result. Delete a bundle folder whenever you no longer need it.
 `vidsnap recipe interview --no-keep-bundle` restores the 0.1.0 behavior: a
 temporary bundle removed when the command ends, and no index line.
 
@@ -103,6 +105,14 @@ The fingerprint is the SHA-256 of the tool name, one `0x1F` byte, and the
 validated arguments as compact ASCII JSON with sorted keys, computed before
 redaction. It is a one-way digest; redacted values never appear in the
 ledger. `tool.call.completed` and `tool.call.failed` keep their 0.1.0 shape.
+
+### Audio sent to speech recognition: `transcribe_audio`
+
+The `phase.completed` event of `transcribe_audio` records what was sent, as extra
+keys of its existing summary payload (no new event kind): `audio_format`
+(`mp3`, `aac` or `wav`), `audio_segments` (requests made), `audio_bytes` (file
+bytes sent, before Base64), and `audio_segment_seconds` (the longest segment, or
+`null` for a whole WAV file). Bundles written before this change lack these keys.
 
 ### Failed model requests: `model.request.failed`, `model.request.blocked`
 
