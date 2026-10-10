@@ -2,7 +2,12 @@
 
 import pytest
 
-from vidsnap.config import DASHSCOPE_ASR_BASE_URL, TOKEN_PLAN_BASE_URL, HarnessConfig
+from vidsnap.config import (
+    DASHSCOPE_ASR_BASE_URL,
+    DASHSCOPE_COMPATIBLE_BASE_URL,
+    TOKEN_PLAN_BASE_URL,
+    HarnessConfig,
+)
 
 
 def test_config_prefers_vidsnap_key_and_caps_concurrency(monkeypatch) -> None:
@@ -31,8 +36,12 @@ def test_config_uses_fallback_key_and_safe_default_concurrency(monkeypatch) -> N
 
 
 def test_asr_endpoint_is_a_fixed_public_dashscope_constant_apart_from_token_plan() -> None:
-    assert DASHSCOPE_ASR_BASE_URL == "https://dashscope.aliyuncs.com/compatible-mode/v1"
+    # Speech recognition uses the native DashScope API; `qwen-audio-3.1-asr-flash` is not
+    # served in compatible mode (404), which stays for the evaluation's chat models.
+    assert DASHSCOPE_ASR_BASE_URL == "https://dashscope.aliyuncs.com/api/v1"
+    assert DASHSCOPE_COMPATIBLE_BASE_URL == "https://dashscope.aliyuncs.com/compatible-mode/v1"
     assert DASHSCOPE_ASR_BASE_URL != TOKEN_PLAN_BASE_URL
+    assert DASHSCOPE_COMPATIBLE_BASE_URL != TOKEN_PLAN_BASE_URL
 
 
 def test_text_model_endpoint_stays_pinned_to_token_plan() -> None:

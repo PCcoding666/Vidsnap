@@ -131,7 +131,7 @@ async def test_blocked_default_stack_keeps_its_bundle_and_identifies_qwen(tmp_pa
     assert _manifest(run_dir)["terminal_state"] == "BLOCKED"
     header = _run_started(run_dir)
     assert header["provider"] == {"id": "qwen", "model": "qwen3.8-max"}
-    assert header["speech_recognizer"] == {"id": "qwen", "model": "qwen3-asr-flash"}
+    assert header["speech_recognizer"] == {"id": "qwen", "model": "qwen-audio-3.1-asr-flash"}
     assert media.audio_calls == []
 
 

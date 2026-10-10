@@ -83,12 +83,16 @@ Endpoints and keys (environment variables only, never files):
 
 | Endpoint | Base URL | Key variables |
 |---|---|---|
-| `dashscope` (default) | `https://dashscope.aliyuncs.com/compatible-mode/v1` | `VIDSNAP_DASHSCOPE_API_KEY`, then `DASHSCOPE_API_KEY` |
+| `dashscope` (default) | `https://dashscope.aliyuncs.com/compatible-mode/v1` for the chat models; `https://dashscope.aliyuncs.com/api/v1` (native API) for ASR | `VIDSNAP_DASHSCOPE_API_KEY`, then `DASHSCOPE_API_KEY` |
 | `token-plan` | the harness default Token Plan endpoint | `VIDSNAP_QWEN_API_KEY`, then `QWEN_API_KEY` |
 
-The Token Plan catalogue does not include `qwen3-asr-flash` or any Omni model
-(`/models` listing and a `model_not_found` reply, 2026-10-10), so ASR and native
-Omni systems always use `dashscope`. A `qwen3.8-omni-flash` or
+ASR is the harness's own `qwen-audio-3.1-asr-flash` client (`QwenAudioAsrClient`), so the
+evaluation sends exactly the request the harness sends; only the key variables above and
+the 300 s timeout differ. The model is not served in compatible mode (404), so ASR calls
+the native `services/aigc/multimodal-generation/generation` path of the same host. The Token
+Plan catalogue did not include the previous ASR model `qwen3-asr-flash` or any Omni model
+(`/models` listing and a `model_not_found` reply, 2026-10-10; it was not checked for
+`qwen-audio-3.1-asr-flash`), so ASR and native Omni systems always use `dashscope`. A `qwen3.8-omni-flash` or
 `qwen3.5-omni-plus` request with the whole file as `data:;base64,` in a
 `video_url` part, `stream=True`, `stream_options.include_usage` and
 `modalities=["text"]` was accepted and answered on 2026-10-10; the model's
@@ -217,7 +221,12 @@ The evaluator's price table is `vidsnap.eval-price-table/v1`: a `vidsnap.price-t
 model table plus optional `audio_input_per_million_tokens` per model and
 `speech_per_second` for ASR models. VidSnap ships no prices;
 `benchmarks/eval/price-table.example.json` is an example with its source and date,
-to be checked before use.
+to be checked before use. The ASR entry is keyed by the model name in the run header
+(`qwen-audio-3.1-asr-flash`). That model is billed per token (list 0.8 input / 2.7 output CNY
+per million tokens, Beijing), which `speech_per_second` cannot express, so the example
+carries the old per-second price as an unverified placeholder upper bound and says so in its
+`source`; the evaluator reports ASR cost from audio seconds, not from the tokens the
+provider returns.
 
 `vidsnap eval report --estimate` prints an estimated cost per task and system for
 the ready items, from their durations and the stated assumptions (tokens per

@@ -11,6 +11,13 @@ import httpx
 import pytest
 
 from tests.eval.helpers import make_item
+from tests.fixtures.native_asr import (
+    ASR_URL,
+    RECORDED_TEXT,
+    audio_part,
+    native_reply,
+    recorded_response,
+)
 from vidsnap.eval.adapters import FakeMedia
 from vidsnap.eval.providers import (
     DASHSCOPE_BASE_URL,
@@ -26,6 +33,7 @@ from vidsnap.eval.providers import (
 )
 from vidsnap.eval.systems import BuildOptions, NotApplicable, build_components, parse_system
 from vidsnap.eval.tasks import get_task
+from vidsnap.providers.asr import QWEN_ASR_IDENTITY, QwenAsrRecognizer
 from vidsnap.providers.base import ProviderError, ProviderUnavailable
 from vidsnap.video.probe import MediaProbe
 
@@ -214,22 +222,42 @@ async def test_native_video_is_sent_whole_as_base64(tmp_path: Path) -> None:
 
 
 @pytest.mark.asyncio
-async def test_asr_keeps_the_released_request_shape() -> None:
+async def test_asr_uses_the_native_request_shape_and_reports_the_usage() -> None:
     seen: list[httpx.Request] = []
 
     def handler(request: httpx.Request) -> httpx.Response:
-        return httpx.Response(200, json={"choices": [{"message": {"content": "转写文本"}}]})
+        return httpx.Response(200, json=recorded_response())
 
     recognizer = EvalAsrRecognizer(api_key=KEY, transport=transport(handler, seen))
     response = await recognizer.transcribe(b"RIFFfake-wav", mime_type="audio/wav")
-    body = json.loads(seen[0].content)
-    assert body["model"] == "qwen3-asr-flash"
-    part = body["messages"][0]["content"][0]
-    assert part["type"] == "input_audio" and part["input_audio"].startswith(
+    (request,) = seen
+    assert str(request.url) == ASR_URL
+    assert request.headers["Authorization"] == f"Bearer {KEY}"
+    body = json.loads(request.content)
+    assert body["model"] == "qwen-audio-3.1-asr-flash"
+    assert body["parameters"] == {"format": "wav", "sample_rate": "16000"}
+    part = audio_part(body)
+    assert part["type"] == "input_audio" and part["input_audio"]["data"].startswith(
         "data:audio/wav;base64,"
     )
+    assert response.text == RECORDED_TEXT
+    assert response.usage.reported
+    assert (response.usage.model_calls, response.usage.input_tokens) == (1, 182)
+    assert response.usage.output_tokens == 19
+
+
+@pytest.mark.asyncio
+async def test_asr_without_usage_in_the_reply_is_unreported_not_zero() -> None:
+    seen: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={"output": {"text": "转写文本"}})
+
+    recognizer = EvalAsrRecognizer(api_key=KEY, transport=transport(handler, seen))
+    response = await recognizer.transcribe(b"RIFFfake-wav")
+
     assert response.text == "转写文本"
-    assert not response.usage.reported
+    assert not response.usage.reported and response.usage.model_calls == 1
 
 
 @pytest.mark.asyncio
@@ -237,7 +265,7 @@ async def test_asr_sends_compressed_audio_whole_with_its_real_mime_type() -> Non
     seen: list[httpx.Request] = []
 
     def handler(request: httpx.Request) -> httpx.Response:
-        return httpx.Response(200, json={"choices": [{"message": {"content": "转写文本"}}]})
+        return httpx.Response(200, json=native_reply("转写文本"))
 
     recognizer = EvalAsrRecognizer(api_key=KEY, transport=transport(handler, seen))
     audio = b"\xff\xfb" * 3_700_000  # 7.4 MB: over the 7 MB WAV chunk size, under 10 MB of Base64
@@ -246,9 +274,54 @@ async def test_asr_sends_compressed_audio_whole_with_its_real_mime_type() -> Non
     response = await recognizer.transcribe(audio, mime_type="audio/mpeg")
 
     assert len(seen) == 1 and response.usage.model_calls == 1
-    uri = json.loads(seen[0].content)["messages"][0]["content"][0]["input_audio"]
+    body = json.loads(seen[0].content)
+    assert body["parameters"]["format"] == "mp3"
+    uri = audio_part(body)["input_audio"]["data"]
     assert uri.startswith("data:audio/mpeg;base64,")
     assert base64.b64decode(uri.removeprefix("data:audio/mpeg;base64,")) == audio
+
+
+@pytest.mark.asyncio
+async def test_eval_and_harness_recognizers_send_the_same_request() -> None:
+    eval_seen: list[httpx.Request] = []
+    harness_seen: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json=native_reply("same"))
+
+    eval_asr = EvalAsrRecognizer(api_key=KEY, transport=transport(handler, eval_seen))
+    harness_asr = QwenAsrRecognizer(api_key=KEY, transport=transport(handler, harness_seen))
+    audio = b"ID3\x04\x00" + bytes(range(200))
+
+    assert (await eval_asr.transcribe(audio, mime_type="audio/mpeg")).text == "same"
+    assert await harness_asr.transcribe(audio, mime_type="audio/mpeg") == "same"
+
+    (a,), (b,) = eval_seen, harness_seen
+    assert (a.method, str(a.url), a.content) == (b.method, str(b.url), b.content)
+    assert a.headers["Authorization"] == b.headers["Authorization"]
+
+
+@pytest.mark.asyncio
+async def test_asr_identity_timeout_and_endpoint_rules() -> None:
+    seen: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json=native_reply("x"))
+
+    recognizer = EvalAsrRecognizer(api_key=KEY, transport=transport(handler, seen))
+    assert recognizer.identity == QWEN_ASR_IDENTITY
+    assert recognizer.identity.model == "qwen-audio-3.1-asr-flash"
+    assert recognizer.identity.base_url == "https://dashscope.aliyuncs.com/api/v1"
+
+    await recognizer.transcribe(b"abcd")
+    assert seen[0].extensions["timeout"] == {
+        name: 300.0 for name in ("connect", "read", "write", "pool")
+    }
+
+    with pytest.raises(ValueError, match="token-plan"):
+        EvalAsrRecognizer(api_key=KEY, endpoint="token-plan")
+    with pytest.raises(ProviderUnavailable, match="dashscope"):
+        await EvalAsrRecognizer(api_key=None).transcribe(b"abcd")
 
 
 def test_system_names_are_allow_listed() -> None:

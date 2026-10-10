@@ -1,0 +1,278 @@
+{
+  "output": {
+    "output": {
+      "sentence": {
+        "begin_time": 160,
+        "channel_id": 0,
+        "end_time": 6880,
+        "sentence_end": true,
+        "sentence_id": 1,
+        "text": "今天的作业是第3页第5题，把答案写在练习纸上，明天早上交。",
+        "words": [
+          {
+            "begin_time": 160,
+            "end_time": 680,
+            "fixed": true,
+            "punctuation": "",
+            "text": "今天的"
+          },
+          {
+            "begin_time": 680,
+            "end_time": 1080,
+            "fixed": true,
+            "punctuation": "",
+            "text": "作业"
+          },
+          {
+            "begin_time": 1080,
+            "end_time": 1320,
+            "fixed": true,
+            "punctuation": "",
+            "text": "是"
+          },
+          {
+            "begin_time": 1320,
+            "end_time": 1480,
+            "fixed": true,
+            "punctuation": "",
+            "text": "第"
+          },
+          {
+            "begin_time": 1480,
+            "end_time": 1760,
+            "fixed": true,
+            "punctuation": "",
+            "text": "3"
+          },
+          {
+            "begin_time": 1760,
+            "end_time": 2160,
+            "fixed": true,
+            "punctuation": "",
+            "text": "页第"
+          },
+          {
+            "begin_time": 2160,
+            "end_time": 2440,
+            "fixed": true,
+            "punctuation": "",
+            "text": "5"
+          },
+          {
+            "begin_time": 2440,
+            "end_time": 3040,
+            "fixed": true,
+            "punctuation": "，",
+            "text": "题"
+          },
+          {
+            "begin_time": 3040,
+            "end_time": 3280,
+            "fixed": true,
+            "punctuation": "",
+            "text": "把"
+          },
+          {
+            "begin_time": 3280,
+            "end_time": 3680,
+            "fixed": true,
+            "punctuation": "",
+            "text": "答案"
+          },
+          {
+            "begin_time": 3680,
+            "end_time": 4160,
+            "fixed": true,
+            "punctuation": "",
+            "text": "写在"
+          },
+          {
+            "begin_time": 4160,
+            "end_time": 4640,
+            "fixed": true,
+            "punctuation": "",
+            "text": "练习"
+          },
+          {
+            "begin_time": 4640,
+            "end_time": 4880,
+            "fixed": true,
+            "punctuation": "",
+            "text": "纸"
+          },
+          {
+            "begin_time": 4880,
+            "end_time": 5400,
+            "fixed": true,
+            "punctuation": "，",
+            "text": "上"
+          },
+          {
+            "begin_time": 5400,
+            "end_time": 5960,
+            "fixed": true,
+            "punctuation": "",
+            "text": "明天"
+          },
+          {
+            "begin_time": 5960,
+            "end_time": 6440,
+            "fixed": true,
+            "punctuation": "",
+            "text": "早上"
+          },
+          {
+            "begin_time": 6440,
+            "end_time": 6880,
+            "fixed": true,
+            "punctuation": "。",
+            "text": "交"
+          }
+        ]
+      },
+      "text": "今天的作业是第3页第5题，把答案写在练习纸上，明天早上交。"
+    },
+    "sentence": {
+      "begin_time": 160,
+      "channel_id": 0,
+      "end_time": 6880,
+      "sentence_end": true,
+      "sentence_id": 1,
+      "text": "今天的作业是第3页第5题，把答案写在练习纸上，明天早上交。",
+      "words": [
+        {
+          "begin_time": 160,
+          "end_time": 680,
+          "fixed": true,
+          "punctuation": "",
+          "text": "今天的"
+        },
+        {
+          "begin_time": 680,
+          "end_time": 1080,
+          "fixed": true,
+          "punctuation": "",
+          "text": "作业"
+        },
+        {
+          "begin_time": 1080,
+          "end_time": 1320,
+          "fixed": true,
+          "punctuation": "",
+          "text": "是"
+        },
+        {
+          "begin_time": 1320,
+          "end_time": 1480,
+          "fixed": true,
+          "punctuation": "",
+          "text": "第"
+        },
+        {
+          "begin_time": 1480,
+          "end_time": 1760,
+          "fixed": true,
+          "punctuation": "",
+          "text": "3"
+        },
+        {
+          "begin_time": 1760,
+          "end_time": 2160,
+          "fixed": true,
+          "punctuation": "",
+          "text": "页第"
+        },
+        {
+          "begin_time": 2160,
+          "end_time": 2440,
+          "fixed": true,
+          "punctuation": "",
+          "text": "5"
+        },
+        {
+          "begin_time": 2440,
+          "end_time": 3040,
+          "fixed": true,
+          "punctuation": "，",
+          "text": "题"
+        },
+        {
+          "begin_time": 3040,
+          "end_time": 3280,
+          "fixed": true,
+          "punctuation": "",
+          "text": "把"
+        },
+        {
+          "begin_time": 3280,
+          "end_time": 3680,
+          "fixed": true,
+          "punctuation": "",
+          "text": "答案"
+        },
+        {
+          "begin_time": 3680,
+          "end_time": 4160,
+          "fixed": true,
+          "punctuation": "",
+          "text": "写在"
+        },
+        {
+          "begin_time": 4160,
+          "end_time": 4640,
+          "fixed": true,
+          "punctuation": "",
+          "text": "练习"
+        },
+        {
+          "begin_time": 4640,
+          "end_time": 4880,
+          "fixed": true,
+          "punctuation": "",
+          "text": "纸"
+        },
+        {
+          "begin_time": 4880,
+          "end_time": 5400,
+          "fixed": true,
+          "punctuation": "，",
+          "text": "上"
+        },
+        {
+          "begin_time": 5400,
+          "end_time": 5960,
+          "fixed": true,
+          "punctuation": "",
+          "text": "明天"
+        },
+        {
+          "begin_time": 5960,
+          "end_time": 6440,
+          "fixed": true,
+          "punctuation": "",
+          "text": "早上"
+        },
+        {
+          "begin_time": 6440,
+          "end_time": 6880,
+          "fixed": true,
+          "punctuation": "。",
+          "text": "交"
+        }
+      ]
+    },
+    "text": "今天的作业是第3页第5题，把答案写在练习纸上，明天早上交。",
+    "usage": {
+      "duration": 7,
+      "input_tokens": 182,
+      "output_tokens": 19,
+      "total_tokens": 201
+    }
+  },
+  "usage": {
+    "duration": 7,
+    "input_tokens": 182,
+    "output_tokens": 19,
+    "total_tokens": 201
+  }
+}

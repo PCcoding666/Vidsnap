@@ -6,6 +6,7 @@ import json
 import httpx
 import pytest
 
+from tests.fixtures.native_asr import ASR_URL, native_reply
 from vidsnap.config import DASHSCOPE_ASR_BASE_URL, TOKEN_PLAN_BASE_URL
 from vidsnap.contracts.failures import ProviderFailure
 from vidsnap.providers.asr import (
@@ -16,7 +17,7 @@ from vidsnap.providers.asr import (
 from vidsnap.providers.base import ProviderError, ProviderUnavailable
 
 _ASR_CREDENTIAL = "asr-credential-for-tests"
-_ASR_URL = "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions"
+_ASR_URL = ASR_URL
 
 
 def test_asr_chunker_keeps_audio_in_memory_and_base64_encodes_chunks() -> None:
@@ -36,7 +37,7 @@ async def test_qwen_asr_uses_an_in_memory_base64_data_uri() -> None:
 
     async def handler(request: httpx.Request) -> httpx.Response:
         captured.append(json.loads(request.content))
-        return httpx.Response(200, json={"choices": [{"message": {"content": "heard"}}]})
+        return httpx.Response(200, json=native_reply("heard"))
 
     recognizer = QwenAsrRecognizer(
         api_key="test",
@@ -47,18 +48,21 @@ async def test_qwen_asr_uses_an_in_memory_base64_data_uri() -> None:
     assert await recognizer.transcribe(b"abcd") == "heard"
     assert captured == [
         {
-            "model": "qwen3-asr-flash",
-            "messages": [
-                {
-                    "role": "user",
-                    "content": [
-                        {
-                            "type": "input_audio",
-                            "input_audio": "data:audio/wav;base64,YWJjZA==",
-                        }
-                    ],
-                }
-            ],
+            "model": "qwen-audio-3.1-asr-flash",
+            "input": {
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "input_audio",
+                                "input_audio": {"data": "data:audio/wav;base64,YWJjZA=="},
+                            }
+                        ],
+                    }
+                ]
+            },
+            "parameters": {"format": "wav", "sample_rate": "16000"},
         }
     ]
 
@@ -89,7 +93,7 @@ async def test_asr_request_goes_to_the_public_dashscope_endpoint_with_the_asr_ke
 
     async def handler(request: httpx.Request) -> httpx.Response:
         captured.append(request)
-        return httpx.Response(200, json={"choices": [{"message": {"content": "heard"}}]})
+        return httpx.Response(200, json=native_reply("heard"))
 
     recognizer = QwenAsrRecognizer(api_key=_ASR_CREDENTIAL, transport=httpx.MockTransport(handler))
 
@@ -98,13 +102,14 @@ async def test_asr_request_goes_to_the_public_dashscope_endpoint_with_the_asr_ke
     assert str(request.url) == _ASR_URL
     assert request.url.host == "dashscope.aliyuncs.com"
     assert request.headers["Authorization"] == f"Bearer {_ASR_CREDENTIAL}"
-    assert json.loads(request.content)["model"] == "qwen3-asr-flash"
+    assert json.loads(request.content)["model"] == "qwen-audio-3.1-asr-flash"
 
 
 def test_asr_identity_records_the_real_asr_endpoint() -> None:
     assert QWEN_ASR_IDENTITY.id == "qwen"
-    assert QWEN_ASR_IDENTITY.model == "qwen3-asr-flash"
+    assert QWEN_ASR_IDENTITY.model == "qwen-audio-3.1-asr-flash"
     assert QWEN_ASR_IDENTITY.base_url == DASHSCOPE_ASR_BASE_URL
+    assert QWEN_ASR_IDENTITY.base_url == "https://dashscope.aliyuncs.com/api/v1"
     assert QWEN_ASR_IDENTITY.base_url != TOKEN_PLAN_BASE_URL
 
 
@@ -124,7 +129,7 @@ async def test_asr_endpoint_cannot_be_chosen_by_the_caller_or_the_environment(
 
     async def handler(request: httpx.Request) -> httpx.Response:
         urls.append(str(request.url))
-        return httpx.Response(200, json={"choices": [{"message": {"content": "heard"}}]})
+        return httpx.Response(200, json=native_reply("heard"))
 
     with pytest.raises(TypeError):
         QwenAsrRecognizer(
@@ -143,7 +148,7 @@ async def test_asr_requests_carry_an_explicit_timeout_not_the_httpx_default() ->
 
     async def handler(request: httpx.Request) -> httpx.Response:
         timeouts.append(request.extensions["timeout"])
-        return httpx.Response(200, json={"choices": [{"message": {"content": "heard"}}]})
+        return httpx.Response(200, json=native_reply("heard"))
 
     transport = httpx.MockTransport(handler)
     await QwenAsrRecognizer(api_key=_ASR_CREDENTIAL, transport=transport).transcribe(b"audio")

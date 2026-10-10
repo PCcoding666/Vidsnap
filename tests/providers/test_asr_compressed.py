@@ -11,6 +11,7 @@ import json
 import httpx
 import pytest
 
+from tests.fixtures.native_asr import native_reply
 from vidsnap.providers.asr import (
     MAX_REQUEST_BASE64_BYTES,
     Base64AudioChunker,
@@ -25,15 +26,15 @@ def _recorder(texts: list[str] | None = None):
     async def handler(request: httpx.Request) -> httpx.Response:
         requests.append(json.loads(request.content))
         reply = (texts or ["heard"])[min(len(requests), len(texts or ["heard"])) - 1]
-        return httpx.Response(200, json={"choices": [{"message": {"content": reply}}]})
+        return httpx.Response(200, json=native_reply(reply))
 
     return requests, httpx.MockTransport(handler)
 
 
 def _data_uri(request: dict[str, object]) -> str:
-    messages = request["messages"]
-    assert isinstance(messages, list)
-    return str(messages[0]["content"][0]["input_audio"])
+    input_ = request["input"]
+    assert isinstance(input_, dict)
+    return str(input_["messages"][0]["content"][0]["input_audio"]["data"])
 
 
 @pytest.mark.asyncio

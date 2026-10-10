@@ -8,9 +8,13 @@ from typing import Literal
 
 TOKEN_PLAN_BASE_URL = "https://token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode/v1"
 # Token Plan serves text models only, so speech recognition goes to the public DashScope
-# OpenAI-compatible endpoint. Like the Token Plan URL it is a fixed constant: no environment
-# variable, argument, or model output can select a different speech endpoint.
-DASHSCOPE_ASR_BASE_URL = "https://dashscope.aliyuncs.com/compatible-mode/v1"
+# native API: `qwen-audio-3.1-asr-flash` is not served in compatible mode (it answers 404
+# "Unsupported model ... for OpenAI compatibility mode"). Like the Token Plan URL it is a
+# fixed constant: no environment variable, argument, or model output can select a
+# different speech endpoint.
+DASHSCOPE_ASR_BASE_URL = "https://dashscope.aliyuncs.com/api/v1"
+# The same public host in OpenAI-compatible mode, used by the evaluation's chat models.
+DASHSCOPE_COMPATIBLE_BASE_URL = "https://dashscope.aliyuncs.com/compatible-mode/v1"
 QWEN_MODEL = "qwen3.8-max"
 
 

@@ -12,6 +12,7 @@ from typer.testing import CliRunner
 
 from tests.ansi import strip_ansi
 from tests.eval.helpers import SUITES_DIR, committed_suite, item_payload, price_table, write_suite
+from tests.fixtures.native_asr import native_reply
 from vidsnap.cli import app
 from vidsnap.eval.costs import load_eval_prices
 from vidsnap.eval.report import build_report, load_results
@@ -203,10 +204,8 @@ async def test_live_harness_path_is_traced_priced_and_never_leaks_the_key(
     def handler(request: httpx.Request) -> httpx.Response:
         assert request.headers["authorization"] == f"Bearer {FAKE_KEY}"
         body = json.loads(request.content)
-        if body["model"] == "qwen3-asr-flash":
-            return httpx.Response(
-                200, json={"choices": [{"message": {"content": "评审时间增加了百分之三十"}}]}
-            )
+        if body["model"] == "qwen-audio-3.1-asr-flash":
+            return httpx.Response(200, json=native_reply("评审时间增加了百分之三十"))
         task_outputs["system"] = body["messages"][0]["content"]
         output = {
             "summary": "嘉宾认为不会取代初级工程师，评审时间增加了 30%。" * 4,
@@ -274,7 +273,10 @@ async def test_live_harness_path_is_traced_priced_and_never_leaks_the_key(
         e for e in events(Path(record["bundle_path"])) if e.get("event_type") == "run.started"
     )
     assert header["payload"]["provider"] == {"id": "qwen", "model": "qwen3.8-max"}
-    assert header["payload"]["speech_recognizer"] == {"id": "qwen", "model": "qwen3-asr-flash"}
+    assert header["payload"]["speech_recognizer"] == {
+        "id": "qwen",
+        "model": "qwen-audio-3.1-asr-flash",
+    }
     for file in [path, *Path(record["bundle_path"]).rglob("*"), *(tmp_path / "run").rglob("*")]:
         if file.is_file():
             assert FAKE_KEY not in file.read_bytes().decode("utf-8", errors="replace")
@@ -324,3 +326,20 @@ async def test_regrade_recomputes_from_bundles_without_model_calls(tmp_path: Pat
         assert record["stages"]["model_request_bytes"] >= 0
         assert record["stages"]["asr_upload_bytes"] == 0  # mock recognizer uploads nothing
     assert "regraded_at" in regraded
+
+
+def test_example_price_table_prices_the_asr_model_and_flags_it_unverified() -> None:
+    from vidsnap.eval.costs import estimate_cost
+    from vidsnap.providers.asr import QWEN_ASR_MODEL
+
+    example = Path(__file__).parents[2] / "benchmarks" / "eval" / "price-table.example.json"
+    prices = load_eval_prices(example)
+
+    asr_price = prices.table.models[QWEN_ASR_MODEL]
+    assert QWEN_ASR_MODEL == "qwen-audio-3.1-asr-flash"
+    assert asr_price.speech_per_second is not None and asr_price.speech_per_second > 0
+    # The old model keeps its verified price so bundles recorded with it can still be priced.
+    assert prices.table.models["qwen3-asr-flash"].speech_per_second == 0.00022
+    assert "UNVERIFIED" in prices.table.source and QWEN_ASR_MODEL in prices.table.source
+    # The planning estimate looks up the current ASR model by default, so it is not None.
+    assert estimate_cost("harness", "qwen3.8-omni-flash", 60.0, True, prices) is not None

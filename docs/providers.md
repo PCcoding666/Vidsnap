@@ -90,13 +90,13 @@ response that is not a valid structured result raises `ProviderError` or
 ### Speech recognition
 
 Speech recognition is not part of `QwenProvider`. The built-in recognizer,
-`QwenAsrRecognizer`, runs `qwen3-asr-flash` and is built by `VideoHarness` and
+`QwenAsrRecognizer`, runs `qwen-audio-3.1-asr-flash` and is built by `VideoHarness` and
 the interview recipe from the same `HarnessConfig`. Token Plan serves text
 models only, so it sends audio to a different endpoint than the text model:
 
 | | Text model (`QwenProvider`) | Speech recognizer |
 | --- | --- | --- |
-| Endpoint | Token Plan | public DashScope compatible mode (`https://dashscope.aliyuncs.com/compatible-mode/v1`) |
+| Endpoint | Token Plan | public DashScope native API (`https://dashscope.aliyuncs.com/api/v1`, path `services/aigc/multimodal-generation/generation`) |
 | Key | `VIDSNAP_QWEN_API_KEY`, else `QWEN_API_KEY` | `VIDSNAP_ASR_API_KEY`, else the text-model key |
 | Timeout | `HarnessConfig.request_timeout_seconds` (120 s) | the same value |
 
@@ -106,6 +106,45 @@ Plan URL. `QWEN_ASR_IDENTITY.base_url` is the speech endpoint; the run header
 records the recognizer's id and model only.
 
 Audio is sent as Base64 data URIs, never uploaded to object storage.
+
+**The request.** `qwen-audio-3.1-asr-flash` is not served by the OpenAI-compatible
+endpoint (`/compatible-mode/v1/chat/completions` answers 404 "Unsupported model ... for
+OpenAI compatibility mode"), so the recognizer calls the native API:
+
+```json
+POST https://dashscope.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation
+Authorization: Bearer <key>
+
+{"model": "qwen-audio-3.1-asr-flash",
+ "input": {"messages": [{"role": "user", "content": [
+   {"type": "input_audio", "input_audio": {"data": "data:audio/mpeg;base64,..."}}]}]},
+ "parameters": {"format": "mp3", "sample_rate": "16000"}}
+```
+
+`parameters.format` is required (omitting it is a 400 `UNSUPPORTED_FORMAT` "format is
+empty") and must match the bytes: `wav`, `mp3` or `aac` from the segment's MIME type
+(`audio/wav` and its aliases, `audio/mpeg` or `audio/mp3`, `audio/aac`); any other MIME type
+is refused with a `validation` failure before a request is sent. `sample_rate` is a string:
+the WAV header's own rate when the file is a PCM WAV, else `"16000"`, which is what the
+harness extracts. The reply's `output.text` is the transcript, with `output.sentence.text` as
+a fallback; a reply with neither is an `invalid_response` failure. `usage.duration` (seconds
+of audio), `usage.input_tokens` and `usage.output_tokens` are read when present; the
+evaluation recognizer reports the token counts in its `ProviderUsage`.
+
+**Language.** `language_hints` is omitted, so the model detects the language. The provider
+documents that the parameter may be left out when the language is not known in advance. The
+same 7-second Chinese clip gave the same text with and without `["zh"]`, and a synthetic
+English sentence was transcribed correctly without it (checked live on 2026-10-10 for MP3,
+AAC and WAV input).
+
+**Limits.** The provider documents at most 5 minutes of audio per request for this model,
+and a 10 MB limit on Base64 input in its HTTP API reference (a general-guide page says 2 GB
+per file; the 10 MB cap is kept here). Its model page lists a maximum input of 7,168 tokens
+and a maximum output of 1,024 tokens. Measured live (2026-10-10): a 192 s clip used 2,461
+input and 367 output tokens (about 13 and 2 per second), and 7 s clips about 20 input tokens
+per second because of a fixed overhead. A 240 s segment would use about 3,000 input tokens,
+under the limit. Dense speech in a long segment could approach the output limit; that has
+not been tested.
 
 **What is sent.** The harness extracts the video's audio through the media port as
 16 kHz mono MP3 at 48 kbps (`libmp3lame`) and cuts it by duration into standalone
@@ -125,8 +164,8 @@ metadata (title, location) is not copied into the files.
 
 MP3 at 48 kbps is 5.3 times smaller than the WAV it replaces. A 192 s synthetic
 clip went from 8.2 MB of Base64 WAV to 1.5 MB of Base64 MP3. The 240 s segment
-length keeps 60 s under the provider's documented limits for `qwen3-asr-flash`
-(at most 5 minutes and 10 MB per request, Base64 included); at this bitrate the
+length keeps 60 s under the provider's documented limits for
+`qwen-audio-3.1-asr-flash` (at most 5 minutes and 10 MB per request, Base64 included); at this bitrate the
 duration limit binds long before the size limit does. Each cut can cost the
 decoder about 33 ms of audio at the start of a segment.
 
@@ -155,12 +194,13 @@ would exceed 10 MB.
 event kind was added. `vidsnap eval` counts MP3 and AAC artifacts in
 `asr_upload_bytes`.
 
-Format check (Bailian documentation snapshot, `asr-model.md` and the Qwen ASR API
-reference): for `qwen3-asr-flash` the documented input formats include `mp3`,
-`aac` and `wav`, up to 10 MB and 5 minutes, and the documented Base64 MIME types
-are `audio/wav` and `audio/mpeg`. `m4a` is not in that model's list, so the
-fallback is ADTS AAC rather than M4A. `audio/aac` is the standard MIME type for
-ADTS but is not among the documented examples.
+Format check (Bailian documentation snapshot, `asr-model.md` and the ASR HTTP API
+reference): the documented `parameters.format` values include `wav`, `mp3` and `opus`, and
+the documented Base64 MIME types are `audio/wav` and `audio/mpeg`. `aac` and `audio/aac`
+are not among the documented examples, so they were checked with a live call on 2026-10-10:
+7 seconds of ADTS AAC with `format` `aac` and `data:audio/aac;base64,...` was accepted and
+gave the same transcript as the MP3 and WAV of the same clip. `m4a` is not used, so the
+fallback is ADTS AAC rather than M4A.
 
 ### MockProvider
 

@@ -197,7 +197,7 @@ async def test_harness_records_the_default_qwen_stack(tmp_path: Path) -> None:
         )
         payload = _event(result.run_path, "run.started")["payload"]
         assert payload["provider"] == {"id": "qwen", "model": "qwen3.8-max"}
-        assert payload["speech_recognizer"] == {"id": "qwen", "model": "qwen3-asr-flash"}
+        assert payload["speech_recognizer"] == {"id": "qwen", "model": "qwen-audio-3.1-asr-flash"}
 
 
 @pytest.mark.asyncio

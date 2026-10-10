@@ -268,7 +268,7 @@ def test_failed_asr_is_charged_as_a_flagged_upper_bound(tmp_path: Path) -> None:
         phase="run",
         payload={
             "provider": {"id": "qwen", "model": "qwen3.8-max"},
-            "speech_recognizer": {"id": "qwen", "model": "qwen3-asr-flash"},
+            "speech_recognizer": {"id": "qwen", "model": "qwen-audio-3.1-asr-flash"},
         },
     )
     probe = trace.start("probe", phase="probe_media")

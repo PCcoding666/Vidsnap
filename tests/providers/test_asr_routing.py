@@ -13,7 +13,8 @@ from typing import Any
 import httpx
 import pytest
 
-from vidsnap.config import DASHSCOPE_ASR_BASE_URL, HarnessConfig
+from tests.fixtures.native_asr import ASR_URL, native_reply
+from vidsnap.config import DASHSCOPE_COMPATIBLE_BASE_URL, HarnessConfig
 from vidsnap.contracts import VideoGoal
 from vidsnap.eval.providers import DASHSCOPE_BASE_URL
 from vidsnap.harness import VideoHarness
@@ -23,7 +24,7 @@ _ASR_CREDENTIAL = "asr-credential-for-tests"
 _TOKEN_PLAN_URL = (
     "https://token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode/v1/chat/completions"
 )
-_ASR_URL = "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions"
+_ASR_URL = ASR_URL
 
 
 def _record_requests(monkeypatch: pytest.MonkeyPatch) -> list[httpx.Request]:
@@ -31,8 +32,8 @@ def _record_requests(monkeypatch: pytest.MonkeyPatch) -> list[httpx.Request]:
 
     async def handler(request: httpx.Request) -> httpx.Response:
         captured.append(request)
-        if json.loads(request.content)["model"] == "qwen3-asr-flash":
-            return httpx.Response(200, json={"choices": [{"message": {"content": "heard"}}]})
+        if json.loads(request.content)["model"] == "qwen-audio-3.1-asr-flash":
+            return httpx.Response(200, json=native_reply("heard"))
         return httpx.Response(
             200,
             json={"choices": [{"message": {"content": '{"summary":"ok","claims":[]}'}}]},
@@ -71,7 +72,7 @@ async def test_default_harness_splits_text_and_speech_between_the_two_endpoints(
     assert json.loads(text_request.content)["model"] == "qwen3.8-max"
     assert str(asr_request.url) == _ASR_URL
     assert asr_request.headers["Authorization"] == f"Bearer {_ASR_CREDENTIAL}"
-    assert json.loads(asr_request.content)["model"] == "qwen3-asr-flash"
+    assert json.loads(asr_request.content)["model"] == "qwen-audio-3.1-asr-flash"
     for request in (text_request, asr_request):
         assert request.extensions["timeout"] == {
             "connect": 77.0,
@@ -110,5 +111,6 @@ def test_default_harness_reads_the_asr_key_from_the_environment(
     assert config.resolved_asr_api_key == _ASR_CREDENTIAL
 
 
-def test_eval_package_uses_the_same_public_endpoint_constant_as_the_harness() -> None:
-    assert DASHSCOPE_BASE_URL == DASHSCOPE_ASR_BASE_URL
+def test_eval_package_keeps_its_chat_endpoint_on_the_same_public_host() -> None:
+    assert DASHSCOPE_BASE_URL == DASHSCOPE_COMPATIBLE_BASE_URL
+    assert DASHSCOPE_BASE_URL.startswith("https://dashscope.aliyuncs.com/")
