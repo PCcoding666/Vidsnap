@@ -13,8 +13,9 @@ from typing import Any
 import httpx
 import pytest
 
-from vidsnap.config import HarnessConfig
+from vidsnap.config import DASHSCOPE_ASR_BASE_URL, HarnessConfig
 from vidsnap.contracts import VideoGoal
+from vidsnap.eval.providers import DASHSCOPE_BASE_URL
 from vidsnap.harness import VideoHarness
 
 _TEXT_CREDENTIAL = "text-credential-for-tests"
@@ -107,3 +108,7 @@ def test_default_harness_reads_the_asr_key_from_the_environment(
 
     assert config.api_key == _TEXT_CREDENTIAL
     assert config.resolved_asr_api_key == _ASR_CREDENTIAL
+
+
+def test_eval_package_uses_the_same_public_endpoint_constant_as_the_harness() -> None:
+    assert DASHSCOPE_BASE_URL == DASHSCOPE_ASR_BASE_URL

@@ -21,7 +21,7 @@ from typing import Any, Literal, Protocol
 import httpx
 from pydantic import JsonValue
 
-from vidsnap.config import TOKEN_PLAN_BASE_URL
+from vidsnap.config import DASHSCOPE_ASR_BASE_URL, TOKEN_PLAN_BASE_URL
 from vidsnap.contracts import Evidence
 from vidsnap.contracts.agent import ProviderUsage
 from vidsnap.contracts.failures import ProviderFailure
@@ -35,7 +35,8 @@ from vidsnap.video.probe import MediaProbe
 
 EndpointName = Literal["dashscope", "token-plan"]
 
-DASHSCOPE_BASE_URL = "https://dashscope.aliyuncs.com/compatible-mode/v1"
+# One public DashScope URL for the harness and the evaluation; this name is an alias.
+DASHSCOPE_BASE_URL = DASHSCOPE_ASR_BASE_URL
 MOCK_BASE_URL = "offline://mock"
 NATIVE_BASE64_LIMIT = 10_000_000
 _BASE64_HEADROOM = 0.95
@@ -473,14 +474,16 @@ async def prepare_native_video(
 
 
 class EvalAsrRecognizer:
-    """The harness's Qwen ASR request shape, on an endpoint that serves the model.
+    """The harness's Qwen ASR request shape, sent to the same public endpoint.
 
-    Chunking and payload match ``QwenAsrRecognizer`` exactly (8 MiB Base64
-    fragments of the WAV bytes) so the evaluation measures the harness
-    component as released. Two things differ: the endpoint (the Token Plan
-    catalogue has no ASR model) and the timeout (the released client uses
-    httpx's 5-second default; here it is the run's request timeout, so the
-    evaluation measures transcription quality rather than that limit).
+    Endpoint, payload and chunking match ``QwenAsrRecognizer``: the shared
+    ``Base64AudioChunker`` sends audio that fits in one chunk unchanged and
+    cuts longer PCM WAV audio into standalone WAV files, 7,000,000 bytes at
+    most each by default, so the evaluation measures the harness component as
+    it is. Only two things differ: the key comes from the evaluation's own
+    variables (``VIDSNAP_DASHSCOPE_API_KEY``, ``DASHSCOPE_API_KEY``) rather
+    than ``VIDSNAP_ASR_API_KEY``, and the default timeout is 300 s instead
+    of 120 s.
     """
 
     def __init__(
