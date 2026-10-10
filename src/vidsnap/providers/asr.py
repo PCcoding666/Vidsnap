@@ -28,6 +28,10 @@ class AudioChunk:
     data_base64: str
 
 
+# Raw bytes per request. The provider documents a 10 MB limit on the Base64-encoded input
+# and 5 minutes of audio; 7_000_000 bytes encode to about 9.3 MB and are about 218 s of
+# 16 kHz mono 16-bit audio.
+DEFAULT_CHUNK_BYTES = 7_000_000
 _WAV_HEADER_BYTES = 44
 _PCM_FORMAT_TAG = 1
 _UNKNOWN_DATA_SIZE = 0xFFFFFFFF
@@ -139,7 +143,7 @@ class Base64AudioChunker:
     cannot be cut without a decoder, so it raises ``ProviderError``.
     """
 
-    def __init__(self, *, chunk_bytes: int = 8 * 1024 * 1024) -> None:
+    def __init__(self, *, chunk_bytes: int = DEFAULT_CHUNK_BYTES) -> None:
         if chunk_bytes < 1:
             raise ValueError("chunk_bytes must be positive")
         self.chunk_bytes = chunk_bytes

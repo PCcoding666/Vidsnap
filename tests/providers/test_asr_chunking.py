@@ -171,6 +171,30 @@ def test_streamed_wav_with_unknown_data_length_runs_to_the_end() -> None:
     assert b"".join(item.pcm for item in parsed) == pcm
 
 
+def test_default_chunk_size_keeps_the_base64_request_under_ten_megabytes() -> None:
+    chunker = Base64AudioChunker()
+
+    assert chunker.chunk_bytes == 7_000_000
+    encoded_length = 4 * -(-chunker.chunk_bytes // 3)
+    assert encoded_length < 10_000_000  # the provider's documented request limit
+    assert chunker.chunk_bytes / 32_000 < 300  # seconds of 16 kHz mono 16-bit, under 5 minutes
+
+
+def test_default_limit_sends_a_wav_at_the_limit_whole_and_splits_one_byte_more() -> None:
+    limit = Base64AudioChunker().chunk_bytes
+    fits = _wav(b"\x01\x02" * ((limit - _CANONICAL_HEADER_BYTES) // 2))
+    assert len(fits) == limit
+    assert len(Base64AudioChunker().encode(fits)) == 1
+
+    too_big = _wav(b"\x01\x02" * ((limit - _CANONICAL_HEADER_BYTES) // 2 + 1))
+    pieces = _decoded(Base64AudioChunker().encode(too_big))
+
+    assert len(pieces) == 2
+    assert all(len(piece) <= limit for piece in pieces)
+    parsed = [_parse_standalone_wav(piece) for piece in pieces]
+    assert sum(len(item.pcm) for item in parsed) == len(too_big) - _CANONICAL_HEADER_BYTES
+
+
 def test_empty_audio_has_no_chunks() -> None:
     assert Base64AudioChunker().encode(b"") == []
 

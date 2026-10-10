@@ -20,6 +20,11 @@ Keep a Changelog style.
   endpoint; set `VIDSNAP_ASR_API_KEY` to a public DashScope key.
   `HarnessConfig` gains `asr_api_key` and `resolved_asr_api_key`. The audio
   of a run now goes to a second endpoint, which has its own data terms.
+- `Base64AudioChunker`'s default `chunk_bytes` is now 7,000,000 bytes instead
+  of 8 MiB. Base64 of 8 MiB is about 11.2 MB, over the 10 MB request limit the
+  provider documents for `qwen3-asr-flash`; 7,000,000 bytes encode to about
+  9.3 MB and are about 218 s of 16 kHz mono 16-bit audio. Audio between the two
+  sizes that used to go out as one request is now split in two.
 - A WAV file larger than the chunk limit that cannot be split (a format other
   than PCM) and any other oversized audio now raise `ProviderError`; they used
   to be sent as undecodable fragments.

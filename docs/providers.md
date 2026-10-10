@@ -106,12 +106,13 @@ Plan URL. `QWEN_ASR_IDENTITY.base_url` is the speech endpoint; the run header
 records the recognizer's id and model only.
 
 Audio is sent as Base64 data URIs, never uploaded to object storage. Audio that
-fits in one chunk (8 MiB by default) is sent unchanged. A longer PCM WAV file is
-cut on sample-frame boundaries, and every piece gets its own header with the
-original sample rate, channel count and bit depth, so each request carries a
-valid WAV file. Longer audio in any other format cannot be cut without a
-decoder, so the recognizer raises `ProviderError` (and uses the explicit
-`local_fallback`, if one was given).
+fits in one chunk (7,000,000 bytes by default, about 9.3 MB once Base64-encoded,
+under the provider's documented 10 MB request limit) is sent unchanged. A
+longer PCM WAV file is cut on sample-frame boundaries, and every piece gets its
+own header with the original sample rate, channel count and bit depth, so each
+request carries a valid WAV file. Longer audio in any other format cannot be
+cut without a decoder, so the recognizer raises `ProviderError` (and uses the
+explicit `local_fallback`, if one was given).
 
 ### MockProvider
 
