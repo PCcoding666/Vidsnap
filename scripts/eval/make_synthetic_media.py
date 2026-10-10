@@ -85,7 +85,11 @@ def tts(text: str, voice: str, out: Path) -> None:
 
 
 def max_volume_db(path: Path) -> float:
-    """Peak level of a narration file; macOS writes silence for a voice that cannot read the text."""
+    """Peak level of a narration file.
+
+    macOS writes silence when a voice cannot read the text (for example the
+    English "Eddy" given Chinese), so silence means a wrong voice name.
+    """
     completed = subprocess.run(
         [
             "ffmpeg",
