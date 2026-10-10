@@ -31,6 +31,7 @@ Topics: video-ai, agent-harness, multimodal, ai-agents, video-analysis, llm-eval
 - [Trace format and run index](trace-format.md) — every field a run records, failure categories, the local run index, human reviews, and price tables.
 - [Default tools and data review](default-tools-and-data-review.md) — what the built-in tools read, their budgets, and what leaves the machine.
 - [Benchmark status](benchmark-status.md) — no live comparison is published; infrastructure validation is not proof that Harness beats Direct, and these pages make no performance claims.
+- [Task evaluation](eval.md) — eval sets for the business tasks, harness vs native video models, machine and human metrics, and component attribution.
 - [Benchmark methodology](benchmark-methodology.md) — the offline trust metrics, fairness registration rules, and the deterministic `vidsnap benchmark evaluate` command; no results are published.
 - [Benchmark evidence](../README.md#benchmark-evidence) — the benchmark infrastructure exists, but no live benchmark results are published.
 - [Release checklist](release-checklist.md) — the reusable release steps and the currently verified release evidence.

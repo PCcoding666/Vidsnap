@@ -130,6 +130,13 @@ def _probe_duration(events: list[RunEvent]) -> float | None:
     return None
 
 
+def _asr_failed(events: list[RunEvent]) -> bool:
+    return any(
+        event.event_type == "tool.call.failed" and event.payload.get("name") == "transcribe_audio"
+        for event in events
+    )
+
+
 def _asr_ran(events: list[RunEvent]) -> bool:
     return any(
         (event.event_type or "") in ("tool.call.completed", "tool.call.failed")
@@ -195,6 +202,8 @@ def run_cost(bundle: Path, prices: LoadedEvalPrices | None) -> dict[str, JsonVal
     seconds: float | None = 0.0
     if _asr_ran(events) and speech_provider not in FREE_PROVIDERS:
         seconds = _speech_seconds(events, _probe_duration(events))
+        if _asr_failed(events):
+            notes.append("speech_failed_charged_as_upper_bound")
         speech_price = prices.table.models.get(speech_model or "")
         if speech_price is None or speech_price.speech_per_second is None:
             asr_amount = None

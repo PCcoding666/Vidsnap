@@ -477,7 +477,10 @@ class EvalAsrRecognizer:
 
     Chunking and payload match ``QwenAsrRecognizer`` exactly (8 MiB Base64
     fragments of the WAV bytes) so the evaluation measures the harness
-    component as released; only the endpoint differs.
+    component as released. Two things differ: the endpoint (the Token Plan
+    catalogue has no ASR model) and the timeout (the released client uses
+    httpx's 5-second default; here it is the run's request timeout, so the
+    evaluation measures transcription quality rather than that limit).
     """
 
     def __init__(

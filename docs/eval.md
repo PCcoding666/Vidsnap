@@ -88,7 +88,11 @@ Endpoints and keys (environment variables only, never files):
 
 The Token Plan catalogue does not include `qwen3-asr-flash` or any Omni model
 (`/models` listing and a `model_not_found` reply, 2026-10-10), so ASR and native
-Omni systems always use `dashscope`.
+Omni systems always use `dashscope`. A `qwen3.8-omni-flash` or
+`qwen3.5-omni-plus` request with the whole file as `data:;base64,` in a
+`video_url` part, `stream=True`, `stream_options.include_usage` and
+`modalities=["text"]` was accepted and answered on 2026-10-10; the model's
+default (thinking on) was left unchanged.
 
 Native input: a file whose Base64 form is under the documented 10 MB limit is sent
 as-is; a larger file is re-encoded locally (lower resolution and bitrate, audio kept)
@@ -202,7 +206,10 @@ starting points, documented here so they can be changed in one reviewed place
 ## Cost
 
 Run cost comes from the trace: model-request tokens times the price table, plus
-ASR seconds (probe duration of audio actually transcribed) times the ASR price.
+ASR seconds (the logged `transcribe_audio` windows) times the ASR price. A failed
+ASR call is charged as an upper bound and flagged
+(`speech_failed_charged_as_upper_bound`). Amounts are list-price equivalents;
+free quotas, Token Plan quota and discounts are not visible to the evaluator.
 Native Omni usage is split by modality when the provider reports it
 (`prompt_tokens_details`), because some models price audio input differently.
 The evaluator's price table is `vidsnap.eval-price-table/v1`: a `vidsnap.price-table/v1`

@@ -249,3 +249,40 @@ def test_results_must_be_eval_result_files(tmp_path: Path) -> None:
     with pytest.raises(ValueError):
         load_results([bogus])
     assert make_item().item_id == "x-01"
+
+
+def test_failed_asr_is_charged_as_a_flagged_upper_bound(tmp_path: Path) -> None:
+    prices = load_eval_prices(price_table(tmp_path / "prices.json"))
+    identity = ProviderIdentity(
+        id="qwen", model="qwen3.8-max", base_url="https://example.invalid/v1"
+    )
+    bundle = RunBundle.create(
+        tmp_path / "bundle",
+        loop_spec=default_loop_spec(),
+        provider_url=identity.base_url,
+        provider_identity=identity,
+    )
+    trace = TraceRecorder(bundle)
+    run = trace.start(
+        "run",
+        phase="run",
+        payload={
+            "provider": {"id": "qwen", "model": "qwen3.8-max"},
+            "speech_recognizer": {"id": "qwen", "model": "qwen3-asr-flash"},
+        },
+    )
+    probe = trace.start("probe", phase="probe_media")
+    trace.finish(probe, status="completed", payload={"duration_seconds": 100.0})
+    call = trace.start(
+        "tool.call",
+        phase="transcribe_audio",
+        payload={"name": "transcribe_audio", "arguments": {"windows": []}},
+    )
+    trace.finish(call, status="failed", payload={"name": "transcribe_audio"})
+    trace.finish(run, status="failed")
+    bundle.finalize("FAILED")
+    cost = run_cost(bundle.path, prices)
+    assert cost is not None
+    assert cost["speech_seconds"] == 100.0
+    assert cost["amount"] == pytest.approx(100 * 0.00022)
+    assert "speech_failed_charged_as_upper_bound" in cost["notes"]
