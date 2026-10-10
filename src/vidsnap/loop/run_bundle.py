@@ -107,6 +107,11 @@ class RunBundle:
         self._event_sequence = 0
         self._finalized = False
 
+    @property
+    def run_id(self) -> str:
+        """Read-only run identifier already recorded in the redacted manifest."""
+        return str(self._manifest["run_id"])
+
     @classmethod
     def create(cls, path: Path, *, loop_spec: LoopSpec, provider_url: str) -> RunBundle:
         """Create the required bundle layout without embedding provider credentials."""

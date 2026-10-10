@@ -11,7 +11,7 @@ VideoKind = Literal["static", "talking", "screencast", "action", "unknown"]
 
 _SOURCE_WEIGHTS: dict[VideoKind, dict[CandidateSource, float]] = {
     "static": {"uniform": 0.8, "scene": 1.2, "motion": 0.6, "ocr": 1.5, "asr": 0.9},
-    "talking": {"uniform": 0.8, "scene": 0.8, "motion": 0.6, "ocr": 0.8, "asr": 1.5},
+    "talking": {"uniform": 1.0, "scene": 0.8, "motion": 0.6, "ocr": 0.8, "asr": 1.5},
     "screencast": {"uniform": 0.8, "scene": 1.1, "motion": 1.3, "ocr": 1.4, "asr": 1.0},
     "action": {"uniform": 0.8, "scene": 1.1, "motion": 1.5, "ocr": 0.6, "asr": 0.8},
     "unknown": {"uniform": 1.0, "scene": 1.1, "motion": 1.1, "ocr": 1.1, "asr": 1.1},

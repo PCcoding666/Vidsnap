@@ -8,8 +8,10 @@ from typing import Annotated
 import typer
 
 from vidsnap.config import HarnessConfig
-from vidsnap.contracts import HarnessPolicy, VideoGoal, VideoSource
+from vidsnap.contracts import HarnessPolicy, TerminalState, VideoGoal, VideoSource
 from vidsnap.harness import VideoHarness
+from vidsnap.publishing.repository import find_repository_root
+from vidsnap.publishing.service import publish_video
 from vidsnap.trace.export import export_trace
 
 app = typer.Typer(
@@ -61,6 +63,51 @@ def manifest(run_dir: Path = typer.Argument(..., exists=True, file_okay=False)) 
     if not manifest_path.is_file():
         raise typer.BadParameter("run directory does not contain manifest.json")
     typer.echo(manifest_path.read_text(encoding="utf-8"))
+
+
+@app.command()
+def publish(
+    video: Annotated[Path, typer.Option(exists=True, file_okay=True, dir_okay=False)],
+    transcript: Annotated[Path, typer.Option(exists=True, file_okay=True, dir_okay=False)],
+    run_dir: Annotated[Path, typer.Option("--run-dir")],
+    output_dir: Annotated[Path, typer.Option("--output-dir")],
+) -> None:
+    """Opt-in: run the bounded publishing pipeline and export deliverables locally."""
+    try:
+        result = asyncio.run(
+            publish_video(
+                video=video,
+                transcript_path=transcript,
+                run_dir=run_dir,
+                output_dir=output_dir,
+                repository_root=find_repository_root(Path.cwd()),
+            )
+        )
+    except (ValueError, FileExistsError) as error:
+        typer.echo(f"publish failed: {error}", err=True)
+        raise typer.Exit(code=1) from None
+    except Exception:
+        typer.echo("publish failed", err=True)
+        raise typer.Exit(code=1) from None
+    payload: dict[str, object] = {
+        "terminal_state": result.terminal_state.value,
+        "run_path": str(result.run_path),
+        "run_id": result.run_id,
+        "deliverables": [
+            deliverable.model_dump(mode="json") for deliverable in result.publishing.deliverables
+        ]
+        if result.publishing is not None
+        else [],
+        "verification": (
+            {"passed": result.verification.passed, "gates": result.verification.gates}
+            if result.verification is not None
+            else None
+        ),
+        "failure_reason": result.failure_reason,
+    }
+    typer.echo(json.dumps(payload, ensure_ascii=True))
+    if result.terminal_state is not TerminalState.SUCCEEDED:
+        raise typer.Exit(code=1)
 
 
 @trace_app.command("export")

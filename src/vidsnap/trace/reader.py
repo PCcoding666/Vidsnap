@@ -22,7 +22,8 @@ _LANE_PREFIXES: tuple[tuple[str, TraceLane], ...] = (
     ("run", "input"),
     ("probe", "input"),
 )
-_USAGE_FIELDS = frozenset(EventUsage.model_fields)
+# Runtime object is a dict; pydantic stubs misannotate class attribute access.
+_USAGE_FIELDS: frozenset[str] = frozenset(EventUsage.model_fields)  # type: ignore[call-overload]
 
 
 def read_trace(path: Path) -> TraceDocument:

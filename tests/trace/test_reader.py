@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from typing import Any
 
@@ -190,3 +191,40 @@ def test_legacy_outcome_keeps_only_terminal_and_outcome_usage_metadata(
     assert not any(
         item.event_type.startswith(("model.", "tool.", "run.", "probe.")) for item in trace.items
     )
+
+
+def test_legacy_outcome_usage_drops_unknown_and_invalid_counters(tmp_path: Path) -> None:
+    path = tmp_path / "legacy-invalid"
+    path.mkdir()
+    (path / "manifest.json").write_text(
+        json.dumps(
+            {
+                "api_version": "vidsnap.run/v1",
+                "run_id": "legacy-invalid",
+                "terminal_state": "SMOKE_SUCCEEDED",
+            }
+        )
+    )
+    (path / "outcomes.jsonl").write_text(
+        json.dumps(
+            {
+                "case_id": "c1",
+                "variant": "agentic",
+                "usage": {
+                    "model_calls": 3,
+                    "unknown_counter": 99,
+                    "input_tokens": -5,
+                    "output_tokens": True,
+                },
+            }
+        )
+        + "\n"
+    )
+
+    trace = read_trace(path)
+
+    assert trace.usage is not None
+    assert trace.usage.model_calls == 3
+    assert trace.usage.input_tokens == 0
+    assert trace.usage.output_tokens == 0
+    assert not hasattr(trace.usage, "unknown_counter")
