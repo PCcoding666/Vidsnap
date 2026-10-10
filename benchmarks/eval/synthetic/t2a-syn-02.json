@@ -1,0 +1,72 @@
+{
+  "schema_version": "vidsnap.eval-synthetic/v1",
+  "id": "t2a-syn-02",
+  "language": "zh",
+  "voice": "Tingting",
+  "width": 1280,
+  "height": 720,
+  "output": "synthetic/t2a-syn-02.mp4",
+  "slides": [
+    {
+      "lines": [
+        "二分查找",
+        "在有序数组里找一个数"
+      ],
+      "narration": "这一讲介绍二分查找，它用来在有序数组里查找一个数。",
+      "duration_seconds": 8.5
+    },
+    {
+      "lines": [
+        "例子",
+        "数组：3, 8, 15, 23, 42, 57, 61",
+        "目标：42"
+      ],
+      "narration": "看屏幕上的这个有序数组，我们要找 42。",
+      "duration_seconds": 7.0
+    },
+    {
+      "lines": [
+        "第一步",
+        "中间元素 23 < 42",
+        "丢掉左半边"
+      ],
+      "narration": "先看中间的元素 23，它比 42 小，所以目标只可能在右半边，左半边直接丢掉。",
+      "duration_seconds": 11.0
+    },
+    {
+      "lines": [
+        "第二步",
+        "剩下 42, 57, 61，中间是 57 > 42",
+        "丢掉右半边"
+      ],
+      "narration": "剩下三个数，中间是 57，比 42 大，再丢掉右边。",
+      "duration_seconds": 8.0
+    },
+    {
+      "lines": [
+        "第三步",
+        "找到 42，共比较 3 次"
+      ],
+      "narration": "第三步就找到了 42，一共只比较了三次。",
+      "duration_seconds": 7.0
+    },
+    {
+      "lines": [
+        "为什么是 O(log n)",
+        "每一步把范围减半",
+        "n = 100 万时最多约 20 次"
+      ],
+      "narration": "每一步都把搜索范围减半，所以比较次数是对数级的。一百万个数最多也只要比较大约二十次。",
+      "duration_seconds": 12.5
+    },
+    {
+      "lines": [
+        "前提",
+        "数组必须有序",
+        "否则不能丢掉一半"
+      ],
+      "narration": "注意前提：数组必须是有序的，否则我们没有理由丢掉一半。",
+      "duration_seconds": 9.0
+    }
+  ]
+}

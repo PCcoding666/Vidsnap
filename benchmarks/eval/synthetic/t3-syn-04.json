@@ -1,0 +1,80 @@
+{
+  "schema_version": "vidsnap.eval-synthetic/v1",
+  "id": "t3-syn-04",
+  "language": "zh",
+  "voice": "Tingting",
+  "width": 1280,
+  "height": 720,
+  "output": "synthetic/t3-syn-04.mp4",
+  "slides": [
+    {
+      "lines": [
+        "错题讲解：化学方程式",
+        "第 1 题、第 8 题"
+      ],
+      "narration": "同学们好，今天讲两道化学方程式的错题。",
+      "duration_seconds": 7.0
+    },
+    {
+      "lines": [
+        "第 1 题",
+        "写出铁丝在氧气中燃烧的化学方程式"
+      ],
+      "narration": "第一题，写出铁丝在氧气中燃烧的化学方程式。",
+      "duration_seconds": 7.5
+    },
+    {
+      "lines": [
+        "常见错误",
+        "4Fe + 3O₂ = 2Fe₂O₃   ✗",
+        "或者忘写“点燃”"
+      ],
+      "narration": "常见错误有两个：一是把产物写成三氧化二铁，二是忘了写反应条件点燃。",
+      "duration_seconds": 10.5
+    },
+    {
+      "lines": [
+        "正确答案",
+        "3Fe + 2O₂ =(点燃)= Fe₃O₄",
+        "产物是四氧化三铁"
+      ],
+      "narration": "铁丝在氧气中燃烧生成的是四氧化三铁。正确的方程式是 3Fe 加 2O2，条件点燃，生成 Fe3O4。",
+      "duration_seconds": 13.5
+    },
+    {
+      "lines": [
+        "第 8 题",
+        "12 g 碳在足量氧气中完全燃烧，生成多少克二氧化碳？"
+      ],
+      "narration": "第八题，12 克碳在足量氧气中完全燃烧，生成多少克二氧化碳？",
+      "duration_seconds": 9.5
+    },
+    {
+      "lines": [
+        "常见错误",
+        "12 + 16 = 28 g   ✗（只算了一个氧原子）"
+      ],
+      "narration": "有同学写 12 加 16 等于 28 克，只算了一个氧原子。",
+      "duration_seconds": 8.0
+    },
+    {
+      "lines": [
+        "正确解法",
+        "C + O₂ =(点燃)= CO₂",
+        "12 g : 44 g",
+        "生成 44 g CO₂"
+      ],
+      "narration": "二氧化碳里有两个氧原子，相对分子质量是 44。12 克碳对应 44 克二氧化碳。",
+      "duration_seconds": 11.0
+    },
+    {
+      "lines": [
+        "小结",
+        "先确定产物，再配平，别忘反应条件",
+        "按化学式算相对分子质量"
+      ],
+      "narration": "小结：先确定产物，再配平，别忘了反应条件；按化学式计算相对分子质量。",
+      "duration_seconds": 10.5
+    }
+  ]
+}

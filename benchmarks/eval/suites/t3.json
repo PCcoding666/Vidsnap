@@ -1,0 +1,793 @@
+{
+  "schema_version": "vidsnap.eval-suite/v1",
+  "suite_id": "t3",
+  "task": "t3",
+  "title": "老师录屏 → 错题、学习笔记、HTML 教学视频",
+  "description": "Teacher screen recording to wrong-question records, study notes and a teaching-video storyboard.",
+  "items": [
+    {
+      "item_id": "t3-syn-01",
+      "status": "ready",
+      "source": {
+        "kind": "synthetic",
+        "path": "synthetic/t3-syn-01.mp4",
+        "sha256": "3e5a2ab94792348f0df91a0021cb9e6ee400b88b7a86247bf00044d8695c4715",
+        "bytes": 780150,
+        "duration_seconds": 90.523,
+        "licence": "CC0-1.0; generated locally by scripts/eval/make_synthetic_media.py (slides + macOS TTS); fictional content, no real people",
+        "generator": "synthetic/t3-syn-01.json",
+        "language": "zh",
+        "has_audio": true
+      },
+      "inputs": {
+        "goal": "从这段老师讲题录屏中提取错题、写学习笔记，并做一条给初中生看的讲解视频分镜。",
+        "audience": "初中二年级学生"
+      },
+      "reference": {
+        "transcript": {
+          "language": "zh",
+          "from_generator": true
+        },
+        "key_points": [
+          {
+            "id": "kp-verify",
+            "text": "因式分解后要代回验算",
+            "match": [
+              [
+                "验算",
+                "代回",
+                "检验"
+              ]
+            ],
+            "modality": "speech",
+            "window": [
+              79.0,
+              90.5
+            ]
+          },
+          {
+            "id": "kp-discriminant",
+            "text": "判别式 Δ = b² − 4ac",
+            "match": [
+              [
+                "b24ac",
+                "b²-4ac",
+                "b2-4ac",
+                "b平方减4ac"
+              ]
+            ],
+            "modality": "both",
+            "window": [
+              65.5,
+              79.0
+            ]
+          },
+          {
+            "id": "kp-minus16",
+            "text": "Δ = 4 − 20 = −16",
+            "match": [
+              [
+                "16"
+              ],
+              [
+                "20"
+              ]
+            ],
+            "modality": "both",
+            "window": [
+              65.5,
+              79.0
+            ]
+          }
+        ],
+        "key_moments": [
+          {
+            "id": "km-q3",
+            "at_seconds": 13.75,
+            "tolerance_seconds": 4.75,
+            "description": "第 3 题题目"
+          },
+          {
+            "id": "km-q5",
+            "at_seconds": 53.0,
+            "tolerance_seconds": 5.5,
+            "description": "第 5 题题目与选项"
+          }
+        ],
+        "entities": [
+          "b² − 4ac"
+        ],
+        "forbidden": [],
+        "questions": [
+          {
+            "id": "q3",
+            "stem": "解方程 x² − 5x + 6 = 0",
+            "stem_match": [
+              [
+                "x2-5x+6",
+                "x平方减5x加6"
+              ]
+            ],
+            "answer": "x = 2 或 x = 3",
+            "answer_match": [
+              [
+                "x=2",
+                "x1=2",
+                "2或3",
+                "2和3",
+                "2,3",
+                "2、3"
+              ]
+            ],
+            "mistake": "因式分解符号写反，得到 −2、−3",
+            "mistake_match": [
+              [
+                "符号"
+              ],
+              [
+                "反",
+                "错"
+              ]
+            ],
+            "window": [
+              10.0,
+              48.5
+            ]
+          },
+          {
+            "id": "q5",
+            "stem": "方程 x² + 2x + 5 = 0 有几个实数根",
+            "stem_match": [
+              [
+                "x2+2x+5",
+                "x平方加2x加5"
+              ]
+            ],
+            "answer": "没有实数根（Δ = −16 < 0），选 C",
+            "answer_match": [
+              [
+                "没有实数根",
+                "无实数根",
+                "没有实根",
+                "无实根",
+                "不存在实数根",
+                "0个实数根"
+              ]
+            ],
+            "mistake": "判别式漏掉 4，写成 b² − ac",
+            "mistake_match": [
+              [
+                "4ac",
+                "4"
+              ],
+              [
+                "漏",
+                "忘",
+                "少"
+              ]
+            ],
+            "window": [
+              48.5,
+              79.0
+            ]
+          }
+        ]
+      },
+      "notes": "Synthetic teacher screen recording (math); fictional, no student data."
+    },
+    {
+      "item_id": "t3-syn-02",
+      "status": "ready",
+      "source": {
+        "kind": "synthetic",
+        "path": "synthetic/t3-syn-02.mp4",
+        "sha256": "ae337ab68a95084a5c516085262f15f7cc0e0cf7b5f7b906b0e1494f531515eb",
+        "bytes": 708712,
+        "duration_seconds": 80.523,
+        "licence": "CC0-1.0; generated locally by scripts/eval/make_synthetic_media.py (slides + macOS TTS); fictional content, no real people",
+        "generator": "synthetic/t3-syn-02.json",
+        "language": "zh",
+        "has_audio": true
+      },
+      "inputs": {
+        "goal": "从这段老师讲题录屏中提取错题、写学习笔记，并做一条给初中生看的讲解视频分镜。",
+        "audience": "初中二年级学生"
+      },
+      "reference": {
+        "transcript": {
+          "language": "zh",
+          "from_generator": true
+        },
+        "key_points": [
+          {
+            "id": "kp-k-b",
+            "text": "一次函数要同时看斜率 k 和截距 b",
+            "match": [
+              [
+                "斜率"
+              ],
+              [
+                "截距"
+              ]
+            ],
+            "modality": "both",
+            "window": [
+              69.5,
+              80.5
+            ]
+          },
+          {
+            "id": "kp-denominator",
+            "text": "约分前写出分母不为零的条件",
+            "match": [
+              [
+                "分母"
+              ],
+              [
+                "零",
+                "0"
+              ]
+            ],
+            "modality": "speech",
+            "window": [
+              69.5,
+              80.5
+            ]
+          }
+        ],
+        "key_moments": [
+          {
+            "id": "km-q2",
+            "at_seconds": 10.5,
+            "tolerance_seconds": 5.5,
+            "description": "第 2 题题目"
+          },
+          {
+            "id": "km-q7",
+            "at_seconds": 41.75,
+            "tolerance_seconds": 4.25,
+            "description": "第 7 题题目"
+          }
+        ],
+        "entities": [],
+        "forbidden": [],
+        "questions": [
+          {
+            "id": "q2",
+            "stem": "一次函数 y = −2x + 3 的图像经过哪几个象限",
+            "stem_match": [
+              [
+                "y=-2x+3",
+                "-2x+3",
+                "负2x加3"
+              ]
+            ],
+            "answer": "第一、二、四象限",
+            "answer_match": [
+              [
+                "一二四",
+                "第一第二第四",
+                "1,2,4",
+                "124",
+                "一、二、四"
+              ]
+            ],
+            "mistake": "只看斜率忘了截距，误选二、三、四象限",
+            "mistake_match": [
+              [
+                "截距",
+                "常数项"
+              ]
+            ],
+            "window": [
+              6.0,
+              38.5
+            ]
+          },
+          {
+            "id": "q7",
+            "stem": "化简 (x² − 1) / (x − 1)",
+            "stem_match": [
+              [
+                "x2-1"
+              ],
+              [
+                "x-1"
+              ]
+            ],
+            "answer": "x + 1（x ≠ 1）",
+            "answer_match": [
+              [
+                "x+1"
+              ],
+              [
+                "x≠1",
+                "x不等于1",
+                "x≠1"
+              ]
+            ],
+            "mistake": "约分后忘记写 x ≠ 1",
+            "mistake_match": [
+              [
+                "x≠1",
+                "x不等于1",
+                "分母不为零",
+                "分母不能为零",
+                "分母不为0",
+                "分母不能为0",
+                "分母≠0"
+              ]
+            ],
+            "window": [
+              38.5,
+              69.5
+            ]
+          }
+        ]
+      },
+      "notes": "Synthetic teacher screen recording (math); fictional, no student data."
+    },
+    {
+      "item_id": "t3-syn-03",
+      "status": "ready",
+      "source": {
+        "kind": "synthetic",
+        "path": "synthetic/t3-syn-03.mp4",
+        "sha256": "8c90b8c119cbde22b9ced930b47dc22d135edfd3257cd8a643633d660f90a4dc",
+        "bytes": 758968,
+        "duration_seconds": 92.523,
+        "licence": "CC0-1.0; generated locally by scripts/eval/make_synthetic_media.py (slides + macOS TTS); fictional content, no real people",
+        "generator": "synthetic/t3-syn-03.json",
+        "language": "zh",
+        "has_audio": true
+      },
+      "inputs": {
+        "goal": "从这段老师讲题录屏中提取错题、写学习笔记，并做一条给初中生看的讲解视频分镜。",
+        "audience": "初中二年级学生"
+      },
+      "reference": {
+        "transcript": {
+          "language": "zh",
+          "from_generator": true
+        },
+        "key_points": [
+          {
+            "id": "kp-vpai",
+            "text": "排开液体的体积只算浸在液体里的部分",
+            "match": [
+              [
+                "排开"
+              ],
+              [
+                "体积"
+              ]
+            ],
+            "modality": "both",
+            "window": [
+              82.5,
+              92.5
+            ]
+          },
+          {
+            "id": "kp-float",
+            "text": "漂浮时浮力等于重力",
+            "match": [
+              [
+                "漂浮"
+              ],
+              [
+                "重力"
+              ]
+            ],
+            "modality": "both",
+            "window": [
+              67.5,
+              82.5
+            ]
+          }
+        ],
+        "key_moments": [
+          {
+            "id": "km-q4",
+            "at_seconds": 15.25,
+            "tolerance_seconds": 8.25,
+            "description": "第 4 题题目"
+          },
+          {
+            "id": "km-q6",
+            "at_seconds": 55.25,
+            "tolerance_seconds": 5.75,
+            "description": "第 6 题题目与选项"
+          }
+        ],
+        "entities": [
+          "0.6 N"
+        ],
+        "forbidden": [],
+        "questions": [
+          {
+            "id": "q4",
+            "stem": "木块体积 100 cm³，露出 40 cm³，求浮力",
+            "stem_match": [
+              [
+                "100"
+              ],
+              [
+                "40"
+              ]
+            ],
+            "answer": "0.6 N",
+            "answer_match": [
+              [
+                "0.6n",
+                "0.6牛",
+                "0.6"
+              ]
+            ],
+            "mistake": "用总体积计算得到 1 N",
+            "mistake_match": [
+              [
+                "总体积",
+                "露出",
+                "整个体积",
+                "全部体积"
+              ]
+            ],
+            "window": [
+              8.0,
+              50.5
+            ]
+          },
+          {
+            "id": "q6",
+            "stem": "同一木块漂浮在盐水和清水中，哪边浮力大",
+            "stem_match": [
+              [
+                "盐水"
+              ],
+              [
+                "清水"
+              ]
+            ],
+            "answer": "一样大，选 C",
+            "answer_match": [
+              [
+                "一样大",
+                "相等",
+                "相同",
+                "一样"
+              ]
+            ],
+            "mistake": "认为盐水密度大所以浮力大",
+            "mistake_match": [
+              [
+                "密度"
+              ]
+            ],
+            "window": [
+              50.5,
+              82.5
+            ]
+          }
+        ]
+      },
+      "notes": "Synthetic teacher screen recording (physics); fictional, no student data."
+    },
+    {
+      "item_id": "t3-syn-04",
+      "status": "ready",
+      "source": {
+        "kind": "synthetic",
+        "path": "synthetic/t3-syn-04.mp4",
+        "sha256": "55253a2607f2b0b722832a6d3d2b7ef0383376421c128941e7e8a184b275a59e",
+        "bytes": 653436,
+        "duration_seconds": 77.523,
+        "licence": "CC0-1.0; generated locally by scripts/eval/make_synthetic_media.py (slides + macOS TTS); fictional content, no real people",
+        "generator": "synthetic/t3-syn-04.json",
+        "language": "zh",
+        "has_audio": true
+      },
+      "inputs": {
+        "goal": "从这段老师讲题录屏中提取错题、写学习笔记，并做一条给初中生看的讲解视频分镜。",
+        "audience": "初中二年级学生"
+      },
+      "reference": {
+        "transcript": {
+          "language": "zh",
+          "from_generator": true
+        },
+        "key_points": [
+          {
+            "id": "kp-fe3o4",
+            "text": "铁丝燃烧生成四氧化三铁",
+            "match": [
+              [
+                "四氧化三铁",
+                "fe3o4"
+              ]
+            ],
+            "modality": "both",
+            "window": [
+              25.0,
+              38.5
+            ]
+          },
+          {
+            "id": "kp-condition",
+            "text": "别忘反应条件点燃",
+            "match": [
+              [
+                "点燃"
+              ]
+            ],
+            "modality": "both",
+            "window": [
+              25.0,
+              38.5
+            ]
+          },
+          {
+            "id": "kp-44",
+            "text": "CO₂ 相对分子质量 44",
+            "match": [
+              [
+                "44"
+              ]
+            ],
+            "modality": "both",
+            "window": [
+              56.0,
+              67.0
+            ]
+          }
+        ],
+        "key_moments": [
+          {
+            "id": "km-q1",
+            "at_seconds": 10.75,
+            "tolerance_seconds": 4.75,
+            "description": "第 1 题题目"
+          },
+          {
+            "id": "km-q8",
+            "at_seconds": 43.25,
+            "tolerance_seconds": 5.75,
+            "description": "第 8 题题目"
+          }
+        ],
+        "entities": [
+          "Fe3O4",
+          "44"
+        ],
+        "forbidden": [],
+        "questions": [
+          {
+            "id": "q1",
+            "stem": "写出铁丝在氧气中燃烧的化学方程式",
+            "stem_match": [
+              [
+                "铁"
+              ],
+              [
+                "氧气"
+              ],
+              [
+                "燃烧"
+              ]
+            ],
+            "answer": "3Fe + 2O₂ =点燃= Fe₃O₄",
+            "answer_match": [
+              [
+                "fe3o4"
+              ]
+            ],
+            "mistake": "产物写成三氧化二铁，或忘写点燃",
+            "mistake_match": [
+              [
+                "fe2o3",
+                "三氧化二铁",
+                "点燃",
+                "反应条件"
+              ]
+            ],
+            "window": [
+              7.0,
+              38.5
+            ]
+          },
+          {
+            "id": "q8",
+            "stem": "12 g 碳完全燃烧生成多少克二氧化碳",
+            "stem_match": [
+              [
+                "12"
+              ],
+              [
+                "碳"
+              ]
+            ],
+            "answer": "44 g",
+            "answer_match": [
+              [
+                "44"
+              ]
+            ],
+            "mistake": "只算了一个氧原子，得到 28 g",
+            "mistake_match": [
+              [
+                "两个氧",
+                "2个氧",
+                "氧原子",
+                "28"
+              ]
+            ],
+            "window": [
+              38.5,
+              67.0
+            ]
+          }
+        ]
+      },
+      "notes": "Synthetic teacher screen recording (chemistry); fictional, no student data."
+    },
+    {
+      "item_id": "t3-syn-05",
+      "status": "ready",
+      "source": {
+        "kind": "synthetic",
+        "path": "synthetic/t3-syn-05.mp4",
+        "sha256": "a44beed026a7d2b44ce98b45faeff699f245397c765cd80f4b0cf772cb7e5ea2",
+        "bytes": 655935,
+        "duration_seconds": 96.523,
+        "licence": "CC0-1.0; generated locally by scripts/eval/make_synthetic_media.py (slides + macOS TTS); fictional content, no real people",
+        "generator": "synthetic/t3-syn-05.json",
+        "language": "zh",
+        "has_audio": true
+      },
+      "inputs": {
+        "goal": "从这段老师讲题录屏中提取错题、写学习笔记，并做一条给初中生看的讲解视频分镜。",
+        "audience": "初中二年级学生"
+      },
+      "reference": {
+        "transcript": {
+          "language": "zh",
+          "from_generator": true
+        },
+        "key_points": [
+          {
+            "id": "kp-since",
+            "text": "since + 时间点用现在完成时",
+            "match": [
+              [
+                "since"
+              ],
+              [
+                "现在完成时"
+              ]
+            ],
+            "modality": "both",
+            "window": [
+              27.0,
+              40.5
+            ]
+          },
+          {
+            "id": "kp-been-gone",
+            "text": "been to 去过已回来，gone to 去了未回",
+            "match": [
+              [
+                "beento",
+                "been to"
+              ],
+              [
+                "goneto",
+                "gone to"
+              ]
+            ],
+            "modality": "both",
+            "window": [
+              61.5,
+              83.5
+            ]
+          }
+        ],
+        "key_moments": [
+          {
+            "id": "km-q9",
+            "at_seconds": 12.75,
+            "tolerance_seconds": 6.75,
+            "description": "第 9 题题目与选项"
+          },
+          {
+            "id": "km-q12",
+            "at_seconds": 46.75,
+            "tolerance_seconds": 7.25,
+            "description": "第 12 题题目"
+          }
+        ],
+        "entities": [
+          "have lived",
+          "has been to"
+        ],
+        "forbidden": [],
+        "questions": [
+          {
+            "id": "q9",
+            "stem": "I ___ in Beijing since 2020.",
+            "stem_match": [
+              [
+                "since2020",
+                "since 2020"
+              ]
+            ],
+            "answer": "C. have lived",
+            "answer_match": [
+              [
+                "havelived",
+                "have lived"
+              ]
+            ],
+            "mistake": "看到 2020 就选过去时",
+            "mistake_match": [
+              [
+                "过去时",
+                "一般过去时",
+                "过去的时间"
+              ]
+            ],
+            "window": [
+              7.0,
+              40.5
+            ]
+          },
+          {
+            "id": "q12",
+            "stem": "改错：He has gone to Shanghai for three times.",
+            "stem_match": [
+              [
+                "shanghai"
+              ],
+              [
+                "threetimes",
+                "three times"
+              ]
+            ],
+            "answer": "He has been to Shanghai three times.",
+            "answer_match": [
+              [
+                "hasbeento",
+                "has been to"
+              ]
+            ],
+            "mistake": "只删 for，没发现 gone to 用错",
+            "mistake_match": [
+              [
+                "goneto",
+                "gone to"
+              ]
+            ],
+            "window": [
+              40.5,
+              83.5
+            ]
+          }
+        ]
+      },
+      "notes": "Synthetic teacher screen recording (English grammar); fictional, no student data."
+    },
+    {
+      "item_id": "t3-owner-01",
+      "status": "placeholder",
+      "source": {
+        "kind": "owner",
+        "licence": "owner-supplied (to fill in)",
+        "language": "zh"
+      },
+      "inputs": {
+        "goal": "从这段老师讲题录屏中提取错题、写学习笔记，并做一条给初中生看的讲解视频分镜。",
+        "audience": "初中二年级学生"
+      },
+      "notes": "Owner slot. To fill: copy the video under the media root (do not commit it), set source.path, sha256 (shasum -a 256), bytes, duration_seconds (ffprobe), licence ('owner, private, evaluation only' or the real licence) and language; write reference.key_points (3-10 facts with keyword groups), key_moments (timestamps a figure should show) and entities; then set status to 'ready' and run `vidsnap eval validate`. PRIVACY: a real classroom recording may show student names, faces or scores; use only a recording with none of that (or a synthetic one). Never commit it."
+    }
+  ]
+}

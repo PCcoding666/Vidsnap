@@ -1,0 +1,79 @@
+{
+  "schema_version": "vidsnap.eval-synthetic/v1",
+  "id": "t3-syn-05",
+  "language": "zh",
+  "voice": "Tingting",
+  "width": 1280,
+  "height": 720,
+  "output": "synthetic/t3-syn-05.mp4",
+  "slides": [
+    {
+      "lines": [
+        "错题讲解：现在完成时",
+        "第 9 题、第 12 题"
+      ],
+      "narration": "同学们好，今天讲现在完成时的两道错题。",
+      "duration_seconds": 7.0
+    },
+    {
+      "lines": [
+        "第 9 题",
+        "I ___ in Beijing since 2020.",
+        "A. live    B. lived    C. have lived    D. am living"
+      ],
+      "narration": "第九题，I 空格 in Beijing since 2020。请看屏幕上的四个选项。",
+      "duration_seconds": 11.5
+    },
+    {
+      "lines": [
+        "常见错误",
+        "看到 2020 就选过去时 B   ✗"
+      ],
+      "narration": "有的同学看到 2020 这个过去的时间，就选了过去时 B。",
+      "duration_seconds": 8.5
+    },
+    {
+      "lines": [
+        "正确答案：C",
+        "since + 时间点 → 现在完成时",
+        "I have lived in Beijing since 2020."
+      ],
+      "narration": "since 加时间点，表示从过去一直持续到现在，要用现在完成时，所以选 C，have lived。",
+      "duration_seconds": 13.5
+    },
+    {
+      "lines": [
+        "第 12 题（改错）",
+        "He has gone to Shanghai for three times."
+      ],
+      "narration": "第十二题是改错：He has gone to Shanghai for three times。",
+      "duration_seconds": 12.5
+    },
+    {
+      "lines": [
+        "常见错误",
+        "只删掉 for，没发现 gone to 也错了   ✗"
+      ],
+      "narration": "很多同学只删掉了 for，没发现 gone to 也用错了。",
+      "duration_seconds": 8.5
+    },
+    {
+      "lines": [
+        "正确答案",
+        "He has been to Shanghai three times.",
+        "been to：去过已回来；gone to：去了还没回来"
+      ],
+      "narration": "has gone to 表示去了还没回来，不能说去了三次。应该用 has been to，表示去过。正确的句子是 He has been to Shanghai three times。",
+      "duration_seconds": 22.0
+    },
+    {
+      "lines": [
+        "小结",
+        "since / for + 时间段 → 现在完成时",
+        "分清 been to 和 gone to"
+      ],
+      "narration": "小结：看到 since 或者 for 加时间段，考虑现在完成时；分清 been to 和 gone to。",
+      "duration_seconds": 13.0
+    }
+  ]
+}

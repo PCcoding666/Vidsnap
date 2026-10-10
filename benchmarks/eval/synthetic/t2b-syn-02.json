@@ -1,0 +1,77 @@
+{
+  "schema_version": "vidsnap.eval-synthetic/v1",
+  "id": "t2b-syn-02",
+  "language": "en",
+  "voice": "Samantha",
+  "width": 1280,
+  "height": 720,
+  "output": "synthetic/t2b-syn-02.mp4",
+  "slides": [
+    {
+      "lines": [
+        "Small Teams — Episode 31",
+        "Host and guest: founder of a 12-person remote design studio"
+      ],
+      "narration": "Welcome back to Small Teams. My guest today runs a fully remote design studio of twelve people. Why did you go remote?",
+      "duration_seconds": 12.0,
+      "speaker": "Host"
+    },
+    {
+      "lines": [
+        "Small Teams — Episode 31",
+        "Host and guest: founder of a 12-person remote design studio"
+      ],
+      "narration": "Honestly, it started with hiring. Our best candidate lived four time zones away, and we did not want to lose her.",
+      "duration_seconds": 11.5,
+      "speaker": "Guest",
+      "voice": "Daniel"
+    },
+    {
+      "lines": [
+        "Small Teams — Episode 31",
+        "Host and guest: founder of a 12-person remote design studio"
+      ],
+      "narration": "What was the hardest part?",
+      "duration_seconds": 4.5,
+      "speaker": "Host"
+    },
+    {
+      "lines": [
+        "Small Teams — Episode 31",
+        "Host and guest: founder of a 12-person remote design studio"
+      ],
+      "narration": "Decisions. In an office you decide in the hallway. Remotely, we had to write every decision down in a shared log, with a date and an owner.",
+      "duration_seconds": 14.0,
+      "speaker": "Guest",
+      "voice": "Daniel"
+    },
+    {
+      "lines": [
+        "Small Teams — Episode 31",
+        "Host and guest: founder of a 12-person remote design studio"
+      ],
+      "narration": "Did that slow you down?",
+      "duration_seconds": 4.5,
+      "speaker": "Host"
+    },
+    {
+      "lines": [
+        "Small Teams — Episode 31",
+        "Host and guest: founder of a 12-person remote design studio"
+      ],
+      "narration": "For the first month, yes. After that it was faster, because nobody had to ask the same question twice. We now meet in person twice a year.",
+      "duration_seconds": 14.0,
+      "speaker": "Guest",
+      "voice": "Daniel"
+    },
+    {
+      "lines": [
+        "Small Teams — Episode 31",
+        "Host and guest: founder of a 12-person remote design studio"
+      ],
+      "narration": "Write it down, and meet twice a year. Thanks for joining us.",
+      "duration_seconds": 7.5,
+      "speaker": "Host"
+    }
+  ]
+}

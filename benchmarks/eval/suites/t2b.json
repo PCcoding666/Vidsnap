@@ -1,0 +1,502 @@
+{
+  "schema_version": "vidsnap.eval-suite/v1",
+  "suite_id": "t2b",
+  "task": "t2b",
+  "title": "播客 / 片段点评（≤120 s）",
+  "description": "Podcast or clip review for clips of at most 120 s: summary plus timed claims.",
+  "items": [
+    {
+      "item_id": "t2b-syn-01",
+      "status": "ready",
+      "source": {
+        "kind": "synthetic",
+        "path": "synthetic/t2b-syn-01.mp4",
+        "sha256": "909d0212d0167efefeb3b14e58a850bcf9452096c787c7d4872a1479bd370ea8",
+        "bytes": 419063,
+        "duration_seconds": 79.023,
+        "licence": "CC0-1.0; generated locally by scripts/eval/make_synthetic_media.py (slides + macOS TTS); fictional content, no real people",
+        "generator": "synthetic/t2b-syn-01.json",
+        "language": "zh",
+        "has_audio": true
+      },
+      "inputs": {
+        "goal": "为这段播客片段写一份点评：概括加 3 到 8 条有时间点的观点。"
+      },
+      "reference": {
+        "transcript": {
+          "language": "zh",
+          "from_generator": true
+        },
+        "key_points": [
+          {
+            "id": "kp-not-replace",
+            "text": "嘉宾认为不会取代初级工程师",
+            "match": [
+              [
+                "不会取代",
+                "不认为会取代",
+                "不会被取代",
+                "不会替代",
+                "不会被替代"
+              ]
+            ],
+            "modality": "speech",
+            "window": [
+              15.0,
+              30.0
+            ]
+          },
+          {
+            "id": "kp-review-30",
+            "text": "代码评审时间增加约 30%",
+            "match": [
+              [
+                "评审",
+                "审查",
+                "review"
+              ],
+              [
+                "30"
+              ]
+            ],
+            "modality": "speech",
+            "window": [
+              15.0,
+              30.0
+            ]
+          },
+          {
+            "id": "kp-read-code",
+            "text": "要求新人先学会读代码",
+            "match": [
+              [
+                "读代码",
+                "阅读代码",
+                "看懂代码",
+                "读懂代码"
+              ]
+            ],
+            "modality": "speech",
+            "window": [
+              35.0,
+              52.5
+            ]
+          },
+          {
+            "id": "kp-interview-bug",
+            "text": "面试加题：从 AI 写的问题代码里找 bug",
+            "match": [
+              [
+                "面试"
+              ],
+              [
+                "bug",
+                "错误",
+                "问题代码",
+                "找出"
+              ]
+            ],
+            "modality": "speech",
+            "window": [
+              57.5,
+              73.0
+            ]
+          }
+        ],
+        "key_moments": [
+          {
+            "id": "km-review",
+            "at_seconds": 22.5,
+            "tolerance_seconds": 8.5,
+            "description": "评审时间增加 30%"
+          },
+          {
+            "id": "km-read-code",
+            "at_seconds": 43.75,
+            "tolerance_seconds": 9.75,
+            "description": "先学会读代码"
+          },
+          {
+            "id": "km-interview",
+            "at_seconds": 65.25,
+            "tolerance_seconds": 8.75,
+            "description": "面试找 bug"
+          }
+        ],
+        "entities": [
+          "30%"
+        ],
+        "forbidden": [
+          {
+            "id": "fb-review-down",
+            "text": "评审时间减少了",
+            "match": [
+              [
+                "评审时间减少",
+                "评审时间缩短",
+                "审查时间减少",
+                "评审更快"
+              ]
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "item_id": "t2b-syn-02",
+      "status": "ready",
+      "source": {
+        "kind": "synthetic",
+        "path": "synthetic/t2b-syn-02.mp4",
+        "sha256": "88542e14ef921bf6956d4655e8d59869a4a5d5950b3b61b72519177e47316410",
+        "bytes": 517538,
+        "duration_seconds": 68.023,
+        "licence": "CC0-1.0; generated locally by scripts/eval/make_synthetic_media.py (slides + macOS TTS); fictional content, no real people",
+        "generator": "synthetic/t2b-syn-02.json",
+        "language": "en",
+        "has_audio": true
+      },
+      "inputs": {
+        "goal": "为这段英文播客片段写一份中文点评：概括加 3 到 8 条有时间点的观点。"
+      },
+      "reference": {
+        "transcript": {
+          "language": "en",
+          "from_generator": true
+        },
+        "key_points": [
+          {
+            "id": "kp-twelve",
+            "text": "12 人的全远程设计工作室",
+            "match": [
+              [
+                "12",
+                "十二"
+              ]
+            ],
+            "modality": "both",
+            "window": [
+              0.0,
+              12.0
+            ]
+          },
+          {
+            "id": "kp-hiring",
+            "text": "转远程始于招聘：最好的候选人在四个时区之外",
+            "match": [
+              [
+                "招聘",
+                "招人",
+                "候选人",
+                "hiring"
+              ]
+            ],
+            "modality": "speech",
+            "window": [
+              12.0,
+              23.5
+            ]
+          },
+          {
+            "id": "kp-decision-log",
+            "text": "每个决定都写进共享日志，带日期和负责人",
+            "match": [
+              [
+                "决策",
+                "决定"
+              ],
+              [
+                "记录",
+                "写下",
+                "日志",
+                "log"
+              ]
+            ],
+            "modality": "speech",
+            "window": [
+              28.0,
+              42.0
+            ]
+          },
+          {
+            "id": "kp-first-month",
+            "text": "第一个月变慢，之后更快",
+            "match": [
+              [
+                "第一个月",
+                "头一个月",
+                "最初一个月",
+                "first month",
+                "前一个月"
+              ]
+            ],
+            "modality": "speech",
+            "window": [
+              46.5,
+              60.5
+            ]
+          },
+          {
+            "id": "kp-twice-year",
+            "text": "每年线下见面两次",
+            "match": [
+              [
+                "一年两次",
+                "每年两次",
+                "twice a year",
+                "一年见两次",
+                "每年见面两次",
+                "一年见面两次"
+              ]
+            ],
+            "modality": "speech",
+            "window": [
+              46.5,
+              60.5
+            ]
+          }
+        ],
+        "key_moments": [
+          {
+            "id": "km-hiring",
+            "at_seconds": 17.75,
+            "tolerance_seconds": 6.75,
+            "description": "招聘原因"
+          },
+          {
+            "id": "km-decisions",
+            "at_seconds": 35.0,
+            "tolerance_seconds": 8.0,
+            "description": "决策日志"
+          },
+          {
+            "id": "km-twice",
+            "at_seconds": 53.5,
+            "tolerance_seconds": 8.0,
+            "description": "一年见两次"
+          }
+        ],
+        "entities": [
+          "Small Teams"
+        ],
+        "forbidden": [
+          {
+            "id": "fb-monthly",
+            "text": "每月线下见面",
+            "match": [
+              [
+                "每月见面",
+                "每周见面",
+                "每个月见面"
+              ]
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "item_id": "t2b-syn-03",
+      "status": "ready",
+      "source": {
+        "kind": "synthetic",
+        "path": "synthetic/t2b-syn-03.mp4",
+        "sha256": "6423ca333d939f6257a55a2120e448599ffa64f40e009e1efab2571aadeb1a34",
+        "bytes": 350974,
+        "duration_seconds": 69.023,
+        "licence": "CC0-1.0; generated locally by scripts/eval/make_synthetic_media.py (slides + macOS TTS); fictional content, no real people",
+        "generator": "synthetic/t2b-syn-03.json",
+        "language": "zh",
+        "has_audio": true
+      },
+      "inputs": {
+        "goal": "为这段播客片段写一份点评：概括加 3 到 8 条有时间点的观点。"
+      },
+      "reference": {
+        "transcript": {
+          "language": "zh",
+          "from_generator": true
+        },
+        "key_points": [
+          {
+            "id": "kp-eight-years",
+            "text": "嘉宾做了八年用户研究",
+            "match": [
+              [
+                "8年",
+                "八年"
+              ]
+            ],
+            "modality": "both",
+            "window": [
+              0.0,
+              13.5
+            ]
+          },
+          {
+            "id": "kp-no-feature-question",
+            "text": "新手常错：直接问用户想要什么功能",
+            "match": [
+              [
+                "功能"
+              ],
+              [
+                "想要",
+                "需要什么"
+              ]
+            ],
+            "modality": "speech",
+            "window": [
+              13.5,
+              27.0
+            ]
+          },
+          {
+            "id": "kp-past-behavior",
+            "text": "应该问过去的具体行为",
+            "match": [
+              [
+                "过去"
+              ],
+              [
+                "具体",
+                "行为",
+                "怎么做"
+              ]
+            ],
+            "modality": "speech",
+            "window": [
+              31.0,
+              46.5
+            ]
+          },
+          {
+            "id": "kp-five",
+            "text": "一个方向先访谈五个人",
+            "match": [
+              [
+                "5个",
+                "五个",
+                "5人",
+                "五人",
+                "5位",
+                "五位",
+                "5名",
+                "五名"
+              ]
+            ],
+            "modality": "speech",
+            "window": [
+              51.5,
+              62.5
+            ]
+          }
+        ],
+        "key_moments": [
+          {
+            "id": "km-mistake",
+            "at_seconds": 20.25,
+            "tolerance_seconds": 7.75,
+            "description": "常见错误"
+          },
+          {
+            "id": "km-past",
+            "at_seconds": 38.75,
+            "tolerance_seconds": 8.75,
+            "description": "问过去的行为"
+          },
+          {
+            "id": "km-five",
+            "at_seconds": 57.0,
+            "tolerance_seconds": 6.5,
+            "description": "先访谈五个人"
+          }
+        ],
+        "entities": [],
+        "forbidden": [
+          {
+            "id": "fb-ten",
+            "text": "建议访谈十个人以上",
+            "match": [
+              [
+                "十个人",
+                "10个人",
+                "二十个人",
+                "20个人",
+                "十人以上"
+              ]
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "item_id": "t2b-pub-01",
+      "status": "needs_reference",
+      "source": {
+        "kind": "public",
+        "path": "public/DuckandC1951_512kb.mp4",
+        "url": "https://archive.org/download/DuckandC1951/DuckandC1951_512kb.mp4",
+        "sha256": "ab0a244f9705792c8b24e9ab1e1f85a7d8ea0c3c1b8cbf8810271e608b6578b6",
+        "bytes": 39240901,
+        "duration_seconds": 555.389,
+        "licence": "Public domain (Prelinger Archives; archive.org licenseurl creativecommons.org/licenses/publicdomain/)",
+        "attribution": "Duck and Cover (1951); Prelinger Archives",
+        "clip": {
+          "start_seconds": 0.0,
+          "end_seconds": 110.0
+        },
+        "language": "en",
+        "has_audio": true
+      },
+      "inputs": {
+        "goal": "为这段影片片段写一份中文点评：概括加 3 到 8 条有时间点的观点。"
+      },
+      "reference": {
+        "key_points": [],
+        "key_moments": []
+      },
+      "notes": "A 110 s window of a real narrated film; references not written yet (times are relative to the clip)."
+    },
+    {
+      "item_id": "t2b-pub-02",
+      "status": "needs_reference",
+      "source": {
+        "kind": "public",
+        "path": "public/DuckandC1951_512kb.mp4",
+        "url": "https://archive.org/download/DuckandC1951/DuckandC1951_512kb.mp4",
+        "sha256": "ab0a244f9705792c8b24e9ab1e1f85a7d8ea0c3c1b8cbf8810271e608b6578b6",
+        "bytes": 39240901,
+        "duration_seconds": 555.389,
+        "licence": "Public domain (Prelinger Archives; archive.org licenseurl creativecommons.org/licenses/publicdomain/)",
+        "attribution": "Duck and Cover (1951); Prelinger Archives",
+        "clip": {
+          "start_seconds": 230.0,
+          "end_seconds": 340.0
+        },
+        "language": "en",
+        "has_audio": true
+      },
+      "inputs": {
+        "goal": "为这段影片片段写一份中文点评：概括加 3 到 8 条有时间点的观点。"
+      },
+      "reference": {
+        "key_points": [],
+        "key_moments": []
+      },
+      "notes": "A 110 s window of a real narrated film; references not written yet (times are relative to the clip)."
+    },
+    {
+      "item_id": "t2b-owner-01",
+      "status": "placeholder",
+      "source": {
+        "kind": "owner",
+        "licence": "owner-supplied (to fill in)",
+        "language": "zh"
+      },
+      "inputs": {
+        "goal": "为这段播客片段写一份点评：概括加 3 到 8 条有时间点的观点。"
+      },
+      "notes": "Owner slot. To fill: copy the video under the media root (do not commit it), set source.path, sha256 (shasum -a 256), bytes, duration_seconds (ffprobe), licence ('owner, private, evaluation only' or the real licence) and language; write reference.key_points (3-10 facts with keyword groups), key_moments (timestamps a figure should show) and entities; then set status to 'ready' and run `vidsnap eval validate`. The clip must be at most 120 s; use source.clip to cut a window."
+    }
+  ]
+}

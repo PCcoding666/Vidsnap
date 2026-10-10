@@ -1,0 +1,80 @@
+{
+  "schema_version": "vidsnap.eval-synthetic/v1",
+  "id": "t3-syn-01",
+  "language": "zh",
+  "voice": "Tingting",
+  "width": 1280,
+  "height": 720,
+  "output": "synthetic/t3-syn-01.mp4",
+  "slides": [
+    {
+      "lines": [
+        "错题讲解：一元二次方程",
+        "第 3 题、第 5 题"
+      ],
+      "narration": "同学们好，今天我们讲上次测验里错得最多的两道题，第三题和第五题。",
+      "duration_seconds": 10.0
+    },
+    {
+      "lines": [
+        "第 3 题",
+        "解方程：x² − 5x + 6 = 0"
+      ],
+      "narration": "先看第三题，解方程 x 平方减 5x 加 6 等于 0。",
+      "duration_seconds": 7.5
+    },
+    {
+      "lines": [
+        "常见错误",
+        "(x + 2)(x + 3) = 0",
+        "x = −2 或 x = −3   ✗"
+      ],
+      "narration": "很多同学因式分解时符号写反了，写成 x 加 2 乘以 x 加 3，得到负 2 和负 3，这是错的。",
+      "duration_seconds": 12.0
+    },
+    {
+      "lines": [
+        "正确解法",
+        "(x − 2)(x − 3) = 0",
+        "x = 2 或 x = 3"
+      ],
+      "narration": "正确的分解是 x 减 2 乘以 x 减 3。两个因数相乘等于 6、相加等于负 5，应该是负 2 和负 3，所以解是 x 等于 2 或 x 等于 3。代回去验算，结果都等于零。",
+      "duration_seconds": 19.0
+    },
+    {
+      "lines": [
+        "第 5 题",
+        "方程 x² + 2x + 5 = 0 有几个实数根？",
+        "A. 两个    B. 一个    C. 没有"
+      ],
+      "narration": "再看第五题，这个方程有几个实数根？请看屏幕上的三个选项。",
+      "duration_seconds": 9.0
+    },
+    {
+      "lines": [
+        "常见错误",
+        "把判别式写成 b² − ac，漏掉了 4   ✗"
+      ],
+      "narration": "常见错误是把判别式写成 b 平方减 ac，漏掉了 4。",
+      "duration_seconds": 8.0
+    },
+    {
+      "lines": [
+        "正确解法",
+        "Δ = b² − 4ac = 4 − 20 = −16 < 0",
+        "没有实数根，选 C"
+      ],
+      "narration": "正确的判别式是 b 平方减 4ac，等于 4 减 20，是负 16，小于零，所以方程没有实数根，答案选 C。",
+      "duration_seconds": 13.5
+    },
+    {
+      "lines": [
+        "小结",
+        "因式分解后要代回验算",
+        "判别式是 b² − 4ac"
+      ],
+      "narration": "小结一下：因式分解以后一定要代回去验算；判别式是 b 平方减 4ac，不要漏掉 4。",
+      "duration_seconds": 11.5
+    }
+  ]
+}
