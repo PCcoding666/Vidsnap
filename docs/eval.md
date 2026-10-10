@@ -110,6 +110,7 @@ vidsnap eval run --suite t1 --system harness+qwen3.8-max \
 vidsnap eval run --suite t1 --system native:qwen3.8-omni-flash \
   --price-table prices.json --max-cost 5 --items t1-syn-01
 vidsnap eval report eval-out/*.json --human human.json -o report.md
+vidsnap eval regrade eval-out/*.json   # after references change; no model calls
 ```
 
 Live systems refuse to start without `--price-table` and `--max-cost`. The runner
@@ -139,7 +140,7 @@ another model.
 | `structure` | all | Mean of the task's structure checks (t1: title, intro, 3-10 takeaways, at least 3 sections, at least 3 captioned figures, figures spread over half the timeline, mostly Chinese prose, summary length; t2a/t3 video: 3-15 scenes, scene length 6-40 s, captions at most 6 s and 40 characters, no overlap, SRT identical to captions; t3 questions: every field filled) |
 | `question_recall`, `answer_accuracy`, `mistake_coverage`, `question_time_accuracy`, `question_precision` | t3 | Reference wrong questions matched by stem keywords; answer, mistake explanation and timestamp checked for each match; spurious questions lower precision |
 | `html_valid`, `render_ok` | t2a, t3 | Rendered HTML parses; with `--render-check`, headless Chrome (all host names unresolvable) renders a non-blank frame |
-| `latency_ms`, `tokens`, `cost` | all | From the RunBundle: run span duration, model-request usage, price table |
+| `latency_ms`, `tokens`, `cost`, upload bytes | all | From the RunBundle: run span duration, model-request usage and request bytes, ASR audio sent (Base64), price table |
 | `failure_category` | all | `vidsnap.run-failure/v1` category from the trace |
 
 ## Human metrics
