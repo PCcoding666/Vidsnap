@@ -20,12 +20,13 @@ _ASR_URL = "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions"
 
 
 def test_asr_chunker_keeps_audio_in_memory_and_base64_encodes_chunks() -> None:
-    chunks = Base64AudioChunker(chunk_bytes=4).encode(b"abcdefgh")
+    # Audio that fits is one chunk, unchanged. Larger audio is split only as a valid
+    # standalone file (see test_asr_chunking.py), never as raw byte slices.
+    chunks = Base64AudioChunker(chunk_bytes=8).encode(b"abcdefgh")
 
-    assert [chunk.index for chunk in chunks] == [0, 1]
+    assert [chunk.index for chunk in chunks] == [0]
     assert [chunk.data_base64 for chunk in chunks] == [
-        base64.b64encode(b"abcd").decode("ascii"),
-        base64.b64encode(b"efgh").decode("ascii"),
+        base64.b64encode(b"abcdefgh").decode("ascii"),
     ]
 
 
