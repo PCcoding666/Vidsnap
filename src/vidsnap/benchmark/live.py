@@ -56,6 +56,7 @@ from vidsnap.runtime import (
     default_plugin_registry,
 )
 from vidsnap.tasks.base import TaskAdapter
+from vidsnap.video.audio import ASR_SEGMENT_SECONDS, AudioSegment, CompressedAudioFormat
 from vidsnap.video.probe import ExtractedFrame, MediaProbe
 from vidsnap.video.sampling import AdaptiveSampler, FrameCandidate
 
@@ -644,6 +645,18 @@ class FormalMediaPort(Protocol):
         end_seconds: float | None = None,
     ) -> Path:
         """Extract local audio bytes, optionally bounded by a time window."""
+
+    async def extract_audio_segments(
+        self,
+        source: Path,
+        output_dir: Path,
+        *,
+        start_seconds: float = 0.0,
+        end_seconds: float | None = None,
+        segment_seconds: float = ASR_SEGMENT_SECONDS,
+        audio_format: CompressedAudioFormat = "mp3",
+    ) -> list[AudioSegment]:
+        """Extract compressed audio segments; the benchmark's transcriber still gets WAV."""
 
 
 class BenchmarkUsage(StrictModel):

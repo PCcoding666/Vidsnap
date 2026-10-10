@@ -10,9 +10,26 @@ from dataclasses import dataclass
 from fractions import Fraction
 from pathlib import Path
 
+from vidsnap.video.audio import (
+    ASR_AUDIO_BITRATE_KBPS,
+    ASR_SAMPLE_RATE_HZ,
+    ASR_SEGMENT_SECONDS,
+    MIN_TAIL_SEGMENT_SECONDS,
+    AudioSegment,
+    CompressedAudioFormat,
+)
 from vidsnap.video.sampling import AdaptiveSampler, EvidenceSamplingPolicy, FrameCandidate
 
 _SCENE_TIMESTAMP = re.compile(r"pts_time:(?P<timestamp>\d+(?:\.\d+)?)")
+_LAME_ENCODER = re.compile(r"\blibmp3lame\b")
+# Per format: FFmpeg encoder, segment muxer format, and file extension.
+_COMPRESSED_AUDIO: dict[CompressedAudioFormat, tuple[str, str, str]] = {
+    "mp3": ("libmp3lame", "mp3", "mp3"),
+    "aac": ("aac", "adts", "aac"),
+}
+_SEGMENT_NAME = "segment-%03d"
+# Slack added when a short final segment is merged, so the merged cut falls after the end.
+_TAIL_MERGE_SLACK_SECONDS = 0.25
 
 
 class FFmpegError(RuntimeError):
@@ -89,6 +106,87 @@ def _perceptual_hash(frame: bytes) -> str:
     return f"{round(average):03d}-{bits_as_hex}"
 
 
+def choose_format(requested: CompressedAudioFormat, encoders: str) -> CompressedAudioFormat:
+    """MP3 when this FFmpeg build has the LAME encoder, otherwise AAC.
+
+    ``encoders`` is the output of ``ffmpeg -encoders``.
+    """
+    if requested == "mp3" and _LAME_ENCODER.search(encoders) is None:
+        return "aac"
+    return requested
+
+
+def audio_segment_command(
+    source: Path,
+    output_dir: Path,
+    *,
+    start_seconds: float,
+    end_seconds: float | None,
+    segment_seconds: float,
+    audio_format: CompressedAudioFormat,
+) -> list[str]:
+    """The argument array that cuts a source's audio into compressed mono segments.
+
+    Output is 16 kHz mono at ``ASR_AUDIO_BITRATE_KBPS``. Source metadata (title,
+    location, ...) is not copied into the files, because they are sent to a provider.
+    The segment list goes to stdout as CSV rows of ``name,start,end``.
+    """
+    encoder, segment_format, extension = _COMPRESSED_AUDIO[audio_format]
+    command = ["ffmpeg", "-y"]
+    if start_seconds > 0:
+        command.extend(["-ss", f"{start_seconds:.6f}"])
+    if end_seconds is not None:
+        command.extend(["-to", f"{end_seconds:.6f}"])
+    pattern = str(output_dir).replace("%", "%%") + f"/{_SEGMENT_NAME}.{extension}"
+    command.extend(
+        [
+            "-i",
+            str(source),
+            "-vn",
+            "-ac",
+            "1",
+            "-ar",
+            str(ASR_SAMPLE_RATE_HZ),
+            "-map_metadata",
+            "-1",
+            "-c:a",
+            encoder,
+            "-b:a",
+            f"{ASR_AUDIO_BITRATE_KBPS}k",
+            "-f",
+            "segment",
+            "-segment_time",
+            f"{segment_seconds:g}",
+            "-segment_format",
+            segment_format,
+            "-reset_timestamps",
+            "1",
+            "-segment_list",
+            "pipe:1",
+            "-segment_list_type",
+            "csv",
+            pattern,
+        ]
+    )
+    return command
+
+
+def _parse_segment_list(output: bytes) -> list[tuple[str, float, float]]:
+    """Parse FFmpeg's CSV segment list into ``(file name, start, end)`` rows."""
+    rows: list[tuple[str, float, float]] = []
+    for line in output.decode("utf-8", errors="replace").splitlines():
+        if not line.strip():
+            continue
+        try:
+            name, start, end = line.rsplit(",", 2)
+            rows.append((name, float(start), float(end)))
+        except ValueError as error:
+            raise FFmpegError(
+                f"ffmpeg wrote an unreadable segment list line: {line[:80]!r}"
+            ) from error
+    return rows
+
+
 class FFmpegMediaPort:
     """Run only local, argument-array FFmpeg commands for one source video."""
 
@@ -101,6 +199,7 @@ class FFmpegMediaPort:
         if sampler is not None and policy is not None:
             raise ValueError("provide either sampler or policy, not both")
         self.sampler = sampler or AdaptiveSampler(policy)
+        self._encoders: str | None = None
 
     async def probe(self, source: Path) -> MediaProbe:
         """Read video/audio metadata through ffprobe without evaluating input text."""
@@ -280,6 +379,76 @@ class FFmpegMediaPort:
         if not output_path.exists():
             raise FFmpegError("ffmpeg reported success without writing audio")
         return output_path
+
+    async def extract_audio_segments(
+        self,
+        source: Path,
+        output_dir: Path,
+        *,
+        start_seconds: float = 0.0,
+        end_seconds: float | None = None,
+        segment_seconds: float = ASR_SEGMENT_SECONDS,
+        audio_format: CompressedAudioFormat = "mp3",
+    ) -> list[AudioSegment]:
+        """Extract compressed 16 kHz mono audio as ordered, standalone segments.
+
+        The segments are cut by duration, at most about ``segment_seconds`` each, and
+        each is a complete file that decodes on its own. MP3 is used unless this
+        FFmpeg lacks the LAME encoder, in which case the files are ADTS AAC; each
+        returned segment says which. A final segment shorter than
+        ``MIN_TAIL_SEGMENT_SECONDS`` is merged into the others rather than returned.
+        """
+        if audio_format not in _COMPRESSED_AUDIO:
+            raise ValueError("audio_format must be 'mp3' or 'aac'")
+        if segment_seconds <= 0:
+            raise ValueError("segment_seconds must be positive")
+        if start_seconds < 0:
+            raise ValueError("start_seconds must be non-negative")
+        if end_seconds is not None and end_seconds <= start_seconds:
+            raise ValueError("end_seconds must be greater than start_seconds")
+        output_dir.mkdir(parents=True, exist_ok=True)
+        if audio_format == "mp3":
+            if self._encoders is None:
+                listing = await self._run("ffmpeg", "-hide_banner", "-encoders")
+                self._encoders = listing.decode("utf-8", errors="replace")
+            audio_format = choose_format(audio_format, self._encoders)
+
+        async def cut(length: float) -> list[tuple[str, float, float]]:
+            return _parse_segment_list(
+                await self._run(
+                    *audio_segment_command(
+                        source,
+                        output_dir,
+                        start_seconds=start_seconds,
+                        end_seconds=end_seconds,
+                        segment_seconds=length,
+                        audio_format=audio_format,
+                    )
+                )
+            )
+
+        rows = await cut(segment_seconds)
+        if len(rows) > 1 and rows[-1][2] - rows[-1][1] < MIN_TAIL_SEGMENT_SECONDS:
+            runt, total = rows[-1][0], rows[-1][2]
+            rows = await cut((total + _TAIL_MERGE_SLACK_SECONDS) / (len(rows) - 1))
+            if runt not in {name for name, _, _ in rows}:
+                (output_dir / runt).unlink(missing_ok=True)
+        if not rows:
+            raise FFmpegError("ffmpeg reported success without writing audio")
+        segments: list[AudioSegment] = []
+        for index, (name, _, _) in enumerate(rows):
+            path = output_dir / name
+            if not path.is_file():
+                raise FFmpegError(f"ffmpeg listed {name} but did not write it")
+            segments.append(
+                AudioSegment(
+                    path=path,
+                    index=index,
+                    audio_format=audio_format,
+                    size_bytes=path.stat().st_size,
+                )
+            )
+        return segments
 
     async def _motion_candidates(
         self,
