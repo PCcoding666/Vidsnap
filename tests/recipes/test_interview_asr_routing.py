@@ -18,6 +18,9 @@ from vidsnap.recipes import InterviewRecipeRunner
 from vidsnap.recipes import runner as runner_module
 from vidsnap.video.sampling import AdaptiveSampler
 
+_TEXT_CREDENTIAL = "text-credential-for-tests"
+_ASR_CREDENTIAL = "asr-credential-for-tests"
+
 
 class _SpyRecognizer:
     constructed: list[dict[str, Any]] = []
@@ -39,8 +42,8 @@ async def test_default_recognizer_is_built_with_the_asr_key_and_request_timeout(
     video.write_bytes(b"deterministic-local-interview-video-bytes")
     runner = InterviewRecipeRunner(
         config=HarnessConfig(
-            api_key="text-credential-for-tests",
-            asr_api_key="asr-credential-for-tests",
+            api_key=_TEXT_CREDENTIAL,
+            asr_api_key=_ASR_CREDENTIAL,
             request_timeout_seconds=77.0,
         ),
         media=FakeInterviewMedia(),
@@ -52,6 +55,4 @@ async def test_default_recognizer_is_built_with_the_asr_key_and_request_timeout(
 
     await runner.run(VideoSource(path=video), tmp_path / "out")
 
-    assert _SpyRecognizer.constructed == [
-        {"api_key": "asr-credential-for-tests", "timeout_seconds": 77.0}
-    ]
+    assert _SpyRecognizer.constructed == [{"api_key": _ASR_CREDENTIAL, "timeout_seconds": 77.0}]
