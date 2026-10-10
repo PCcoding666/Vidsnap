@@ -11,8 +11,8 @@
       "source": {
         "kind": "synthetic",
         "path": "synthetic/t2b-syn-01.mp4",
-        "sha256": "909d0212d0167efefeb3b14e58a850bcf9452096c787c7d4872a1479bd370ea8",
-        "bytes": 419063,
+        "sha256": "8590b4fac30837893a21f4971a0197632c972c348bb30ca0b337c8ada669ea54",
+        "bytes": 680051,
         "duration_seconds": 79.023,
         "licence": "CC0-1.0; generated locally by scripts/eval/make_synthetic_media.py (slides + macOS TTS); fictional content, no real people",
         "generator": "synthetic/t2b-syn-01.json",
@@ -300,8 +300,8 @@
       "source": {
         "kind": "synthetic",
         "path": "synthetic/t2b-syn-03.mp4",
-        "sha256": "6423ca333d939f6257a55a2120e448599ffa64f40e009e1efab2571aadeb1a34",
-        "bytes": 350974,
+        "sha256": "115b55ad777a1c553f2b64ab44c8f00babc77b4ebbad05a5e51ab0913abdd779",
+        "bytes": 561490,
         "duration_seconds": 69.023,
         "licence": "CC0-1.0; generated locally by scripts/eval/make_synthetic_media.py (slides + macOS TTS); fictional content, no real people",
         "generator": "synthetic/t2b-syn-03.json",

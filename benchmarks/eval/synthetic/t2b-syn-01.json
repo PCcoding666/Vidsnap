@@ -26,7 +26,7 @@
       "narration": "先说结论，我不认为会取代。我们团队用了一年，写代码确实快了，但代码评审的时间反而增加了大约百分之三十。",
       "duration_seconds": 15.0,
       "speaker": "嘉宾",
-      "voice": "Eddy"
+      "voice": "Eddy (Chinese (China mainland))"
     },
     {
       "lines": [
@@ -47,7 +47,7 @@
       "narration": "因为生成的代码看起来都对，但细节里经常藏着问题，评审的人要读得更仔细。所以我现在反而要求新人先学会读代码，再学会写提示词。",
       "duration_seconds": 17.5,
       "speaker": "嘉宾",
-      "voice": "Eddy"
+      "voice": "Eddy (Chinese (China mainland))"
     },
     {
       "lines": [
@@ -68,7 +68,7 @@
       "narration": "变了。面试里我们加了一道题，给候选人一段 AI 写的、有问题的代码，让他找出 bug。能找出来的人，往往上手最快。",
       "duration_seconds": 15.5,
       "speaker": "嘉宾",
-      "voice": "Eddy"
+      "voice": "Eddy (Chinese (China mainland))"
     },
     {
       "lines": [

@@ -33,6 +33,7 @@ FONT_CANDIDATES = (
     "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
 )
 LEAD_SECONDS = 0.4
+SILENCE_DB = -50.0
 TAIL_SECONDS = 0.3
 
 
@@ -81,6 +82,31 @@ def render_slide(lines: list[str], width: int, height: int, font_path: str, out:
 
 def tts(text: str, voice: str, out: Path) -> None:
     subprocess.run(["say", "-v", voice, "-o", str(out), text], check=True)
+
+
+def max_volume_db(path: Path) -> float:
+    """Peak level of a narration file; macOS writes silence for a voice that cannot read the text."""
+    completed = subprocess.run(
+        [
+            "ffmpeg",
+            "-hide_banner",
+            "-nostdin",
+            "-i",
+            str(path),
+            "-af",
+            "volumedetect",
+            "-f",
+            "null",
+            "-",
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    for line in completed.stderr.splitlines():
+        if "max_volume:" in line:
+            return float(line.split("max_volume:")[1].split("dB")[0])
+    return -100.0
 
 
 def duration(path: Path) -> float:
@@ -202,6 +228,12 @@ def build(spec_path: Path, media_root: Path, font: str, *, force: bool) -> dict[
             audio = work / f"slide-{index:02d}.aiff"
             render_slide(slide["lines"], spec["width"], spec["height"], font, png)
             tts(slide["narration"], slide.get("voice") or spec["voice"], audio)
+            voice = slide.get("voice") or spec["voice"]
+            if max_volume_db(audio) < SILENCE_DB:
+                raise SystemExit(
+                    f"{spec['id']} slide {index}: voice '{voice}' produced silence; use the full "
+                    "voice name (say -v '?'), for example 'Eddy (Chinese (China mainland))'"
+                )
             spoken = duration(audio)
             needed = spoken + LEAD_SECONDS + TAIL_SECONDS
             planned = slide["duration_seconds"]
