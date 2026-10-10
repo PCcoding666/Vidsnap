@@ -87,6 +87,33 @@ which the harness maps to a truthful `BLOCKED` terminal state. A live model
 response that is not a valid structured result raises `ProviderError` or
 `AgentDecisionFormatError`, mapped to `FAILED`.
 
+### Speech recognition
+
+Speech recognition is not part of `QwenProvider`. The built-in recognizer,
+`QwenAsrRecognizer`, runs `qwen3-asr-flash` and is built by `VideoHarness` and
+the interview recipe from the same `HarnessConfig`. Token Plan serves text
+models only, so it sends audio to a different endpoint than the text model:
+
+| | Text model (`QwenProvider`) | Speech recognizer |
+| --- | --- | --- |
+| Endpoint | Token Plan | public DashScope compatible mode (`https://dashscope.aliyuncs.com/compatible-mode/v1`) |
+| Key | `VIDSNAP_QWEN_API_KEY`, else `QWEN_API_KEY` | `VIDSNAP_ASR_API_KEY`, else the text-model key |
+| Timeout | `HarnessConfig.request_timeout_seconds` (120 s) | the same value |
+
+Both endpoints are constants in `vidsnap.config`. Neither is an argument or an
+environment variable, and `HarnessConfig.base_url` still accepts only the Token
+Plan URL. `QWEN_ASR_IDENTITY.base_url` is the speech endpoint; the run header
+records the recognizer's id and model only.
+
+Audio is sent as Base64 data URIs, never uploaded to object storage. Audio that
+fits in one chunk (7,000,000 bytes by default, about 9.3 MB once Base64-encoded,
+under the provider's documented 10 MB request limit) is sent unchanged. A
+longer PCM WAV file is cut on sample-frame boundaries, and every piece gets its
+own header with the original sample rate, channel count and bit depth, so each
+request carries a valid WAV file. Longer audio in any other format cannot be
+cut without a decoder, so the recognizer raises `ProviderError` (and uses the
+explicit `local_fallback`, if one was given).
+
 ### MockProvider
 
 MockProvider is deterministic offline. It takes no configuration, depends on
@@ -255,4 +282,5 @@ categorizes the failure by exception type. See the
   always produced by the reference model even when other providers exist for
   application runs.
 - Provider injection does not include speech recognition; ASR is a separate
-  port you pass explicitly.
+  port you pass explicitly, and the built-in one uses its own endpoint and key
+  (see [Speech recognition](#speech-recognition)).

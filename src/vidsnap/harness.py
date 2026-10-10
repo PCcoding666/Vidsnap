@@ -137,7 +137,10 @@ class VideoHarness:
                 else None
             )
             self._provider_identity = None
-            self.recognizer = recognizer or QwenAsrRecognizer(api_key=self.config.api_key)
+            self.recognizer = recognizer or QwenAsrRecognizer(
+                api_key=self.config.resolved_asr_api_key,
+                timeout_seconds=self.config.request_timeout_seconds,
+            )
             if self.recognizer is not recognizer:
                 self._default_recognizer = self.recognizer
         self.sampler = sampler or AdaptiveSampler()

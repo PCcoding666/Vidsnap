@@ -18,6 +18,42 @@ Keep a Changelog style.
   See [Task evaluation](eval.md). No released behaviour or trace semantics
   change.
 
+### Changed
+
+- Speech recognition now calls the public DashScope compatible-mode endpoint
+  (`https://dashscope.aliyuncs.com/compatible-mode/v1`) instead of Token Plan,
+  which serves text models only, so every run with audio failed at ASR with
+  `model_not_found`. The endpoint is a fixed constant
+  (`vidsnap.config.DASHSCOPE_ASR_BASE_URL`), not an argument or an environment
+  variable, and `QWEN_ASR_IDENTITY.base_url` reports it. The text model
+  (`qwen3.8-max`) stays on Token Plan, and `HarnessConfig.base_url` still
+  accepts only the Token Plan URL. **Action needed:** the ASR key is read from
+  `VIDSNAP_ASR_API_KEY`, falling back to `VIDSNAP_QWEN_API_KEY` and then
+  `QWEN_API_KEY`. Do not assume a Token Plan key is accepted by the public
+  endpoint; set `VIDSNAP_ASR_API_KEY` to a public DashScope key.
+  `HarnessConfig` gains `asr_api_key` and `resolved_asr_api_key`. The audio
+  of a run now goes to a second endpoint, which has its own data terms.
+- `Base64AudioChunker`'s default `chunk_bytes` is now 7,000,000 bytes instead
+  of 8 MiB. Base64 of 8 MiB is about 11.2 MB, over the 10 MB request limit the
+  provider documents for `qwen3-asr-flash`; 7,000,000 bytes encode to about
+  9.3 MB and are about 218 s of 16 kHz mono 16-bit audio. Audio between the two
+  sizes that used to go out as one request is now split in two.
+- A WAV file larger than the chunk limit that cannot be split (a format other
+  than PCM) and any other oversized audio now raise `ProviderError`; they used
+  to be sent as undecodable fragments.
+
+### Fixed
+
+- The ASR client had no explicit timeout, so httpx's 5 s default applied and
+  large Base64 request bodies failed with `write_timeout`. It now uses
+  `HarnessConfig.request_timeout_seconds` (120 s by default), like the text
+  client. `QwenAsrRecognizer` takes a new `timeout_seconds` argument.
+- `Base64AudioChunker` cut audio every 8 MiB, so every chunk after the first
+  had no WAV header (audio longer than about 262 s at 16 kHz mono 16-bit). A
+  PCM WAV file larger than the limit is now cut on sample-frame boundaries and
+  each chunk gets its own header with the input's sample rate, channels and
+  bit depth. Audio that fits is still sent unchanged.
+
 ## [0.1.1] - 2026-10-08
 
 Every run now leaves a trace that can be evaluated afterwards. All trace

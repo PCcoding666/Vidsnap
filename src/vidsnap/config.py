@@ -7,6 +7,10 @@ from dataclasses import dataclass, field
 from typing import Literal
 
 TOKEN_PLAN_BASE_URL = "https://token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode/v1"
+# Token Plan serves text models only, so speech recognition goes to the public DashScope
+# OpenAI-compatible endpoint. Like the Token Plan URL it is a fixed constant: no environment
+# variable, argument, or model output can select a different speech endpoint.
+DASHSCOPE_ASR_BASE_URL = "https://dashscope.aliyuncs.com/compatible-mode/v1"
 QWEN_MODEL = "qwen3.8-max"
 
 
@@ -19,6 +23,7 @@ class HarnessConfig:
     base_url: str = TOKEN_PLAN_BASE_URL
     model_concurrency: int = 1
     request_timeout_seconds: float = 120.0
+    asr_api_key: str | None = field(default=None, repr=False)
 
     def __post_init__(self) -> None:
         if self.model != QWEN_MODEL:
@@ -31,13 +36,23 @@ class HarnessConfig:
         if self.request_timeout_seconds <= 0:
             raise ValueError("request_timeout_seconds must be positive")
 
+    @property
+    def resolved_asr_api_key(self) -> str | None:
+        """The key for the public ASR endpoint: the dedicated ASR key, else the text key."""
+        return self.asr_api_key or self.api_key
+
     @classmethod
     def from_env(cls) -> HarnessConfig:
         """Read only the approved local key names and bounded concurrency setting."""
         api_key = os.getenv("VIDSNAP_QWEN_API_KEY") or os.getenv("QWEN_API_KEY")
+        asr_api_key = os.getenv("VIDSNAP_ASR_API_KEY") or None
         raw_concurrency = os.getenv("VIDSNAP_MODEL_CONCURRENCY", "1")
         try:
             requested_concurrency = int(raw_concurrency)
         except ValueError:
             requested_concurrency = 1
-        return cls(api_key=api_key, model_concurrency=max(1, min(2, requested_concurrency)))
+        return cls(
+            api_key=api_key,
+            asr_api_key=asr_api_key,
+            model_concurrency=max(1, min(2, requested_concurrency)),
+        )

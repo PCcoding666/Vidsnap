@@ -35,8 +35,10 @@ HTML trace to `vidsnap-demo/`.
 
 For a live run against your own local video you need Python >= 3.10, FFmpeg and
 ffprobe on PATH, and a provider key in `VIDSNAP_QWEN_API_KEY` (fallback
-`QWEN_API_KEY`). The commands below run from a source checkout — clone this
-repository and change into it, then install in editable mode:
+`QWEN_API_KEY`). Speech recognition for videos with audio has its own key,
+`VIDSNAP_ASR_API_KEY` (see Limitations). The commands below run from a source
+checkout — clone this repository and change into it, then install in editable
+mode:
 
     python -m pip install -e '.[server,dev]'
     vidsnap --help
@@ -50,6 +52,10 @@ repository and change into it, then install in editable mode:
 - The built-in provider targets only `qwen3.8-max` on Alibaba Cloud's
   Beijing endpoint and needs its key in `VIDSNAP_QWEN_API_KEY` (fallback
   `QWEN_API_KEY`); others injectable from code only.
+- The built-in speech recognizer (`qwen3-asr-flash`) calls the public DashScope
+  endpoint, not Token Plan (text models only), with `VIDSNAP_ASR_API_KEY`
+  (fallback: the text-model key, which may not be valid there). Details:
+  [providers](docs/providers.md#speech-recognition).
 - Live `vidsnap analyze` is experimental: verification made no live provider
   call; `vidsnap demo` is offline and needs no key.
 - Local video files only; FFmpeg/ffprobe required on PATH. No URLs/remote

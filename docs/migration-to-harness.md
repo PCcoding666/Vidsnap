@@ -6,6 +6,8 @@ Use vidsnap analyze or VideoHarness.run(...) for a single bounded run. CLI/SDK r
 
 The only approved model configuration is the fixed qwen3.8-max compatible endpoint. Set a rotated local VIDSNAP_QWEN_API_KEY (or QWEN_API_KEY) only when running a live benchmark. Never pass credentials in an HTTP request.
 
+Speech recognition (`qwen3-asr-flash`) is the one other fixed endpoint: the public DashScope compatible-mode endpoint, because Token Plan serves text models only. Its key is `VIDSNAP_ASR_API_KEY`, falling back to the key above.
+
 ## Current guarantees
 
 - Plugin trust boundary: only allow-listed, dependency-checked plugins run, and runs can never mutate them.
