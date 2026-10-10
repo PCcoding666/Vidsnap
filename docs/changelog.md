@@ -20,11 +20,36 @@ Keep a Changelog style.
 
 ### Changed
 
+- Speech recognition now uses `qwen-audio-3.1-asr-flash` instead of `qwen3-asr-flash`.
+  The model is not served in OpenAI-compatible mode (`/compatible-mode/v1` answers 404), so
+  `QwenAsrRecognizer` calls the native DashScope API:
+  `POST https://dashscope.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation`
+  with `input.messages[].content[].input_audio.data` (the Base64 data URI) and
+  `parameters.format` (`wav`, `mp3` or `aac`, from the segment's real MIME type; any other
+  MIME type is refused with a `validation` failure) plus `parameters.sample_rate`. The
+  transcript is `output.text`, falling back to `output.sentence.text`; a reply with neither
+  is an `invalid_response` failure. `language_hints` is omitted so the model detects the
+  language (checked live for Chinese and English). The endpoint and model remain fixed
+  constants. `vidsnap.config.DASHSCOPE_ASR_BASE_URL` is now
+  `https://dashscope.aliyuncs.com/api/v1`; the compatible-mode URL is
+  `DASHSCOPE_COMPATIBLE_BASE_URL`, used by the evaluation's chat models. `QWEN_ASR_MODEL` and
+  `QWEN_ASR_IDENTITY` report the new model and endpoint, so the run header's
+  `speech_recognizer.model` is `qwen-audio-3.1-asr-flash`. `QwenAsrRecognizer`, its
+  `transcribe(audio_bytes, mime_type=...)` port and its key variables are unchanged. The
+  request now lives in `QwenAudioAsrClient`, which the evaluation's `EvalAsrRecognizer`
+  reuses (it keeps its key variables and 300 s timeout) and which returns the provider's
+  `usage` (audio seconds, input and output tokens); `EvalAsrRecognizer` reports the tokens
+  in its `ProviderUsage`. The OpenAI-style ASR request code is removed. Transcript evidence
+  stays plain text: `Evidence.content` has no field for the sentence and word timestamps in
+  the reply, so they are not stored. The model is billed per token, not per second, so the
+  evaluator's example price table carries an unverified placeholder for it; see
+  [Task evaluation](eval.md#cost).
 - Speech recognition now sends compressed audio instead of Base64 WAV. The
   video port gains `extract_audio_segments`, which cuts the audio into
   standalone 16 kHz mono MP3 files at 48 kbps (ADTS AAC if FFmpeg has no LAME
   encoder), at most 240 s each, so duration rather than bytes is the limit
-  (`qwen3-asr-flash` takes 5 minutes and 10 MB per request). Each file is one
+  (`qwen3-asr-flash` took 5 minutes and 10 MB per request, and `qwen-audio-3.1-asr-flash`
+  documents 5 minutes and a 10 MB Base64 input). Each file is one
   request with its real MIME type (`audio/mpeg`) and the transcripts are
   joined with a newline, as before. This is about 5.3 times fewer bytes: 360 KB
   per minute instead of 1.9 MB, or about 480 KB against 2.6 MB once Base64. A
@@ -46,10 +71,9 @@ Keep a Changelog style.
   artifacts. A kept bundle now holds MP3 segments (about 22 MB per hour)
   instead of a WAV (about 115 MB per hour) when the built-in recognizer is
   used.
-- Speech recognition now calls the public DashScope compatible-mode endpoint
-  (`https://dashscope.aliyuncs.com/compatible-mode/v1`) instead of Token Plan,
-  which serves text models only, so every run with audio failed at ASR with
-  `model_not_found`. The endpoint is a fixed constant
+- Speech recognition now calls the public DashScope endpoint (its native API, see the first
+  entry) instead of Token Plan, which serves text models only, so every run with audio
+  failed at ASR with `model_not_found`. The endpoint is a fixed constant
   (`vidsnap.config.DASHSCOPE_ASR_BASE_URL`), not an argument or an environment
   variable, and `QWEN_ASR_IDENTITY.base_url` reports it. The text model
   (`qwen3.8-max`) stays on Token Plan, and `HarnessConfig.base_url` still

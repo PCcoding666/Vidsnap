@@ -52,8 +52,8 @@ mode:
 - The built-in provider targets only `qwen3.8-max` on Alibaba Cloud's
   Beijing endpoint and needs its key in `VIDSNAP_QWEN_API_KEY` (fallback
   `QWEN_API_KEY`); others injectable from code only.
-- The built-in speech recognizer (`qwen3-asr-flash`) calls the public DashScope
-  endpoint, not Token Plan (text models only), with `VIDSNAP_ASR_API_KEY`
+- The built-in speech recognizer (`qwen-audio-3.1-asr-flash`) calls the public
+  DashScope native API, not Token Plan (text models only), with `VIDSNAP_ASR_API_KEY`
   (fallback: the text-model key, which may not be valid there). Details:
   [providers](docs/providers.md#speech-recognition).
 - Live `vidsnap analyze` is experimental: verification made no live provider

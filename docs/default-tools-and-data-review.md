@@ -20,7 +20,7 @@ Fixed 模式按 transcribe_audio 先于 sample_evidence（先语音后视觉）�
 
 ## 本地输入选择与出站模型处理
 
-并非所有处理都在本地完成。工具的输入选择发生在本地，但根据配置的 Qwen 端口与路径，以下内容可随请求发送到固定配置的 Qwen 端点（文本模型使用 Token Plan 端点，语音识别使用公共 DashScope 端点 `https://dashscope.aliyuncs.com/compatible-mode/v1`）：
+并非所有处理都在本地完成。工具的输入选择发生在本地，但根据配置的 Qwen 端口与路径，以下内容可随请求发送到固定配置的 Qwen 端点（文本模型使用 Token Plan 端点，语音识别使用公共 DashScope 原生 API 端点 `https://dashscope.aliyuncs.com/api/v1`）：
 
 - transcribe_audio 提取的音频，以 Base64 形式包含在 ASR 请求中，发送到公共 DashScope 端点（不是 Token Plan 端点）；
 - sample_evidence 选出的视觉帧；
