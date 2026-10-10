@@ -22,7 +22,7 @@ from vidsnap.eval.systems import BuildOptions, parse_system
 from vidsnap.trace.run_index import read_index
 
 TASKS = ("t1", "t2a", "t2b", "t3")
-FAKE_KEY = "sk-eval-test-0000-not-a-real-key"
+FAKE_KEY = "fake-eval-credential-for-leak-test"
 
 
 def events(bundle: Path) -> list[dict[str, Any]]:
