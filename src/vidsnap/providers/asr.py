@@ -9,12 +9,14 @@ from typing import Protocol
 
 import httpx
 
-from vidsnap.config import TOKEN_PLAN_BASE_URL
+from vidsnap.config import DASHSCOPE_ASR_BASE_URL
 from vidsnap.providers.base import ProviderError, ProviderIdentity, ProviderUnavailable
 from vidsnap.providers.failures import http_failure, invalid_response_failure
 
 QWEN_ASR_MODEL = "qwen3-asr-flash"
-QWEN_ASR_IDENTITY = ProviderIdentity(id="qwen", model=QWEN_ASR_MODEL, base_url=TOKEN_PLAN_BASE_URL)
+QWEN_ASR_IDENTITY = ProviderIdentity(
+    id="qwen", model=QWEN_ASR_MODEL, base_url=DASHSCOPE_ASR_BASE_URL
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -54,7 +56,11 @@ class SpeechRecognizer(Protocol):
 
 
 class QwenAsrRecognizer:
-    """Use the fixed Qwen ASR model with Base64 data-URI messages."""
+    """Use the fixed Qwen ASR model with Base64 data-URI messages.
+
+    Requests go to the fixed public DashScope endpoint, never to Token Plan, which
+    serves text models only. The endpoint is not a parameter.
+    """
 
     def __init__(
         self,
@@ -63,8 +69,12 @@ class QwenAsrRecognizer:
         chunker: Base64AudioChunker | None = None,
         local_fallback: SpeechRecognizer | None = None,
         transport: httpx.AsyncBaseTransport | None = None,
+        timeout_seconds: float = 120.0,
     ) -> None:
+        if timeout_seconds <= 0:
+            raise ValueError("timeout_seconds must be positive")
         self._api_key = api_key
+        self._timeout_seconds = timeout_seconds
         self._chunker = chunker or Base64AudioChunker()
         self._local_fallback = local_fallback
         self._transport = transport
@@ -80,13 +90,17 @@ class QwenAsrRecognizer:
 
     async def _transcribe_with_qwen(self, audio_bytes: bytes, *, mime_type: str) -> str:
         if not self._api_key:
-            raise ProviderUnavailable("No local Qwen key is configured; ASR is blocked.")
+            raise ProviderUnavailable(
+                "No local ASR key is configured (VIDSNAP_ASR_API_KEY, else "
+                "VIDSNAP_QWEN_API_KEY or QWEN_API_KEY); ASR is blocked."
+            )
         chunks = self._chunker.encode(audio_bytes)
         if not chunks:
             return ""
         texts: list[str] = []
         async with httpx.AsyncClient(
-            base_url=f"{TOKEN_PLAN_BASE_URL}/",
+            base_url=f"{DASHSCOPE_ASR_BASE_URL}/",
+            timeout=self._timeout_seconds,
             transport=self._transport,
         ) as client:
             for chunk in chunks:

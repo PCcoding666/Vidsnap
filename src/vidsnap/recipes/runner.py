@@ -125,7 +125,10 @@ class InterviewRecipeRunner:
                     timeout_seconds=config.request_timeout_seconds,
                 )
                 recognizer = self._recognizer or SpeechRecognizerAdapter(
-                    QwenAsrRecognizer(api_key=config.api_key)
+                    QwenAsrRecognizer(
+                        api_key=config.resolved_asr_api_key,
+                        timeout_seconds=config.request_timeout_seconds,
+                    )
                 )
                 provider_identity = None
                 header_provider = (
