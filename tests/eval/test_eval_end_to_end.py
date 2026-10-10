@@ -251,6 +251,25 @@ async def test_live_harness_path_is_traced_priced_and_never_leaks_the_key(
     assert record["stages"]["losses"]["lost_at_asr"] == 2
     assert record["stages"]["asr_upload_bytes"] > 0
     assert record["stages"]["model_request_bytes"] > 0
+    # The harness sent compressed segments, and the trace records what was sent.
+    from vidsnap.eval.adapters import _FAKE_COMPRESSED_AUDIO
+
+    bundle_path = Path(record["bundle_path"])
+    assert [
+        file.suffix
+        for file in (bundle_path / "artifacts").rglob("*")
+        if file.is_file() and file.suffix in {".wav", ".mp3", ".aac"}
+    ] == [".mp3"]
+    sent = len(_FAKE_COMPRESSED_AUDIO)
+    assert record["stages"]["asr_upload_bytes"] == 4 * ((sent + 2) // 3)
+    (asr_phase,) = [
+        e
+        for e in events(bundle_path)
+        if e["phase"] == "transcribe_audio" and "audio_format" in e["payload"]
+    ]
+    assert asr_phase["payload"]["audio_format"] == "mp3"
+    assert asr_phase["payload"]["audio_segments"] == 1
+    assert asr_phase["payload"]["audio_bytes"] == sent
     header = next(
         e for e in events(Path(record["bundle_path"])) if e.get("event_type") == "run.started"
     )

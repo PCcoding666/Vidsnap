@@ -235,3 +235,110 @@ def test_default_tool_plugins_are_exactly_the_two_model_visible_tools() -> None:
         assert plugin.manifest.id == f"vidsnap.tool.{plugin.name}"
         result = ToolResult(status="completed")
         assert result.usage.reported is False
+
+
+class FakeSegmentMedia:
+    """A port that cuts each window into two MP3 segments and can also write one WAV."""
+
+    def __init__(self) -> None:
+        self.segment_requests: list[tuple[float, float | None]] = []
+        self.wav_requests: list[tuple[float, float | None]] = []
+
+    async def extract_audio(self, source, output_path, *, start_seconds=0.0, end_seconds=None):
+        del source
+        self.wav_requests.append((start_seconds, end_seconds))
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_bytes(b"wav-audio")
+        return output_path
+
+    async def extract_audio_segments(
+        self, source, output_dir, *, start_seconds=0.0, end_seconds=None, **options
+    ):
+        del source, options
+        from vidsnap.video.audio import AudioSegment
+
+        self.segment_requests.append((start_seconds, end_seconds))
+        output_dir.mkdir(parents=True, exist_ok=True)
+        segments = []
+        for index, payload in enumerate((b"mp3-one", b"mp3-two!")):
+            path = output_dir / f"segment-{index:03d}.mp3"
+            path.write_bytes(payload)
+            segments.append(AudioSegment(path, index, "mp3", len(payload)))
+        return segments
+
+
+class CompressedPort(FakeTranscriptionPort):
+    accepts_compressed_audio = True
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.texts = iter(["first half", "second half"])
+
+    async def transcribe(self, audio_bytes: bytes, *, mime_type: str = "audio/wav"):
+        self.calls.append((audio_bytes, mime_type))
+        return TranscriptionResponse(text=next(self.texts), usage=ProviderUsage(model_calls=1))
+
+
+@pytest.mark.asyncio
+async def test_transcribe_tool_sends_each_compressed_segment_in_order_and_joins_the_text(
+    tmp_path,
+) -> None:
+    media = FakeSegmentMedia()
+    recognizer = CompressedPort()
+    context = make_context(tmp_path, media=media, recognizer=recognizer)
+
+    result = await TranscribeAudioPlugin().execute(
+        TranscribeAudioArgs(windows=({"start_seconds": 1, "end_seconds": 9},)), context
+    )
+
+    assert result.status == "completed"
+    assert media.segment_requests == [(1.0, 9.0)] and media.wav_requests == []
+    assert recognizer.calls == [(b"mp3-one", "audio/mpeg"), (b"mp3-two!", "audio/mpeg")]
+    (transcript,) = context.evidence_sink.items
+    assert transcript.content == "first half\nsecond half"
+    assert (transcript.start_seconds, transcript.end_seconds) == (1.0, 9.0)
+    assert result.usage.model_calls == 2
+    assert result.summary == {
+        "transcript_count": 1,
+        "character_count": len("first half\nsecond half"),
+        "audio_format": "mp3",
+        "audio_segments": 2,
+        "audio_bytes": len(b"mp3-one") + len(b"mp3-two!"),
+        "audio_segment_seconds": 240.0,
+    }
+    assert sorted(path.name for path in (tmp_path / "artifacts").rglob("*.mp3")) == [
+        "segment-000.mp3",
+        "segment-001.mp3",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_transcribe_tool_keeps_wav_for_recognizers_that_do_not_take_compressed_audio(
+    tmp_path,
+) -> None:
+    media = FakeSegmentMedia()
+    recognizer = FakeTranscriptionPort()  # does not declare accepts_compressed_audio
+    context = make_context(tmp_path, media=media, recognizer=recognizer)
+
+    result = await TranscribeAudioPlugin().execute(TranscribeAudioArgs(), context)
+
+    assert media.segment_requests == [] and media.wav_requests == [(0.0, 10.0)]
+    assert recognizer.calls == [(b"wav-audio", "audio/wav")]
+    assert result.summary["audio_format"] == "wav"
+    assert result.summary["audio_bytes"] == len(b"wav-audio")
+    assert result.summary["audio_segment_seconds"] is None
+
+
+@pytest.mark.asyncio
+async def test_speech_recognizer_adapter_forwards_the_compressed_audio_declaration() -> None:
+    from vidsnap.plugins.base import SpeechRecognizerAdapter
+
+    class Plain:
+        async def transcribe(self, audio_bytes: bytes, *, mime_type: str = "audio/wav") -> str:
+            return ""
+
+    class Compressed(Plain):
+        accepts_compressed_audio = True
+
+    assert SpeechRecognizerAdapter(Plain()).accepts_compressed_audio is False
+    assert SpeechRecognizerAdapter(Compressed()).accepts_compressed_audio is True

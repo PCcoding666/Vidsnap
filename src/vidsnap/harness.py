@@ -43,7 +43,8 @@ from vidsnap.skills import register_builtin_skills
 from vidsnap.skills.base import SkillRegistry
 from vidsnap.tasks.base import TaskVerification
 from vidsnap.tasks.video_analysis import VideoAnalysisTaskAdapter
-from vidsnap.video.ports import FFmpegPort
+from vidsnap.video.audio import audio_trace_summary
+from vidsnap.video.ports import FFmpegPort, extract_asr_audio
 from vidsnap.video.probe import ExtractedFrame, FFmpegMediaPort, MediaProbe
 from vidsnap.video.sampling import AdaptiveSampler, FrameCandidate
 
@@ -422,14 +423,28 @@ class VideoHarness:
         if context.probe is None or not context.probe.has_audio or context.recognizer is None:
             context.bundle.append_event("transcribe_audio", {"status": "skipped"})
             return
-        extract_audio = getattr(context.media, "extract_audio", None)
-        if extract_audio is None:
+        if (
+            getattr(context.media, "extract_audio", None) is None
+            and getattr(context.media, "extract_audio_segments", None) is None
+        ):
             context.bundle.append_event("transcribe_audio", {"status": "unsupported_media_port"})
             return
-        audio_path = await extract_audio(
-            context.source.path, context.bundle.path / "artifacts" / "audio.wav"
+        artifacts = context.bundle.path / "artifacts"
+        segments = await extract_asr_audio(
+            context.media,
+            context.source.path,
+            artifacts / "audio",
+            artifacts / "audio.wav",
+            compressed=bool(getattr(context.recognizer, "accepts_compressed_audio", False)),
         )
-        transcript = await context.recognizer.transcribe(audio_path.read_bytes())
+        texts = [
+            await context.recognizer.transcribe(
+                segment.path.read_bytes(), mime_type=segment.mime_type
+            )
+            for segment in segments
+        ]
+        transcript = "\n".join(texts)
+        sent = audio_trace_summary(segments)
         if transcript:
             evidence = Evidence(
                 id=f"asr-{context.controller.iterations}",
@@ -440,9 +455,9 @@ class VideoHarness:
             )
             context.bundle.write_evidence(evidence)
             context.evidence.append(evidence)
-            context.bundle.append_event("transcribe_audio", {"status": "captured"})
+            context.bundle.append_event("transcribe_audio", {"status": "captured", **sent})
         else:
-            context.bundle.append_event("transcribe_audio", {"status": "empty"})
+            context.bundle.append_event("transcribe_audio", {"status": "empty", **sent})
 
     async def _sample_evidence(self, context: _RunContext) -> None:
         if context.probe is None:

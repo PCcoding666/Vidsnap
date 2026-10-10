@@ -480,11 +480,15 @@ class EvalAsrRecognizer:
     ``Base64AudioChunker`` sends audio that fits in one chunk unchanged and
     cuts longer PCM WAV audio into standalone WAV files, 7,000,000 bytes at
     most each by default, so the evaluation measures the harness component as
-    it is. Only two things differ: the key comes from the evaluation's own
-    variables (``VIDSNAP_DASHSCOPE_API_KEY``, ``DASHSCOPE_API_KEY``) rather
+    it is. The harness sends MP3 segments cut by duration (this recognizer
+    declares ``accepts_compressed_audio``); the chunker sends each whole with
+    its MIME type. Only two things differ: the key comes from the evaluation's
+    own variables (``VIDSNAP_DASHSCOPE_API_KEY``, ``DASHSCOPE_API_KEY``) rather
     than ``VIDSNAP_ASR_API_KEY``, and the default timeout is 300 s instead
     of 120 s.
     """
+
+    accepts_compressed_audio = True
 
     def __init__(
         self,
@@ -510,7 +514,7 @@ class EvalAsrRecognizer:
     ) -> TranscriptionResponse:
         if not self._api_key:
             raise ProviderUnavailable(f"no key configured for the {self._endpoint.name} endpoint")
-        chunks = self._chunker.encode(audio_bytes)
+        chunks = self._chunker.encode(audio_bytes, mime_type=mime_type)
         texts: list[str] = []
         async with httpx.AsyncClient(
             base_url=f"{self._endpoint.base_url}/", timeout=self._timeout, transport=self._transport
