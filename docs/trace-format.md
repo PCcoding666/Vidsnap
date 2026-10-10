@@ -69,6 +69,9 @@ The input is hashed before the run's wall-clock budget starts, so hashing time
 is not counted in the run's budget or in its recorded duration. The provider
 is known for the built-in Qwen stack and for any port that declares a
 `ProviderIdentity`; the redacted provider URL stays in `manifest.json`.
+That URL is the text model's. The speech recognizer's endpoint is not
+recorded in the trace; the built-in recognizer always uses the fixed public
+DashScope endpoint, not the text model's Token Plan endpoint.
 Exported HTML traces never show `provider` or `speech_recognizer`.
 
 The input's duration comes from the probe, which runs after `run.started`. It
