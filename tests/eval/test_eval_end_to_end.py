@@ -326,3 +326,20 @@ async def test_regrade_recomputes_from_bundles_without_model_calls(tmp_path: Pat
         assert record["stages"]["model_request_bytes"] >= 0
         assert record["stages"]["asr_upload_bytes"] == 0  # mock recognizer uploads nothing
     assert "regraded_at" in regraded
+
+
+def test_example_price_table_prices_the_asr_model_and_flags_it_unverified() -> None:
+    from vidsnap.eval.costs import estimate_cost
+    from vidsnap.providers.asr import QWEN_ASR_MODEL
+
+    example = Path(__file__).parents[2] / "benchmarks" / "eval" / "price-table.example.json"
+    prices = load_eval_prices(example)
+
+    asr_price = prices.table.models[QWEN_ASR_MODEL]
+    assert QWEN_ASR_MODEL == "qwen-audio-3.1-asr-flash"
+    assert asr_price.speech_per_second is not None and asr_price.speech_per_second > 0
+    # The old model keeps its verified price so bundles recorded with it can still be priced.
+    assert prices.table.models["qwen3-asr-flash"].speech_per_second == 0.00022
+    assert "UNVERIFIED" in prices.table.source and QWEN_ASR_MODEL in prices.table.source
+    # The planning estimate looks up the current ASR model by default, so it is not None.
+    assert estimate_cost("harness", "qwen3.8-omni-flash", 60.0, True, prices) is not None

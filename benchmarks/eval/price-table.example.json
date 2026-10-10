@@ -1,7 +1,7 @@
 {
   "schema_version": "vidsnap.eval-price-table/v1",
   "currency": "CNY",
-  "source": "Alibaba Cloud Model Studio (Bailian) model-market list prices, China (Beijing) region, standard tier, per million tokens; ASR per second of audio. Example only: check current prices and any discounts or Token Plan quota before relying on it.",
+  "source": "Alibaba Cloud Model Studio (Bailian) model-market list prices, China (Beijing) region, standard tier, per million tokens; ASR per second of audio. Example only: check current prices and any discounts or Token Plan quota before relying on it. UNVERIFIED: the qwen-audio-3.1-asr-flash entry copies the qwen3-asr-flash per-second price as a placeholder upper bound. The model is billed per token (list 0.8 input / 2.7 output CNY per million tokens, Beijing), which speech_per_second cannot express; measured token use implies roughly 0.00002 to 0.00003 CNY per second.",
   "checked_on": "2026-10-10",
   "models": {
     "qwen3.8-max": {"input_per_million_tokens": 12, "output_per_million_tokens": 36},
@@ -12,6 +12,7 @@
       "audio_input_per_million_tokens": 53,
       "output_per_million_tokens": 40
     },
+    "qwen-audio-3.1-asr-flash": {"speech_per_second": 0.00022},
     "qwen3-asr-flash": {"speech_per_second": 0.00022}
   }
 }
