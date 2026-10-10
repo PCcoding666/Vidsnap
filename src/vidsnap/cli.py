@@ -14,6 +14,7 @@ from vidsnap.benchmark.trust import TrustEvaluationInput, evaluate_trust
 from vidsnap.config import HarnessConfig
 from vidsnap.contracts import HarnessPolicy, TerminalState, VideoGoal, VideoSource
 from vidsnap.demo import replay_demo_run
+from vidsnap.eval.cli import eval_app
 from vidsnap.harness import VideoHarness
 from vidsnap.plugins import PluginRegistry, ToolPlugin, discovery
 from vidsnap.plugins.project import validate_plugin_project
@@ -46,6 +47,7 @@ plugin_app = typer.Typer(help="Validate and test local plugin projects.")
 app.add_typer(plugin_app, name="plugin")
 runs_app = typer.Typer(help="List and review runs in the local run index.")
 app.add_typer(runs_app, name="runs")
+app.add_typer(eval_app, name="eval")
 
 
 _RUNS_ROOT_HELP = (
