@@ -234,8 +234,12 @@ def _figures(
     frames = _mock_moments(evidence, duration, count)
     if frames:
         return [
-            Figure(timestamp_seconds=frame.start_seconds, caption=caption, evidence_id=frame.id)
-            for frame in frames
+            Figure(
+                timestamp_seconds=frames[index % len(frames)].start_seconds,
+                caption=caption,
+                evidence_id=frames[index % len(frames)].id,
+            )
+            for index in range(count)
         ]
     return [
         Figure(timestamp_seconds=time, caption=caption) for time in _mock_times(duration, count)

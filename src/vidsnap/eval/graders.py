@@ -76,9 +76,9 @@ def grade_questions(
         unused.remove(index)
         question = predicted[index]
         matched += 1
-        answer_ok = matches(normalize(question.correct_answer), reference.answer_match)
-        mistake_text = normalize("\n".join([question.common_mistake, *question.solution_steps]))
-        mistake_ok = matches(mistake_text, reference.mistake_match)
+        answer_ok = matches_math(question.correct_answer, reference.answer_match)
+        mistake_text = "\n".join([question.common_mistake, *question.solution_steps])
+        mistake_ok = matches_math(mistake_text, reference.mistake_match)
         start, end = reference.window
         time_ok = (
             start - _QUESTION_TIME_TOLERANCE
