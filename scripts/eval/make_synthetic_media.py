@@ -204,8 +204,9 @@ def build(spec_path: Path, media_root: Path, font: str, *, force: bool) -> dict[
             tts(slide["narration"], slide.get("voice") or spec["voice"], audio)
             spoken = duration(audio)
             needed = spoken + LEAD_SECONDS + TAIL_SECONDS
-            if needed > slide["duration_seconds"]:
-                too_long.append(f"slide {index}: needs {needed:.1f} s > {slide['duration_seconds']}")
+            planned = slide["duration_seconds"]
+            if needed > planned:
+                too_long.append(f"slide {index}: needs {needed:.1f} s > {planned}")
                 continue
             clip = work / f"segment-{index:02d}.mp4"
             segment(png, audio, float(slide["duration_seconds"]), clip)
