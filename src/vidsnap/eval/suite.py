@@ -147,6 +147,7 @@ class ReferenceQuestion(StrictModel):
     stem_match: Groups
     answer: str = Field(min_length=1)
     answer_match: Groups
+    answer_option: str | None = Field(default=None, pattern=r"^[A-Z]$")
     mistake: str = Field(min_length=1)
     mistake_match: Groups
     window: tuple[float, float]

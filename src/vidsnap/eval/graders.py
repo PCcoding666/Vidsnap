@@ -6,6 +6,8 @@ against the item's reference; metrics whose reference is missing are ``None``.
 
 from __future__ import annotations
 
+import re
+import unicodedata
 from collections.abc import Sequence
 from statistics import mean
 from typing import Any
@@ -49,6 +51,13 @@ def _ratio(hits: dict[str, bool]) -> float | None:
     return round(sum(1 for hit in hits.values() if hit) / len(hits), 4)
 
 
+def option_chosen(answer: str, option: str) -> bool:
+    """True when a multiple-choice answer names ``option`` (``C``, ``C.``, ``选 C`` ...)."""
+    text = unicodedata.normalize("NFKC", answer).strip().upper()
+    pattern = rf"^(选|答案)?\s*[:：]?\s*[(（]?{option}([)）.、:：,，\s]|$)|选\s*{option}(?![A-Z])"
+    return re.search(pattern, text) is not None
+
+
 def _question_text(question: WrongQuestion) -> str:
     return "\n".join([question.stem, *question.options])
 
@@ -76,7 +85,10 @@ def grade_questions(
         unused.remove(index)
         question = predicted[index]
         matched += 1
-        answer_ok = matches_math(question.correct_answer, reference.answer_match)
+        answer_ok = matches_math(question.correct_answer, reference.answer_match) or (
+            reference.answer_option is not None
+            and option_chosen(question.correct_answer, reference.answer_option)
+        )
         mistake_text = "\n".join([question.common_mistake, *question.solution_steps])
         mistake_ok = matches_math(mistake_text, reference.mistake_match)
         start, end = reference.window

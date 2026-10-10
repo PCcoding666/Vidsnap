@@ -249,3 +249,37 @@ def test_mock_outputs_are_schema_valid_and_prompts_carry_inputs(task_id: str) ->
     assert "完整的视频" in native and "evidence" not in native.split("JSON 结构如下")[0]
     if task_id == "t3":
         assert isinstance(output, LessonOutput)
+
+
+@pytest.mark.parametrize(
+    ("answer", "chosen"),
+    [
+        ("C", True),
+        ("C. have lived", True),
+        ("选 C", True),
+        ("答案：C", True),
+        ("（C）没有实数根", True),
+        ("Cl2", False),
+        ("B", False),
+        ("x = 2", False),
+    ],
+)
+def test_multiple_choice_answers_accept_the_option_letter(answer: str, chosen: bool) -> None:
+    from vidsnap.eval.graders import option_chosen
+
+    assert option_chosen(answer, "C") is chosen
+    reference = [
+        ReferenceQuestion(
+            id="q5",
+            stem="几个实数根",
+            stem_match=[["实数根"]],
+            answer="没有实数根，选 C",
+            answer_match=[["没有实数根"]],
+            answer_option="C",
+            mistake="漏掉 4",
+            mistake_match=[["4"]],
+            window=(0, 30),
+        )
+    ]
+    graded = grade_questions(reference, [wrong_question("有几个实数根", answer, "漏掉4", 10)])
+    assert graded["answer_accuracy"] == (1.0 if chosen else 0.0)

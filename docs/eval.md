@@ -49,7 +49,7 @@ One JSON file per task in `benchmarks/eval/suites/`. Each item:
 | `reference.key_moments` | Timestamps (with tolerance) a figure, scene or claim should point at |
 | `reference.entities` | Exact strings (names, numbers, formulas) that must be spelled correctly |
 | `reference.forbidden` | Statements that would be hallucinations for this video |
-| `reference.questions` | `t3` only: the wrong questions, their answers and the mistake explained |
+| `reference.questions` | `t3` only: the wrong questions, their answers (with `answer_option` for multiple choice, so `C` counts) and the mistake explained |
 
 The media root defaults to `benchmarks/eval/media/` (git-ignored) and can be set
 with `--media-root` or `VIDSNAP_EVAL_MEDIA_ROOT`. A source whose bytes do not match
