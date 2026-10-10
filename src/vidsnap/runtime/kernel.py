@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING, Generic, TypeVar
 
 from pydantic import JsonValue, ValidationError
 
+from vidsnap._async import settle_task
 from vidsnap.contracts import Evidence, TerminalState
 from vidsnap.contracts.agent import AgentDecision, ProviderUsage
 from vidsnap.contracts.loopspec import default_loop_spec
@@ -27,7 +28,14 @@ from vidsnap.providers.base import (
     AgentDecisionResponse,
     AgentStepRequest,
     ProviderError,
+    ProviderFailure,
     ProviderUnavailable,
+)
+from vidsnap.runtime.call_review import (
+    model_request_review,
+    sanitize_review_value,
+    tool_result_review,
+    tool_start_review,
 )
 from vidsnap.runtime.context import RunContext
 from vidsnap.tasks.base import TaskVerification
@@ -70,11 +78,13 @@ class HarnessKernel(Generic[OutputT, ModelT]):
         self._max_repair_rounds = default_loop_spec().max_repair_rounds
         self._repair_rounds = 0
         self._started_at: float | None = None
+        self._deadline_expired = False
 
     async def run(self, context: RunContext[OutputT, ModelT]) -> KernelRunResult[OutputT]:
         """Drive one run to a truthful terminal state with exactly one finalization."""
         self._repair_rounds = 0
         self._started_at = self._clock()
+        self._deadline_expired = False
         run_span = context.trace.start(
             "run",
             phase="run",
@@ -82,9 +92,18 @@ class HarnessKernel(Generic[OutputT, ModelT]):
         )
         failure_reason: str | None = None
         terminal_state: TerminalState | None = None
+        execution = asyncio.create_task(self._policy.execute(context, self))
+
+        def expire() -> None:
+            self._deadline_expired = True
+            execution.cancel()
+
+        deadline = asyncio.get_running_loop().call_later(context.policy.max_wall_seconds, expire)
         try:
-            await self._policy.execute(context, self)
+            await asyncio.shield(execution)
         except asyncio.CancelledError:
+            deadline.cancel()
+            await settle_task(execution, cancel=not self._deadline_expired)
             terminal_state = TerminalState.FAILED
             failure_reason = "cancelled"
         except BudgetExceeded as exc:
@@ -99,6 +118,12 @@ class HarnessKernel(Generic[OutputT, ModelT]):
         except Exception:
             terminal_state = TerminalState.FAILED
             failure_reason = "unexpected kernel error"
+        finally:
+            deadline.cancel()
+
+        if self._deadline_expired:
+            terminal_state = TerminalState.EXHAUSTED
+            failure_reason = "wall-clock budget exceeded"
 
         if terminal_state is None:
             terminal_state = context.terminal_state
@@ -140,8 +165,8 @@ class HarnessKernel(Generic[OutputT, ModelT]):
         span = context.trace.start("probe", phase="probe_media")
         try:
             probe = await context.media.probe(context.source.path)
-        except BaseException:
-            context.trace.finish(span, status="failed")
+        except BaseException as error:
+            context.trace.finish(span, status="failed", payload=self._failure_payload(error))
             raise
         context.probe = probe
         context.trace.finish(
@@ -232,7 +257,15 @@ class HarnessKernel(Generic[OutputT, ModelT]):
         context.call_fingerprints.add(fingerprint)
 
         context.tool_calls += 1
-        span = context.trace.start("tool.call", phase=name, payload={"name": name})
+        span = context.trace.start(
+            "tool.call",
+            phase=name,
+            payload={
+                "name": name,
+                "call_review": tool_start_review(validated.model_dump(mode="json")),
+            },
+            parent_event_id=context.last_agent_decision_event_id,
+        )
         try:
             execution = ToolExecutionContext(
                 source_path=context.source.path,
@@ -246,7 +279,10 @@ class HarnessKernel(Generic[OutputT, ModelT]):
             result = await plugin.execute(validated, execution)
         except BaseException as error:
             context.trace.finish(
-                span, status="failed", payload={"name": name}, usage=_error_usage(error)
+                span,
+                status="failed",
+                payload={"name": name, **self._failure_payload(error)},
+                usage=_error_usage(error),
             )
             self._emit_budget(context)
             raise
@@ -254,7 +290,15 @@ class HarnessKernel(Generic[OutputT, ModelT]):
             context.trace.finish(span, status="failed", payload={"name": name})
             self._emit_budget(context)
             raise BudgetExceeded("evidence-frame budget exceeded")
-        context.trace.finish(span, status=result.status, payload={"name": name}, usage=result.usage)
+        context.trace.finish(
+            span,
+            status=result.status,
+            payload={
+                "name": name,
+                "call_review": tool_result_review(result.evidence_ids, result.summary),
+            },
+            usage=result.usage,
+        )
         evidence_ids: list[JsonValue] = []
         evidence_ids.extend(result.evidence_ids)
         context.tool_result_summaries.append(
@@ -265,7 +309,9 @@ class HarnessKernel(Generic[OutputT, ModelT]):
                 "summary": _redact(result.summary),
             }
         )
-        self._complete_phase(context, name, {"status": result.status, **_redact(result.summary)})
+        sanitized_summary = sanitize_review_value(dict(result.summary))
+        assert isinstance(sanitized_summary, dict)
+        self._complete_phase(context, name, {"status": result.status, **sanitized_summary})
         self._emit_budget(context)
         return result
 
@@ -284,7 +330,14 @@ class HarnessKernel(Generic[OutputT, ModelT]):
         span = context.trace.start(
             "model.request",
             phase="synthesize_result",
-            payload={"task": type(context.task_adapter).__name__},
+            payload={
+                "task": type(context.task_adapter).__name__,
+                "call_review": model_request_review(
+                    policy_name=type(self._policy).__name__,
+                    evidence=context.evidence,
+                    request_kind="synthesize",
+                ),
+            },
         )
         try:
             output, usage = await context.task_adapter.request_final(
@@ -293,7 +346,12 @@ class HarnessKernel(Generic[OutputT, ModelT]):
                 context.probe,
             )
         except BaseException as error:
-            context.trace.finish(span, status="failed", usage=_error_usage(error))
+            context.trace.finish(
+                span,
+                status="failed",
+                payload=self._failure_payload(error),
+                usage=_error_usage(error),
+            )
             self._emit_budget(context)
             raise
         context.trace.finish(span, status="completed", usage=usage)
@@ -333,14 +391,38 @@ class HarnessKernel(Generic[OutputT, ModelT]):
             verifier_feedback=context.verifier_feedback,
             format_repair=format_repair,
         )
-        span = context.trace.start("model.request", phase="agent_decision")
+        span = context.trace.start(
+            "model.request",
+            phase="agent_decision",
+            payload={
+                "call_review": model_request_review(
+                    policy_name=type(self._policy).__name__,
+                    evidence=context.evidence,
+                    request_kind="agent_decision",
+                    tool_results=context.tool_result_summaries,
+                    format_repair=format_repair,
+                    verifier_feedback=context.verifier_feedback,
+                    remaining_model_calls=request.remaining_model_calls,
+                    remaining_tool_calls=request.remaining_tool_calls,
+                    remaining_frames=request.remaining_frames,
+                ),
+            },
+        )
         try:
             response = await context.agent_model.decide_next(request)
         except AgentDecisionFormatError as error:
-            context.trace.finish(span, status="failed", usage=_error_usage(error))
+            context.trace.finish(
+                span,
+                status="failed",
+                payload=self._failure_payload(error),
+                usage=_error_usage(error),
+            )
             context.bundle.append_event(
                 "agent.decision",
-                {"reason": "format_error"},
+                {
+                    "reason": "format_error",
+                    "parent_model_event_id": span.event_id,
+                },
                 event_id=uuid.uuid4().hex,
                 event_type="agent.decision",
                 status="failed",
@@ -348,22 +430,33 @@ class HarnessKernel(Generic[OutputT, ModelT]):
             self._emit_budget(context)
             raise
         except BaseException as error:
-            context.trace.finish(span, status="failed", usage=_error_usage(error))
+            context.trace.finish(
+                span,
+                status="failed",
+                payload=self._failure_payload(error),
+                usage=_error_usage(error),
+            )
             self._emit_budget(context)
             raise
         context.trace.finish(span, status="completed", usage=response.usage)
         # Feedback applies to exactly one successful request; format-error retries keep it.
         context.verifier_feedback = None
+        decision_event_id = uuid.uuid4().hex
         context.bundle.append_event(
             "agent.decision",
             {
                 "kind": response.decision.kind,
                 "tool_calls": [call.name for call in response.decision.calls],
+                "parent_model_event_id": span.event_id,
             },
-            event_id=uuid.uuid4().hex,
+            event_id=decision_event_id,
             event_type="agent.decision",
             status="completed",
         )
+        if response.decision.kind == "tool_calls":
+            context.last_agent_decision_event_id = decision_event_id
+        else:
+            context.last_agent_decision_event_id = None
         self._emit_budget(context)
         return response
 
@@ -472,8 +565,28 @@ class HarnessKernel(Generic[OutputT, ModelT]):
     def _enforce_wall(self, context: RunContext[OutputT, ModelT]) -> None:
         if self._started_at is None:
             raise RuntimeError("kernel budgets are only enforced inside run()")
-        if self._clock() - self._started_at > context.policy.max_wall_seconds:
+        if (
+            self._deadline_expired
+            or self._clock() - self._started_at > context.policy.max_wall_seconds
+        ):
             raise BudgetExceeded("wall-clock budget exceeded")
+
+    def _failure_payload(self, error: BaseException) -> dict[str, JsonValue]:
+        """Project only typed diagnostics; never serialize exception text or chains."""
+        failure = getattr(error, "failure", None)
+        if not isinstance(failure, ProviderFailure):
+            if isinstance(error, asyncio.CancelledError):
+                failure = ProviderFailure(category="cancelled")
+            elif isinstance(error, AgentDecisionFormatError):
+                failure = ProviderFailure(category="invalid_response")
+            elif isinstance(error, ProviderError):
+                failure = ProviderFailure(category="provider_error")
+            else:
+                return {}
+        payload = failure.as_payload()
+        if self._deadline_expired:
+            payload["category"] = "run_deadline"
+        return {"failure": payload}
 
     @staticmethod
     def _frame_count(context: RunContext[OutputT, ModelT]) -> int:
@@ -493,6 +606,15 @@ def _registered_subtitle(adapter: object) -> str | None:
 
 def _error_usage(error: BaseException) -> ProviderUsage | None:
     """Map safe aggregate counters from one failed provider attempt into usage."""
+    failure = getattr(error, "failure", None)
+    if isinstance(failure, ProviderFailure):
+        return ProviderUsage(
+            model_calls=1,
+            input_bytes=failure.input_bytes or 0,
+            input_tokens=failure.input_tokens or 0,
+            output_tokens=failure.output_tokens or 0,
+            reported=failure.input_tokens is not None and failure.output_tokens is not None,
+        )
     counters: dict[str, int] = {}
     for attribute in ("input_bytes", "input_tokens", "output_tokens"):
         value = getattr(error, attribute, None)

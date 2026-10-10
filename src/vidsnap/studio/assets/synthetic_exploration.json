@@ -1,0 +1,92 @@
+{
+  "api_version": "vidsnap.studio/v1",
+  "title": "Synthetic exploration demo (packaged fixture, no recorded runs)",
+  "exploration": {
+    "problem": {
+      "statement": "Packaged demonstration problem: compare candidate approaches for a bounded, offline video-analysis task before any real run is recorded.",
+      "constraints": [
+        "Local, single-user harness only",
+        "Bounded budgets declared up front",
+        "No network access and no real media in this fixture"
+      ]
+    },
+    "approaches": [
+      {
+        "id": "simple-prompt",
+        "label": "Simple prompt",
+        "synthetic": true,
+        "prompt_sha256": "0000000000000000000000000000000000000000000000000000000000000001",
+        "harness": {
+          "max_model_calls": 4,
+          "max_tool_calls": 2,
+          "tools": ["transcribe_audio"]
+        },
+        "trials": [
+          {"trial_id": "t1", "run": "synthetic/simple-prompt/t1"}
+        ]
+      },
+      {
+        "id": "a-bigger-model",
+        "label": "A bigger model",
+        "synthetic": true,
+        "prompt_sha256": "0000000000000000000000000000000000000000000000000000000000000002",
+        "harness": {
+          "max_model_calls": 4,
+          "max_tool_calls": 2,
+          "tools": ["transcribe_audio"]
+        },
+        "trials": [
+          {"trial_id": "t1", "run": "synthetic/a-bigger-model/t1"}
+        ]
+      },
+      {
+        "id": "adaptive-thinking",
+        "label": "Adaptive thinking",
+        "synthetic": true,
+        "prompt_sha256": "0000000000000000000000000000000000000000000000000000000000000003",
+        "harness": {
+          "max_model_calls": 8,
+          "max_tool_calls": 4,
+          "tools": ["transcribe_audio", "sample_evidence"]
+        },
+        "trials": [
+          {"trial_id": "t1", "run": "synthetic/adaptive-thinking/t1"}
+        ]
+      },
+      {
+        "id": "a-better-prompt",
+        "label": "A better prompt",
+        "synthetic": true,
+        "prompt_sha256": "0000000000000000000000000000000000000000000000000000000000000004",
+        "harness": {
+          "max_model_calls": 6,
+          "max_tool_calls": 3,
+          "tools": ["transcribe_audio", "sample_evidence"]
+        },
+        "trials": [
+          {"trial_id": "t1", "run": "synthetic/a-better-prompt/t1"}
+        ]
+      },
+      {
+        "id": "generate-evaluate-repair",
+        "label": "Generate evaluate repair",
+        "synthetic": true,
+        "prompt_sha256": "0000000000000000000000000000000000000000000000000000000000000005",
+        "harness": {
+          "max_model_calls": 12,
+          "max_tool_calls": 6,
+          "tools": ["transcribe_audio", "sample_evidence"]
+        },
+        "trials": [
+          {"trial_id": "t1", "run": "synthetic/generate-evaluate-repair/t1"}
+        ]
+      }
+    ]
+  },
+  "evals": [
+    {
+      "id": "verifier-pass",
+      "description": "Recorded RunBundle verifier outcome marked as passed; synthetic demos record nothing."
+    }
+  ]
+}

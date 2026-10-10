@@ -110,9 +110,62 @@ async def test_qwen_client_sends_captured_frame_as_a_local_data_uri(tmp_path) ->
 
     content = captured["payload"]["messages"][1]["content"]
     assert content[0]["type"] == "text"
-    assert json.loads(content[0]["text"])["evidence"][0]["id"] == "frame-1"
-    assert content[1]["image_url"]["url"] == "data:image/jpeg;base64,anBlZy1ieXRlcw=="
+    # The frame-mapping preamble is appended after the JSON payload in part 0.
+    assert json.loads(content[0]["text"].split("\n", 1)[0])["evidence"][0]["id"] == "frame-1"
+    # P0 fix: every frame image is preceded by its [MM:SS] source-timestamp label.
+    assert content[1] == {"type": "text", "text": "[00:00]"}
+    assert content[2]["image_url"]["url"] == "data:image/jpeg;base64,anBlZy1ieXRlcw=="
     assert response.result.summary == "ok"
+
+
+@pytest.mark.asyncio
+async def test_qwen_synthesis_interleaves_frame_timestamp_labels(tmp_path) -> None:
+    """Frame evidence must reach the model with explicit per-frame time labels."""
+    captured: dict[str, object] = {}
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        captured["payload"] = json.loads(request.content)
+        return httpx.Response(
+            200, json={"choices": [{"message": {"content": '{"summary":"ok","claims":[]}'}}]}
+        )
+
+    frames = []
+    for index, seconds in enumerate((0.0, 75.4, 119.0)):
+        path = tmp_path / f"frame-{index}.jpg"
+        path.write_bytes(b"jpeg-bytes")
+        frames.append(
+            Evidence(
+                id=f"frame-{index}",
+                start_seconds=seconds,
+                end_seconds=seconds,
+                modality="frame",
+                artifact_path=path,
+            )
+        )
+    transcript = tmp_path / "note.txt"
+    transcript.write_bytes(b"not-an-image")
+    frames.append(
+        Evidence(
+            id="transcript-1",
+            start_seconds=0.0,
+            end_seconds=119.0,
+            modality="transcript",
+            content="spoken words",
+        )
+    )
+
+    await QwenCompatibleClient(
+        api_key="test", transport=httpx.MockTransport(handler)
+    ).analyze_evidence(frames, VideoGoal(objective="Inspect the frames"))
+
+    content = captured["payload"]["messages"][1]["content"]
+    labels = [part["text"] for part in content if part["type"] == "text"][1:]
+    assert labels == ["[00:00]", "[01:15]", "[01:59]"]
+    image_count = sum(1 for part in content if part["type"] == "image_url")
+    assert image_count == 3
+    # Non-frame evidence (transcript) must not inject a timestamp label.
+    assert "[00:00]" in labels and labels.count("[00:00]") == 1
+    assert "source-video timestamp" in content[0]["text"]
 
 
 @pytest.mark.asyncio

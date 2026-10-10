@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Protocol, runtime_checkable
+from typing import Literal, Protocol, get_args, runtime_checkable
 
 from pydantic import JsonValue
 
@@ -12,9 +13,72 @@ from vidsnap.contracts import Evidence, ToolPlan, VideoAnalysisResult, VideoGoal
 from vidsnap.contracts.agent import AgentDecision, ProviderUsage
 from vidsnap.video.probe import MediaProbe
 
+FailureCategory = Literal[
+    "connect_timeout",
+    "read_timeout",
+    "write_timeout",
+    "pool_timeout",
+    "connection_error",
+    "transport_error",
+    "http_error",
+    "request_deadline",
+    "invalid_response",
+    "cancelled",
+    "run_deadline",
+    "provider_error",
+]
+
+
+@dataclass(frozen=True, slots=True)
+class ProviderFailure:
+    """Allow-listed failure facts, never raw exceptions, URLs or provider bodies."""
+
+    category: FailureCategory
+    http_status: int | None = None
+    input_bytes: int | None = None
+    input_tokens: int | None = None
+    output_tokens: int | None = None
+
+    def __post_init__(self) -> None:
+        if self.category not in get_args(FailureCategory):
+            raise ValueError("unsupported provider failure category")
+        for value in (self.http_status, self.input_bytes, self.input_tokens, self.output_tokens):
+            if value is not None and (
+                isinstance(value, bool) or not isinstance(value, int) or value < 0
+            ):
+                raise ValueError("provider failure counters must be non-negative integers or null")
+        if self.http_status is not None and not 100 <= self.http_status <= 599:
+            raise ValueError("invalid HTTP status")
+
+    def as_payload(self) -> dict[str, JsonValue]:
+        """Versioned additive trace metadata; missing measurements remain null."""
+        return {
+            "schema_version": "vidsnap.provider-failure/v1",
+            "category": self.category,
+            "http_status": self.http_status,
+            "input_bytes": self.input_bytes,
+            "input_tokens": self.input_tokens,
+            "output_tokens": self.output_tokens,
+        }
+
 
 class ProviderError(RuntimeError):
     """Raised for an unavailable or malformed model-provider response."""
+
+    failure: ProviderFailure | None = None
+
+    def __init__(self, message: str, *, failure: ProviderFailure | None = None) -> None:
+        super().__init__(message)
+        if failure is not None:
+            self.failure = failure
+
+
+class ProviderCancelledError(asyncio.CancelledError):
+    """Preserve measured request facts while allowing cancellation to propagate."""
+
+    def __init__(self, *, failure: ProviderFailure) -> None:
+        super().__init__("provider call cancelled")
+        self.failure = failure
 
 
 class ProviderUnavailable(ProviderError):
@@ -33,6 +97,7 @@ class ModelResponse:
     input_tokens: int = 0
     output_tokens: int = 0
     usage_reported: bool = False
+    input_bytes: int = 0
 
 
 @dataclass(frozen=True, slots=True)

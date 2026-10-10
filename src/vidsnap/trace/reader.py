@@ -26,11 +26,13 @@ _LANE_PREFIXES: tuple[tuple[str, TraceLane], ...] = (
     ("agent.decision", "model"),
     ("tool.call", "tools"),
     ("evidence.added", "tools"),
+    ("local.asr", "tools"),
     ("verifier", "verifier"),
     ("repair", "verifier"),
     ("terminal", "verifier"),
     ("run", "input"),
     ("probe", "input"),
+    ("runtime", "input"),
 )
 _USAGE_FIELDS = frozenset(EventUsage.model_fields)
 _REDACTED = "***REDACTED***"

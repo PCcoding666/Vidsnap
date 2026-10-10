@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from fractions import Fraction
 from pathlib import Path
 
+from vidsnap._async import settle_task
 from vidsnap.video.sampling import AdaptiveSampler, EvidenceSamplingPolicy, FrameCandidate
 
 _SCENE_TIMESTAMP = re.compile(r"pts_time:(?P<timestamp>\d+(?:\.\d+)?)")
@@ -374,7 +375,16 @@ class FFmpegMediaPort:
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )
-        stdout, stderr = await process.communicate()
+        try:
+            stdout, stderr = await process.communicate()
+        except asyncio.CancelledError:
+            if process.returncode is None:
+                try:
+                    process.kill()
+                except ProcessLookupError:
+                    pass
+            await settle_task(asyncio.create_task(process.wait()))
+            raise
         if process.returncode != 0:
             command = arguments[0] if arguments else "process"
             detail = stderr.decode("utf-8", errors="replace")[-500:]
