@@ -1,0 +1,17 @@
+{
+  "schema_version": "vidsnap.eval-price-table/v1",
+  "currency": "CNY",
+  "source": "Alibaba Cloud Model Studio (Bailian) model-market list prices, China (Beijing) region, standard tier, per million tokens; ASR per second of audio. Example only: check current prices and any discounts or Token Plan quota before relying on it.",
+  "checked_on": "2026-10-10",
+  "models": {
+    "qwen3.8-max": {"input_per_million_tokens": 12, "output_per_million_tokens": 36},
+    "qwen3.8-flash": {"input_per_million_tokens": 0.8, "output_per_million_tokens": 2.7},
+    "qwen3.8-omni-flash": {"input_per_million_tokens": 0.8, "output_per_million_tokens": 2.7},
+    "qwen3.5-omni-plus": {
+      "input_per_million_tokens": 7,
+      "audio_input_per_million_tokens": 53,
+      "output_per_million_tokens": 40
+    },
+    "qwen3-asr-flash": {"speech_per_second": 0.00022}
+  }
+}

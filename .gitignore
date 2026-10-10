@@ -121,3 +121,10 @@ notes_*.md
 # 修正：上面的 Python 模板规则 lib/ 无路径前缀，误伤了前端 shadcn 的 src/lib
 !frontend/src/lib/
 !backend/app/evals/
+
+# Eval sets are committed; their media, results and rendered outputs are not.
+!benchmarks/eval/suites/*.json
+!benchmarks/eval/synthetic/*.json
+!benchmarks/eval/price-table.example.json
+benchmarks/eval/media/
+eval-out/

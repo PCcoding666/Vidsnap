@@ -1,0 +1,591 @@
+{
+  "schema_version": "vidsnap.eval-suite/v1",
+  "suite_id": "t2a",
+  "task": "t2a",
+  "title": "讲解视频分镜（主题 → 脚本 → HTML）",
+  "description": "Explainer video: source video plus topic to a storyboard rendered as timeline HTML.",
+  "items": [
+    {
+      "item_id": "t2a-syn-01",
+      "status": "ready",
+      "source": {
+        "kind": "synthetic",
+        "path": "synthetic/t2a-syn-01.mp4",
+        "sha256": "2a2def0fd639bd537def6ad07e9cb65a516d41283a56918b1decc4136ce08ee2",
+        "bytes": 644702,
+        "duration_seconds": 72.023,
+        "licence": "CC0-1.0; generated locally by scripts/eval/make_synthetic_media.py (slides + macOS TTS); fictional content, no real people",
+        "generator": "synthetic/t2a-syn-01.json",
+        "language": "zh",
+        "has_audio": true
+      },
+      "inputs": {
+        "goal": "以这段讲座为素材，做一条概念讲解视频的分镜脚本。",
+        "topic": "用 3 分钟讲清 KV Cache 为什么能加速生成，以及它的代价",
+        "audience": "懂一点编程的大学生"
+      },
+      "reference": {
+        "transcript": {
+          "language": "zh",
+          "from_generator": true
+        },
+        "key_points": [
+          {
+            "id": "kp-all-previous",
+            "text": "新词元的 Q 要和之前所有词元的 K、V 计算",
+            "match": [
+              [
+                "之前所有",
+                "前面所有",
+                "所有历史",
+                "之前的所有",
+                "已生成的所有",
+                "所有之前"
+              ]
+            ],
+            "modality": "speech",
+            "window": [
+              8.5,
+              20.0
+            ]
+          },
+          {
+            "id": "kp-quadratic",
+            "text": "不缓存时总计算量随长度平方增长",
+            "match": [
+              [
+                "平方",
+                "二次",
+                "n2"
+              ]
+            ],
+            "modality": "speech",
+            "window": [
+              20.0,
+              33.0
+            ]
+          },
+          {
+            "id": "kp-only-new",
+            "text": "缓存后每步只算新词元的 K、V",
+            "match": [
+              [
+                "只",
+                "仅"
+              ],
+              [
+                "新词元",
+                "新token",
+                "新的词元",
+                "当前词元",
+                "新生成的"
+              ]
+            ],
+            "modality": "speech",
+            "window": [
+              33.0,
+              46.5
+            ]
+          },
+          {
+            "id": "kp-formula",
+            "text": "缓存大小 = 2 × 层数 × 隐藏维度 × 序列长度 × 字节数",
+            "match": [
+              [
+                "层数"
+              ],
+              [
+                "序列长度"
+              ],
+              [
+                "字节"
+              ]
+            ],
+            "modality": "both",
+            "window": [
+              46.5,
+              61.5
+            ]
+          },
+          {
+            "id": "kp-example",
+            "text": "例子：32 层、4096 维、序列 4096、FP16",
+            "match": [
+              [
+                "32"
+              ],
+              [
+                "4096"
+              ]
+            ],
+            "modality": "visual",
+            "window": [
+              46.5,
+              61.5
+            ]
+          },
+          {
+            "id": "kp-2gib",
+            "text": "例子算出 2 GiB",
+            "match": [
+              [
+                "2gib",
+                "2gb",
+                "2 gib",
+                "2g"
+              ]
+            ],
+            "modality": "speech",
+            "window": [
+              46.5,
+              61.5
+            ]
+          },
+          {
+            "id": "kp-tradeoff",
+            "text": "用显存换计算",
+            "match": [
+              [
+                "显存换计算",
+                "空间换时间",
+                "用显存换",
+                "以显存换",
+                "内存换计算"
+              ]
+            ],
+            "modality": "speech",
+            "window": [
+              61.5,
+              72.0
+            ]
+          }
+        ],
+        "key_moments": [
+          {
+            "id": "km-no-cache",
+            "at_seconds": 26.5,
+            "tolerance_seconds": 7.5,
+            "description": "不缓存的平方增长"
+          },
+          {
+            "id": "km-cache",
+            "at_seconds": 39.75,
+            "tolerance_seconds": 7.75,
+            "description": "缓存后只算新词元"
+          },
+          {
+            "id": "km-cost",
+            "at_seconds": 54.0,
+            "tolerance_seconds": 8.5,
+            "description": "显存公式与 2 GiB 例子"
+          }
+        ],
+        "entities": [
+          "KV Cache",
+          "2 GiB"
+        ],
+        "forbidden": [
+          {
+            "id": "fb-no-memory-cost",
+            "text": "KV Cache 不占用额外显存",
+            "match": [
+              [
+                "不占用额外显存",
+                "不需要额外显存",
+                "不占显存"
+              ]
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "item_id": "t2a-syn-02",
+      "status": "ready",
+      "source": {
+        "kind": "synthetic",
+        "path": "synthetic/t2a-syn-02.mp4",
+        "sha256": "6d3dc6175db9fce5edf6362ea902efbcd1b9ff5ddcb623c912b8c1cac553a287",
+        "bytes": 491048,
+        "duration_seconds": 63.023,
+        "licence": "CC0-1.0; generated locally by scripts/eval/make_synthetic_media.py (slides + macOS TTS); fictional content, no real people",
+        "generator": "synthetic/t2a-syn-02.json",
+        "language": "zh",
+        "has_audio": true
+      },
+      "inputs": {
+        "goal": "以这段讲解为素材，做一条概念讲解视频的分镜脚本。",
+        "topic": "用 2 分钟讲清二分查找为什么是 O(log n)",
+        "audience": "初中生"
+      },
+      "reference": {
+        "transcript": {
+          "language": "zh",
+          "from_generator": true
+        },
+        "key_points": [
+          {
+            "id": "kp-sorted",
+            "text": "数组必须有序",
+            "match": [
+              [
+                "有序",
+                "排好序",
+                "排序"
+              ]
+            ],
+            "modality": "speech",
+            "window": [
+              54.0,
+              63.0
+            ]
+          },
+          {
+            "id": "kp-halve",
+            "text": "每一步把范围减半",
+            "match": [
+              [
+                "减半",
+                "一半"
+              ]
+            ],
+            "modality": "speech",
+            "window": [
+              41.5,
+              54.0
+            ]
+          },
+          {
+            "id": "kp-log",
+            "text": "比较次数是对数级 O(log n)",
+            "match": [
+              [
+                "log",
+                "对数"
+              ]
+            ],
+            "modality": "both",
+            "window": [
+              41.5,
+              54.0
+            ]
+          },
+          {
+            "id": "kp-million",
+            "text": "一百万个数最多约 20 次",
+            "match": [
+              [
+                "20",
+                "二十"
+              ],
+              [
+                "100万",
+                "一百万",
+                "1000000"
+              ]
+            ],
+            "modality": "speech",
+            "window": [
+              41.5,
+              54.0
+            ]
+          },
+          {
+            "id": "kp-steps",
+            "text": "例子：先比 23，再比 57",
+            "match": [
+              [
+                "23"
+              ],
+              [
+                "57"
+              ]
+            ],
+            "modality": "both",
+            "window": [
+              15.5,
+              34.5
+            ]
+          },
+          {
+            "id": "kp-array",
+            "text": "例子数组 3, 8, 15, 23, 42, 57, 61",
+            "match": [
+              [
+                "15"
+              ],
+              [
+                "61"
+              ]
+            ],
+            "modality": "visual",
+            "window": [
+              8.5,
+              15.5
+            ]
+          },
+          {
+            "id": "kp-three",
+            "text": "共比较 3 次",
+            "match": [
+              [
+                "3次",
+                "三次"
+              ]
+            ],
+            "modality": "speech",
+            "window": [
+              34.5,
+              41.5
+            ]
+          }
+        ],
+        "key_moments": [
+          {
+            "id": "km-array",
+            "at_seconds": 12.0,
+            "tolerance_seconds": 4.5,
+            "description": "示例数组"
+          },
+          {
+            "id": "km-step1",
+            "at_seconds": 21.0,
+            "tolerance_seconds": 6.5,
+            "description": "第一步比较 23"
+          },
+          {
+            "id": "km-log",
+            "at_seconds": 47.75,
+            "tolerance_seconds": 7.25,
+            "description": "为什么是 O(log n)"
+          }
+        ],
+        "entities": [
+          "O(log n)",
+          "42"
+        ],
+        "forbidden": [
+          {
+            "id": "fb-linear",
+            "text": "二分查找是线性时间",
+            "match": [
+              [
+                "线性时间",
+                "o(n)"
+              ]
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "item_id": "t2a-syn-03",
+      "status": "ready",
+      "source": {
+        "kind": "synthetic",
+        "path": "synthetic/t2a-syn-03.mp4",
+        "sha256": "82ef096b7966e288435268e5dd89d309fbb691609f2822293b70c27f0fa9c26b",
+        "bytes": 575876,
+        "duration_seconds": 68.523,
+        "licence": "CC0-1.0; generated locally by scripts/eval/make_synthetic_media.py (slides + macOS TTS); fictional content, no real people",
+        "generator": "synthetic/t2a-syn-03.json",
+        "language": "zh",
+        "has_audio": true
+      },
+      "inputs": {
+        "goal": "以这段讲解为素材，做一条概念讲解视频的分镜脚本。",
+        "topic": "用 2 分钟讲清学习率太大和太小分别会怎样",
+        "audience": "刚学机器学习的大学生"
+      },
+      "reference": {
+        "transcript": {
+          "language": "zh",
+          "from_generator": true
+        },
+        "key_points": [
+          {
+            "id": "kp-update",
+            "text": "参数沿梯度反方向更新，幅度是学习率乘梯度",
+            "match": [
+              [
+                "学习率"
+              ],
+              [
+                "梯度"
+              ],
+              [
+                "乘",
+                "×"
+              ]
+            ],
+            "modality": "both",
+            "window": [
+              8.5,
+              19.5
+            ]
+          },
+          {
+            "id": "kp-too-large",
+            "text": "学习率太大会震荡甚至发散",
+            "match": [
+              [
+                "震荡",
+                "来回跳",
+                "发散"
+              ]
+            ],
+            "modality": "speech",
+            "window": [
+              19.5,
+              30.5
+            ]
+          },
+          {
+            "id": "kp-too-small",
+            "text": "学习率太小训练很慢",
+            "match": [
+              [
+                "太小",
+                "过小"
+              ],
+              [
+                "慢"
+              ]
+            ],
+            "modality": "speech",
+            "window": [
+              30.5,
+              41.0
+            ]
+          },
+          {
+            "id": "kp-example-08",
+            "text": "学习率 0.1 时 x 每步乘 0.8",
+            "match": [
+              [
+                "0.8",
+                "零点八"
+              ]
+            ],
+            "modality": "speech",
+            "window": [
+              41.0,
+              56.5
+            ]
+          },
+          {
+            "id": "kp-example-diverge",
+            "text": "学习率 1.1 时 x 每步乘 −1.2，越跳越远",
+            "match": [
+              [
+                "1.2"
+              ],
+              [
+                "1.1"
+              ]
+            ],
+            "modality": "visual",
+            "window": [
+              41.0,
+              56.5
+            ]
+          },
+          {
+            "id": "kp-decay",
+            "text": "先大后小：衰减或预热后衰减",
+            "match": [
+              [
+                "衰减",
+                "预热",
+                "warmup"
+              ]
+            ],
+            "modality": "speech",
+            "window": [
+              56.5,
+              68.5
+            ]
+          }
+        ],
+        "key_moments": [
+          {
+            "id": "km-rule",
+            "at_seconds": 14.0,
+            "tolerance_seconds": 6.5,
+            "description": "更新公式"
+          },
+          {
+            "id": "km-example",
+            "at_seconds": 48.75,
+            "tolerance_seconds": 8.75,
+            "description": "x 平方的例子"
+          },
+          {
+            "id": "km-schedule",
+            "at_seconds": 62.5,
+            "tolerance_seconds": 7.0,
+            "description": "学习率衰减"
+          }
+        ],
+        "entities": [
+          "0.8"
+        ],
+        "forbidden": [
+          {
+            "id": "fb-bigger-better",
+            "text": "学习率越大越好",
+            "match": [
+              [
+                "越大越好",
+                "越大收敛越快"
+              ]
+            ]
+          }
+        ]
+      },
+      "notes": "The divergent example (rate 1.1) appears only on screen."
+    },
+    {
+      "item_id": "t2a-pub-01",
+      "status": "needs_reference",
+      "source": {
+        "kind": "public",
+        "path": "public/atom_and_biological_science_512kb.mp4",
+        "url": "https://archive.org/download/atom_and_biological_science/atom_and_biological_science_512kb.mp4",
+        "sha256": "400e46b633146f8d15732ca87ad54fd9e025683dfbcfb72d826b843dc276bfd2",
+        "bytes": 50129885,
+        "duration_seconds": 689.656,
+        "licence": "Public domain (Prelinger Archives; archive.org licenseurl creativecommons.org/licenses/publicdomain/)",
+        "attribution": "The Atom and Biological Science (1952); Prelinger Archives",
+        "language": "en",
+        "has_audio": true
+      },
+      "inputs": {
+        "goal": "以这部影片为素材，做一条概念讲解视频的分镜脚本。",
+        "topic": "用 3 分钟讲清 1950 年代科学家如何做实验研究辐射对动植物细胞的影响（只依据影片）",
+        "audience": "高中生"
+      },
+      "reference": {
+        "key_points": [],
+        "key_moments": [],
+        "entities": []
+      },
+      "notes": "Real 11.5-minute narrated film. Reference key points are not written yet."
+    },
+    {
+      "item_id": "t2a-owner-01",
+      "status": "placeholder",
+      "source": {
+        "kind": "owner",
+        "licence": "owner-supplied (to fill in)",
+        "language": "zh"
+      },
+      "inputs": {
+        "goal": "以这段视频为素材，做一条概念讲解视频的分镜脚本。",
+        "topic": "（填写讲解主题）",
+        "audience": "（填写目标观众）"
+      },
+      "notes": "Owner slot. To fill: copy the video under the media root (do not commit it), set source.path, sha256 (shasum -a 256), bytes, duration_seconds (ffprobe), licence ('owner, private, evaluation only' or the real licence) and language; write reference.key_points (3-10 facts with keyword groups), key_moments (timestamps a figure should show) and entities; then set status to 'ready' and run `vidsnap eval validate`."
+    }
+  ]
+}

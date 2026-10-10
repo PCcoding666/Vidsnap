@@ -1,0 +1,78 @@
+{
+  "schema_version": "vidsnap.eval-synthetic/v1",
+  "id": "t1-syn-02",
+  "language": "en",
+  "voice": "Samantha",
+  "width": 1280,
+  "height": 720,
+  "output": "synthetic/t1-syn-02.mp4",
+  "slides": [
+    {
+      "lines": [
+        "How We Cut Onboarding Time in Half",
+        "Maya Chen, Engineering Manager, Northwind Labs"
+      ],
+      "narration": "Hi, I'm Maya Chen, an engineering manager at Northwind Labs. This is the story of how we cut new engineer onboarding from fourteen days to six.",
+      "duration_seconds": 13.5
+    },
+    {
+      "lines": [
+        "The problem",
+        "First merged pull request: 14 days on average",
+        "New hires waited on access and context"
+      ],
+      "narration": "Last year a new engineer needed fourteen days on average to merge their first pull request. Most of that time was spent waiting for access and hunting for context.",
+      "duration_seconds": 15.0
+    },
+    {
+      "lines": [
+        "Change 1: a buddy for every new hire",
+        "One named buddy, 30 minutes a day, first two weeks"
+      ],
+      "narration": "The first change was simple. Every new hire gets one named buddy, who spends thirty minutes a day with them for the first two weeks.",
+      "duration_seconds": 13.0
+    },
+    {
+      "lines": [
+        "Change 2: a sandbox account on day one",
+        "Staging data and sample tickets, no waiting for permissions"
+      ],
+      "narration": "Second, we created a sandbox account that is ready on day one, with staging data and a few sample tickets, so nobody waits for permissions.",
+      "duration_seconds": 13.0
+    },
+    {
+      "lines": [
+        "Change 3: a demo every Friday",
+        "New hires show what they built, however small"
+      ],
+      "narration": "Third, every Friday new hires give a short demo of what they built that week, however small. It makes progress visible.",
+      "duration_seconds": 11.5
+    },
+    {
+      "lines": [
+        "Results",
+        "First merged PR: 14 days -> 6 days",
+        "Week-4 survey 'I feel productive': 71% -> 88%"
+      ],
+      "narration": "The results are on this slide. The first merged pull request now takes six days. The survey numbers at the bottom surprised us the most.",
+      "duration_seconds": 13.0
+    },
+    {
+      "lines": [
+        "What did not work",
+        "A 40-page wiki nobody read",
+        "Recorded lectures without exercises"
+      ],
+      "narration": "Not everything worked. A forty page wiki was mostly ignored, and recorded lectures without exercises did not help.",
+      "duration_seconds": 10.0
+    },
+    {
+      "lines": [
+        "Takeaway",
+        "Remove waiting first, then add people"
+      ],
+      "narration": "My main takeaway: remove waiting first, then add people. Thank you.",
+      "duration_seconds": 7.0
+    }
+  ]
+}

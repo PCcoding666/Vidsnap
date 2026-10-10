@@ -1,0 +1,526 @@
+{
+  "schema_version": "vidsnap.eval-suite/v1",
+  "suite_id": "t1",
+  "task": "t1",
+  "title": "长视频 → 图文公众号文章",
+  "description": "Long video to an illustrated WeChat-style article: structure, key frames, captions, faithful summary.",
+  "items": [
+    {
+      "item_id": "t1-syn-01",
+      "status": "ready",
+      "source": {
+        "kind": "synthetic",
+        "path": "synthetic/t1-syn-01.mp4",
+        "sha256": "2484aabcbd8e6596755c8630c086193c5fd55babe4c9a5647ce56ffc8242e57a",
+        "bytes": 1526745,
+        "duration_seconds": 192.023,
+        "licence": "CC0-1.0; generated locally by scripts/eval/make_synthetic_media.py (slides + macOS TTS); fictional content, no real people",
+        "generator": "synthetic/t1-syn-01.json",
+        "language": "zh",
+        "has_audio": true
+      },
+      "inputs": {
+        "goal": "把这段技术讲座改写成一篇面向工程师的公众号文章，讲清楚 Prefill 与 Decode 为什么要分离部署。"
+      },
+      "reference": {
+        "transcript": {
+          "language": "zh",
+          "from_generator": true
+        },
+        "key_points": [
+          {
+            "id": "kp-two-stages",
+            "text": "Prefill 一次处理整段提示词，Decode 每步只生成一个词元",
+            "match": [
+              [
+                "prefill"
+              ],
+              [
+                "decode"
+              ],
+              [
+                "一个词元",
+                "一个token",
+                "逐个",
+                "每次生成一个",
+                "每一步只生成",
+                "一个新的词元"
+              ]
+            ],
+            "modality": "speech",
+            "window": [
+              16.5,
+              39.0
+            ]
+          },
+          {
+            "id": "kp-dims",
+            "text": "以 Llama 3 8B、隐藏维度 4096 为例",
+            "match": [
+              [
+                "4096"
+              ],
+              [
+                "llama"
+              ]
+            ],
+            "modality": "both",
+            "window": [
+              39.0,
+              53.5
+            ]
+          },
+          {
+            "id": "kp-compute-bound",
+            "text": "运算量与读取量之比只剩 S，Prefill 是计算受限的",
+            "match": [
+              [
+                "计算受限",
+                "算力受限",
+                "计算密集",
+                "compute bound",
+                "computebound"
+              ]
+            ],
+            "modality": "speech",
+            "window": [
+              53.5,
+              78.5
+            ]
+          },
+          {
+            "id": "kp-decode-bandwidth",
+            "text": "Decode 每字节约 1 次运算，瓶颈在显存带宽",
+            "match": [
+              [
+                "decode"
+              ],
+              [
+                "带宽",
+                "bandwidth"
+              ]
+            ],
+            "modality": "speech",
+            "window": [
+              78.5,
+              97.0
+            ]
+          },
+          {
+            "id": "kp-roofline-numbers",
+            "text": "H100 约 1000 TFLOPS、3.35 TB/s，拐点约 300 次运算/字节",
+            "match": [
+              [
+                "3.35"
+              ],
+              [
+                "300"
+              ]
+            ],
+            "modality": "visual",
+            "window": [
+              97.0,
+              116.0
+            ]
+          },
+          {
+            "id": "kp-ttft",
+            "text": "TTFT（首个词元延迟）由 Prefill 决定",
+            "match": [
+              [
+                "ttft",
+                "首个词元",
+                "首字",
+                "首token"
+              ],
+              [
+                "prefill"
+              ]
+            ],
+            "modality": "speech",
+            "window": [
+              116.0,
+              138.0
+            ]
+          },
+          {
+            "id": "kp-tpot",
+            "text": "TPOT（每个输出词元的时间）由 Decode 决定",
+            "match": [
+              [
+                "tpot",
+                "每个输出词元",
+                "每个词元的间隔",
+                "每个token"
+              ],
+              [
+                "decode"
+              ]
+            ],
+            "modality": "speech",
+            "window": [
+              116.0,
+              138.0
+            ]
+          },
+          {
+            "id": "kp-interference",
+            "text": "混跑时长 Prefill 会卡住正在 Decode 的请求",
+            "match": [
+              [
+                "卡住",
+                "干扰",
+                "阻塞",
+                "插队",
+                "抢占"
+              ]
+            ],
+            "modality": "speech",
+            "window": [
+              138.0,
+              155.0
+            ]
+          },
+          {
+            "id": "kp-disaggregation",
+            "text": "分离部署，代价是在两个池之间传输 KV Cache",
+            "match": [
+              [
+                "分离",
+                "拆分",
+                "分开部署"
+              ],
+              [
+                "kv cache",
+                "kv缓存",
+                "kvcache"
+              ]
+            ],
+            "modality": "speech",
+            "window": [
+              155.0,
+              175.5
+            ]
+          },
+          {
+            "id": "kp-root-cause",
+            "text": "根本原因是算力与带宽需求的错配",
+            "match": [
+              [
+                "错配",
+                "不匹配",
+                "失配"
+              ]
+            ],
+            "modality": "speech",
+            "window": [
+              175.5,
+              192.0
+            ]
+          }
+        ],
+        "key_moments": [
+          {
+            "id": "km-two-stages",
+            "at_seconds": 27.75,
+            "tolerance_seconds": 12.25,
+            "description": "两个阶段的对比幻灯片"
+          },
+          {
+            "id": "km-formula",
+            "at_seconds": 66.0,
+            "tolerance_seconds": 13.5,
+            "description": "运算量与读取量公式"
+          },
+          {
+            "id": "km-roofline",
+            "at_seconds": 106.5,
+            "tolerance_seconds": 10.5,
+            "description": "Roofline 拐点与 H100 数字"
+          },
+          {
+            "id": "km-latency",
+            "at_seconds": 127.0,
+            "tolerance_seconds": 12.0,
+            "description": "TTFT 与 TPOT"
+          },
+          {
+            "id": "km-disaggregation",
+            "at_seconds": 165.25,
+            "tolerance_seconds": 11.25,
+            "description": "分离部署示意"
+          }
+        ],
+        "entities": [
+          "Llama 3 8B",
+          "4096",
+          "TTFT",
+          "TPOT",
+          "KV Cache"
+        ],
+        "forbidden": [
+          {
+            "id": "fb-decode-compute",
+            "text": "Decode 是计算受限的",
+            "match": [
+              [
+                "decode是计算受限",
+                "decode阶段是计算受限",
+                "decode为计算受限"
+              ]
+            ]
+          }
+        ]
+      },
+      "notes": "Short (about 4 min) synthetic proxy for a long technical talk; 'roofline numbers' appear only on screen."
+    },
+    {
+      "item_id": "t1-syn-02",
+      "status": "ready",
+      "source": {
+        "kind": "synthetic",
+        "path": "synthetic/t1-syn-02.mp4",
+        "sha256": "4611c34147f0c4bb4e53b831b63296ccf2b8f6b63c2f562c53dbd89fd1c937f1",
+        "bytes": 745906,
+        "duration_seconds": 96.023,
+        "licence": "CC0-1.0; generated locally by scripts/eval/make_synthetic_media.py (slides + macOS TTS); fictional content, no real people",
+        "generator": "synthetic/t1-syn-02.json",
+        "language": "en",
+        "has_audio": true
+      },
+      "inputs": {
+        "goal": "把这段英文分享改写成一篇中文公众号文章，介绍他们把新人上手时间减半的三个做法和结果。"
+      },
+      "reference": {
+        "transcript": {
+          "language": "en",
+          "from_generator": true
+        },
+        "key_points": [
+          {
+            "id": "kp-before-after",
+            "text": "首次合并 PR 从 14 天降到 6 天",
+            "match": [
+              [
+                "14",
+                "十四"
+              ],
+              [
+                "6天",
+                "六天",
+                "6 天",
+                "6 days"
+              ]
+            ],
+            "modality": "both",
+            "window": [
+              66.0,
+              79.0
+            ]
+          },
+          {
+            "id": "kp-buddy",
+            "text": "每位新人一名固定伙伴，每天 30 分钟，持续两周",
+            "match": [
+              [
+                "buddy",
+                "伙伴",
+                "导师",
+                "搭档",
+                "师傅",
+                "带教"
+              ],
+              [
+                "30",
+                "三十"
+              ]
+            ],
+            "modality": "speech",
+            "window": [
+              28.5,
+              41.5
+            ]
+          },
+          {
+            "id": "kp-sandbox",
+            "text": "入职第一天就有沙盒账号",
+            "match": [
+              [
+                "sandbox",
+                "沙盒",
+                "沙箱"
+              ]
+            ],
+            "modality": "speech",
+            "window": [
+              41.5,
+              54.5
+            ]
+          },
+          {
+            "id": "kp-demo",
+            "text": "每周五新人做演示",
+            "match": [
+              [
+                "demo",
+                "演示",
+                "展示"
+              ],
+              [
+                "周五",
+                "friday",
+                "星期五"
+              ]
+            ],
+            "modality": "speech",
+            "window": [
+              54.5,
+              66.0
+            ]
+          },
+          {
+            "id": "kp-survey",
+            "text": "第 4 周“觉得自己有产出”从 71% 升到 88%",
+            "match": [
+              [
+                "71"
+              ],
+              [
+                "88"
+              ]
+            ],
+            "modality": "visual",
+            "window": [
+              66.0,
+              79.0
+            ]
+          },
+          {
+            "id": "kp-failed",
+            "text": "40 页的 wiki 没人看，没有练习的录播课没用",
+            "match": [
+              [
+                "wiki",
+                "维基",
+                "文档"
+              ],
+              [
+                "40",
+                "四十"
+              ]
+            ],
+            "modality": "speech",
+            "window": [
+              79.0,
+              89.0
+            ]
+          },
+          {
+            "id": "kp-takeaway",
+            "text": "先消除等待，再加人",
+            "match": [
+              [
+                "消除等待",
+                "减少等待",
+                "去掉等待",
+                "先解决等待",
+                "remove waiting",
+                "等待"
+              ]
+            ],
+            "modality": "speech",
+            "window": [
+              89.0,
+              96.0
+            ]
+          }
+        ],
+        "key_moments": [
+          {
+            "id": "km-problem",
+            "at_seconds": 21.0,
+            "tolerance_seconds": 8.5,
+            "description": "问题：14 天"
+          },
+          {
+            "id": "km-buddy",
+            "at_seconds": 35.0,
+            "tolerance_seconds": 7.5,
+            "description": "伙伴制"
+          },
+          {
+            "id": "km-sandbox",
+            "at_seconds": 48.0,
+            "tolerance_seconds": 7.5,
+            "description": "沙盒账号"
+          },
+          {
+            "id": "km-results",
+            "at_seconds": 72.5,
+            "tolerance_seconds": 7.5,
+            "description": "结果数字"
+          }
+        ],
+        "entities": [
+          "Maya Chen",
+          "Northwind Labs"
+        ],
+        "forbidden": []
+      },
+      "notes": "English source, Chinese article (the owner's usual direction); the survey numbers appear only on screen."
+    },
+    {
+      "item_id": "t1-pub-01",
+      "status": "needs_reference",
+      "source": {
+        "kind": "public",
+        "path": "public/DuckandC1951_512kb.mp4",
+        "url": "https://archive.org/download/DuckandC1951/DuckandC1951_512kb.mp4",
+        "sha256": "ab0a244f9705792c8b24e9ab1e1f85a7d8ea0c3c1b8cbf8810271e608b6578b6",
+        "bytes": 39240901,
+        "duration_seconds": 555.389,
+        "licence": "Public domain (Prelinger Archives; archive.org licenseurl creativecommons.org/licenses/publicdomain/)",
+        "attribution": "Duck and Cover (1951), Federal Civil Defense Administration / Archer Productions; Prelinger Archives",
+        "language": "en",
+        "has_audio": true
+      },
+      "inputs": {
+        "goal": "只依据影片内容，把这部 1951 年的民防教育短片改写成一篇中文公众号文章，介绍它教了什么、怎么教。"
+      },
+      "reference": {
+        "key_points": [],
+        "key_moments": [],
+        "entities": [
+          "Bert"
+        ]
+      },
+      "notes": "Real 9-minute narrated film. Reference key points are not written yet: watch it once and add 6-10 key points and 4-6 key moments, then set status to ready."
+    },
+    {
+      "item_id": "t1-owner-01",
+      "status": "placeholder",
+      "source": {
+        "kind": "owner",
+        "licence": "owner-supplied (to fill in)",
+        "language": "zh"
+      },
+      "inputs": {
+        "goal": "把这段长视频改写成一篇图文并茂的公众号文章。"
+      },
+      "notes": "Owner slot. To fill: copy the video under the media root (do not commit it), set source.path, sha256 (shasum -a 256), bytes, duration_seconds (ffprobe), licence ('owner, private, evaluation only' or the real licence) and language; write reference.key_points (3-10 facts with keyword groups), key_moments (timestamps a figure should show) and entities; then set status to 'ready' and run `vidsnap eval validate`."
+    },
+    {
+      "item_id": "t1-owner-02",
+      "status": "placeholder",
+      "source": {
+        "kind": "owner",
+        "licence": "owner-supplied (to fill in)",
+        "language": "zh"
+      },
+      "inputs": {
+        "goal": "把这段长视频改写成一篇图文并茂的公众号文章。"
+      },
+      "notes": "Owner slot. To fill: copy the video under the media root (do not commit it), set source.path, sha256 (shasum -a 256), bytes, duration_seconds (ffprobe), licence ('owner, private, evaluation only' or the real licence) and language; write reference.key_points (3-10 facts with keyword groups), key_moments (timestamps a figure should show) and entities; then set status to 'ready' and run `vidsnap eval validate`."
+    }
+  ]
+}

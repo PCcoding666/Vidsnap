@@ -5,6 +5,19 @@ Keep a Changelog style.
 
 ## [Unreleased]
 
+### Added
+
+- `vidsnap eval`: task evaluation of "harness + model" against models that read
+  the video natively, on four eval sets (`benchmarks/eval/`): long video to an
+  illustrated article, explainer storyboard, podcast/clip review, and teacher
+  recording to wrong questions, notes and a teaching-video storyboard. Every
+  evaluated item is an ordinary traced RunBundle (new `NativePolicy` for the
+  native path); deterministic machine graders, per-stage attribution (ASR,
+  sampling, synthesis), oracle ablations, a Markdown report, and a blind A/B
+  human review page. Live systems require a price table and a spending cap.
+  See [Task evaluation](eval.md). No released behaviour or trace semantics
+  change.
+
 ### Changed
 
 - Speech recognition now calls the public DashScope compatible-mode endpoint
