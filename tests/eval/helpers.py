@@ -106,7 +106,7 @@ def price_table(path: Path) -> Path:
                         "audio_input_per_million_tokens": 53,
                         "output_per_million_tokens": 40,
                     },
-                    "qwen3-asr-flash": {"speech_per_second": 0.00022},
+                    "qwen-audio-3.1-asr-flash": {"speech_per_second": 0.00022},
                 },
             }
         ),

@@ -75,7 +75,7 @@ def decoded_seconds(path: Path) -> float:
 
 
 def test_segment_length_respects_the_documented_provider_limits() -> None:
-    # qwen3-asr-flash: at most 5 minutes and 10 MB after Base64 per request.
+    # qwen-audio-3.1-asr-flash: at most 5 minutes per request; the 10 MB Base64 cap is kept.
     assert ASR_SEGMENT_SECONDS <= 300 - 30
     base64_bytes = 4 * math.ceil(ASR_SEGMENT_SECONDS * ASR_AUDIO_BITRATE_KBPS * 1000 / 8 / 3)
     assert base64_bytes < 10_000_000 / 2  # duration, not size, is the binding limit
@@ -335,6 +335,7 @@ async def test_each_real_segment_is_one_valid_standalone_request_in_order(tmp_pa
 
     import httpx
 
+    from tests.fixtures.native_asr import native_reply
     from vidsnap.providers.asr import QwenAsrRecognizer
 
     source = tmp_path / "tone.wav"
@@ -350,13 +351,12 @@ async def test_each_real_segment_is_one_valid_standalone_request_in_order(tmp_pa
     uploads: list[bytes] = []
 
     async def handler(request: httpx.Request) -> httpx.Response:
-        uri = json.loads(request.content)["messages"][0]["content"][0]["input_audio"]
+        part = json.loads(request.content)["input"]["messages"][0]["content"][0]
+        uri = part["input_audio"]["data"]
         prefix = "data:audio/mpeg;base64,"
         assert uri.startswith(prefix)
         uploads.append(base64.b64decode(uri.removeprefix(prefix)))
-        return httpx.Response(
-            200, json={"choices": [{"message": {"content": f"part {len(uploads)}"}}]}
-        )
+        return httpx.Response(200, json=native_reply(f"part {len(uploads)}"))
 
     recognizer = QwenAsrRecognizer(api_key="test", transport=httpx.MockTransport(handler))
     texts = [

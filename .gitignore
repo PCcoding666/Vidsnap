@@ -128,3 +128,6 @@ notes_*.md
 !benchmarks/eval/price-table.example.json
 benchmarks/eval/media/
 eval-out/
+
+# Offline ASR test fixture: a recorded reply to a synthetic clip, request ids removed.
+!tests/fixtures/asr/qwen-audio-3.1-asr-flash-response.json

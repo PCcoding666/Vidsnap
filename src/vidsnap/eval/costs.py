@@ -20,6 +20,7 @@ from pydantic import Field, JsonValue, ValidationError
 from vidsnap.contracts.models import StrictModel
 from vidsnap.eval.attribution import read_events
 from vidsnap.loop.events import RunEvent
+from vidsnap.providers.asr import QWEN_ASR_MODEL
 from vidsnap.trace.pricing import LoadedPriceTable, ModelPrice, PriceTable
 
 EVAL_PRICE_SCHEMA = "vidsnap.eval-price-table/v1"
@@ -256,7 +257,7 @@ def estimate_cost(
     has_audio: bool,
     prices: LoadedEvalPrices,
     *,
-    speech_model: str = "qwen3-asr-flash",
+    speech_model: str = QWEN_ASR_MODEL,
     measured_frames: int | None = None,
     tokens_per_frame: int | None = None,
 ) -> float | None:

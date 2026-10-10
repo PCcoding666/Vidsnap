@@ -16,6 +16,7 @@ from dataclasses import dataclass
 import httpx
 import pytest
 
+from tests.fixtures.native_asr import native_reply
 from vidsnap.providers.asr import AudioChunk, Base64AudioChunker, QwenAsrRecognizer
 from vidsnap.providers.base import ProviderError
 
@@ -238,11 +239,9 @@ async def test_recognizer_sends_one_standalone_wav_per_request_and_joins_in_orde
     data_uris: list[str] = []
 
     async def handler(request: httpx.Request) -> httpx.Response:
-        content = json.loads(request.content)["messages"][0]["content"][0]
-        data_uris.append(content["input_audio"])
-        return httpx.Response(
-            200, json={"choices": [{"message": {"content": f"part {len(data_uris)}"}}]}
-        )
+        content = json.loads(request.content)["input"]["messages"][0]["content"][0]
+        data_uris.append(content["input_audio"]["data"])
+        return httpx.Response(200, json=native_reply(f"part {len(data_uris)}"))
 
     recognizer = QwenAsrRecognizer(
         api_key="test",

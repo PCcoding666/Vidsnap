@@ -12,6 +12,7 @@ from typer.testing import CliRunner
 
 from tests.ansi import strip_ansi
 from tests.eval.helpers import SUITES_DIR, committed_suite, item_payload, price_table, write_suite
+from tests.fixtures.native_asr import native_reply
 from vidsnap.cli import app
 from vidsnap.eval.costs import load_eval_prices
 from vidsnap.eval.report import build_report, load_results
@@ -203,10 +204,8 @@ async def test_live_harness_path_is_traced_priced_and_never_leaks_the_key(
     def handler(request: httpx.Request) -> httpx.Response:
         assert request.headers["authorization"] == f"Bearer {FAKE_KEY}"
         body = json.loads(request.content)
-        if body["model"] == "qwen3-asr-flash":
-            return httpx.Response(
-                200, json={"choices": [{"message": {"content": "评审时间增加了百分之三十"}}]}
-            )
+        if body["model"] == "qwen-audio-3.1-asr-flash":
+            return httpx.Response(200, json=native_reply("评审时间增加了百分之三十"))
         task_outputs["system"] = body["messages"][0]["content"]
         output = {
             "summary": "嘉宾认为不会取代初级工程师，评审时间增加了 30%。" * 4,
@@ -274,7 +273,10 @@ async def test_live_harness_path_is_traced_priced_and_never_leaks_the_key(
         e for e in events(Path(record["bundle_path"])) if e.get("event_type") == "run.started"
     )
     assert header["payload"]["provider"] == {"id": "qwen", "model": "qwen3.8-max"}
-    assert header["payload"]["speech_recognizer"] == {"id": "qwen", "model": "qwen3-asr-flash"}
+    assert header["payload"]["speech_recognizer"] == {
+        "id": "qwen",
+        "model": "qwen-audio-3.1-asr-flash",
+    }
     for file in [path, *Path(record["bundle_path"]).rglob("*"), *(tmp_path / "run").rglob("*")]:
         if file.is_file():
             assert FAKE_KEY not in file.read_bytes().decode("utf-8", errors="replace")

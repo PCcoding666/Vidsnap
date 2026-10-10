@@ -1,4 +1,4 @@
-"""In-memory Base64 Qwen-ASR requests with an optional local-plugin fallback."""
+"""In-memory Base64 Qwen-Audio ASR requests with an optional local-plugin fallback."""
 
 from __future__ import annotations
 
@@ -6,18 +6,24 @@ import base64
 import struct
 from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Protocol
+from typing import Any, Protocol
 
 import httpx
 
 from vidsnap.config import DASHSCOPE_ASR_BASE_URL
+from vidsnap.contracts.failures import ProviderFailure
 from vidsnap.providers.base import ProviderError, ProviderIdentity, ProviderUnavailable
 from vidsnap.providers.failures import http_failure, invalid_response_failure
 
-QWEN_ASR_MODEL = "qwen3-asr-flash"
+QWEN_ASR_MODEL = "qwen-audio-3.1-asr-flash"
 QWEN_ASR_IDENTITY = ProviderIdentity(
     id="qwen", model=QWEN_ASR_MODEL, base_url=DASHSCOPE_ASR_BASE_URL
 )
+# The native DashScope path, relative to `DASHSCOPE_ASR_BASE_URL`. The model is not served by
+# the OpenAI-compatible `chat/completions` path.
+QWEN_ASR_PATH = "services/aigc/multimodal-generation/generation"
+# Every ASR input the harness produces is 16 kHz mono. A WAV file declares its own rate.
+_DEFAULT_SAMPLE_RATE = "16000"
 
 
 @dataclass(frozen=True, slots=True)
@@ -194,10 +200,198 @@ class SpeechRecognizer(Protocol):
         """Return text without persisting audio or transcript to object storage."""
 
 
-class QwenAsrRecognizer:
-    """Use the fixed Qwen ASR model with Base64 data-URI messages.
+_FORMAT_MIME_TYPES = {"wav": "audio/wav", "mp3": "audio/mpeg", "aac": "audio/aac"}
+_COMPRESSED_MIME_FORMATS = {"audio/mpeg": "mp3", "audio/mp3": "mp3", "audio/aac": "aac"}
 
-    Requests go to the fixed public DashScope endpoint, never to Token Plan, which
+
+def _audio_format(mime_type: str) -> str:
+    """The ``parameters.format`` for a MIME type; the API requires it to match the bytes."""
+    normalized = mime_type.split(";", 1)[0].strip().lower()
+    if normalized in _WAV_MIME_TYPES:
+        return "wav"
+    audio_format = _COMPRESSED_MIME_FORMATS.get(normalized)
+    if audio_format is None:
+        raise ProviderError(
+            f"unsupported audio MIME type {mime_type!r} for ASR; send WAV, MP3 or AAC",
+            failure=ProviderFailure(category="validation"),
+        )
+    return audio_format
+
+
+def _sample_rate(audio_bytes: bytes, audio_format: str) -> str:
+    """The sample rate in Hz as a string: the WAV header's own, else the harness's 16 kHz."""
+    if audio_format == "wav":
+        wav = _parse_pcm_wav(audio_bytes)
+        if wav is not None:
+            return str(wav.sample_rate)
+    return _DEFAULT_SAMPLE_RATE
+
+
+def _counter(value: object) -> int | None:
+    if isinstance(value, int) and not isinstance(value, bool) and value >= 0:
+        return value
+    return None
+
+
+def _total(values: Sequence[int | None]) -> int | None:
+    """The sum, or ``None`` when any request did not report the counter (unknown is not zero)."""
+    if any(value is None for value in values):
+        return None
+    return sum(value for value in values if value is not None)
+
+
+@dataclass(frozen=True, slots=True)
+class AsrTranscript:
+    """The joined text of one recognition plus the usage the provider reported.
+
+    ``audio_seconds`` is the audio duration the provider processed, ``input_tokens`` and
+    ``output_tokens`` its billing counters. Each is ``None`` unless every request reported it.
+    """
+
+    text: str
+    requests: int = 0
+    audio_seconds: int | None = None
+    input_tokens: int | None = None
+    output_tokens: int | None = None
+
+    @property
+    def usage_reported(self) -> bool:
+        """Whether the provider reported both token counters for every request."""
+        return self.input_tokens is not None and self.output_tokens is not None
+
+
+@dataclass(frozen=True, slots=True)
+class _Reply:
+    text: str
+    audio_seconds: int | None
+    input_tokens: int | None
+    output_tokens: int | None
+
+
+def _invalid_response(message: str) -> ProviderError:
+    return ProviderError(message, failure=invalid_response_failure(None, input_bytes=None))
+
+
+def _parse_reply(response: httpx.Response) -> _Reply:
+    """Read ``output.text`` (else ``output.sentence.text``) and the ``usage`` counters.
+
+    A reply without text is invalid. The same payload is also repeated under
+    ``output.output``; it is not needed.
+    """
+    try:
+        body: Any = response.json()
+    except (ValueError, RecursionError) as error:
+        raise _invalid_response("provider ASR reply was not JSON") from error
+    output = body.get("output") if isinstance(body, dict) else None
+    if not isinstance(output, dict):
+        raise _invalid_response("provider response did not contain ASR text")
+    text = output.get("text")
+    if not isinstance(text, str):
+        sentence = output.get("sentence")
+        text = sentence.get("text") if isinstance(sentence, dict) else None
+    if not isinstance(text, str):
+        raise _invalid_response("provider response did not contain ASR text")
+    usage = body.get("usage")
+    if not isinstance(usage, dict):
+        usage = output.get("usage")
+    if not isinstance(usage, dict):
+        usage = {}
+    return _Reply(
+        text=text,
+        audio_seconds=_counter(usage.get("duration")),
+        input_tokens=_counter(usage.get("input_tokens")),
+        output_tokens=_counter(usage.get("output_tokens")),
+    )
+
+
+class QwenAudioAsrClient:
+    """The fixed ASR model on the fixed native DashScope endpoint, one request per chunk.
+
+    Shared by the harness recognizer and the evaluation recognizer, so both send exactly
+    the same request. The model and the endpoint are constants, not parameters. Each request
+    carries ``parameters.format`` for the real audio (``wav``, ``mp3`` or ``aac``), the
+    sample rate, and no ``language_hints``: the model detects the language itself, which
+    suits Chinese and English material alike.
+    """
+
+    def __init__(
+        self,
+        *,
+        api_key: str | None,
+        chunker: Base64AudioChunker | None = None,
+        transport: httpx.AsyncBaseTransport | None = None,
+        timeout_seconds: float = 120.0,
+        unavailable_message: str = "No ASR key is configured; ASR is blocked.",
+    ) -> None:
+        if timeout_seconds <= 0:
+            raise ValueError("timeout_seconds must be positive")
+        self._api_key = api_key
+        self._timeout_seconds = timeout_seconds
+        self._chunker = chunker or Base64AudioChunker()
+        self._transport = transport
+        self._unavailable_message = unavailable_message
+
+    async def recognize(self, audio_bytes: bytes, *, mime_type: str = "audio/wav") -> AsrTranscript:
+        """Send each chunk of the audio and return the joined text and the summed usage."""
+        if not self._api_key:
+            raise ProviderUnavailable(self._unavailable_message)
+        chunks = self._chunker.encode(audio_bytes, mime_type=mime_type)
+        if not chunks:
+            return AsrTranscript(text="", requests=0)
+        audio_format = _audio_format(mime_type)
+        sample_rate = _sample_rate(audio_bytes, audio_format)
+        data_uri_prefix = f"data:{_FORMAT_MIME_TYPES[audio_format]};base64,"
+        replies: list[_Reply] = []
+        async with httpx.AsyncClient(
+            base_url=f"{DASHSCOPE_ASR_BASE_URL}/",
+            timeout=self._timeout_seconds,
+            transport=self._transport,
+        ) as client:
+            for chunk in chunks:
+                payload = {
+                    "model": QWEN_ASR_MODEL,
+                    "input": {
+                        "messages": [
+                            {
+                                "role": "user",
+                                "content": [
+                                    {
+                                        "type": "input_audio",
+                                        "input_audio": {
+                                            "data": f"{data_uri_prefix}{chunk.data_base64}"
+                                        },
+                                    }
+                                ],
+                            }
+                        ]
+                    },
+                    "parameters": {"format": audio_format, "sample_rate": sample_rate},
+                }
+                try:
+                    response = await client.post(
+                        QWEN_ASR_PATH,
+                        headers={"Authorization": f"Bearer {self._api_key}"},
+                        json=payload,
+                    )
+                    response.raise_for_status()
+                except httpx.HTTPError as error:
+                    raise ProviderError(
+                        "Qwen ASR request failed", failure=http_failure(error, input_bytes=None)
+                    ) from error
+                replies.append(_parse_reply(response))
+        return AsrTranscript(
+            text="\n".join(reply.text for reply in replies),
+            requests=len(replies),
+            audio_seconds=_total([reply.audio_seconds for reply in replies]),
+            input_tokens=_total([reply.input_tokens for reply in replies]),
+            output_tokens=_total([reply.output_tokens for reply in replies]),
+        )
+
+
+class QwenAsrRecognizer:
+    """Use the fixed Qwen-Audio ASR model with Base64 data-URI messages.
+
+    Requests go to the fixed public DashScope native endpoint, never to Token Plan, which
     serves text models only. The endpoint is not a parameter.
     """
 
@@ -210,13 +404,17 @@ class QwenAsrRecognizer:
         transport: httpx.AsyncBaseTransport | None = None,
         timeout_seconds: float = 120.0,
     ) -> None:
-        if timeout_seconds <= 0:
-            raise ValueError("timeout_seconds must be positive")
-        self._api_key = api_key
-        self._timeout_seconds = timeout_seconds
-        self._chunker = chunker or Base64AudioChunker()
+        self._client = QwenAudioAsrClient(
+            api_key=api_key,
+            chunker=chunker,
+            transport=transport,
+            timeout_seconds=timeout_seconds,
+            unavailable_message=(
+                "No local ASR key is configured (VIDSNAP_ASR_API_KEY, else "
+                "VIDSNAP_QWEN_API_KEY or QWEN_API_KEY); ASR is blocked."
+            ),
+        )
         self._local_fallback = local_fallback
-        self._transport = transport
 
     @property
     def accepts_compressed_audio(self) -> bool:
@@ -233,67 +431,11 @@ class QwenAsrRecognizer:
     async def transcribe(self, audio_bytes: bytes, *, mime_type: str = "audio/wav") -> str:
         """Try Qwen ASR first, then an explicitly supplied local plugin if needed."""
         try:
-            return await self._transcribe_with_qwen(audio_bytes, mime_type=mime_type)
+            return (await self._client.recognize(audio_bytes, mime_type=mime_type)).text
         except ProviderError:
             if self._local_fallback is None:
                 raise
             return await self._local_fallback.transcribe(audio_bytes, mime_type=mime_type)
-
-    async def _transcribe_with_qwen(self, audio_bytes: bytes, *, mime_type: str) -> str:
-        if not self._api_key:
-            raise ProviderUnavailable(
-                "No local ASR key is configured (VIDSNAP_ASR_API_KEY, else "
-                "VIDSNAP_QWEN_API_KEY or QWEN_API_KEY); ASR is blocked."
-            )
-        chunks = self._chunker.encode(audio_bytes, mime_type=mime_type)
-        if not chunks:
-            return ""
-        texts: list[str] = []
-        async with httpx.AsyncClient(
-            base_url=f"{DASHSCOPE_ASR_BASE_URL}/",
-            timeout=self._timeout_seconds,
-            transport=self._transport,
-        ) as client:
-            for chunk in chunks:
-                payload = {
-                    "model": QWEN_ASR_MODEL,
-                    "messages": [
-                        {
-                            "role": "user",
-                            "content": [
-                                {
-                                    "type": "input_audio",
-                                    "input_audio": (f"data:{mime_type};base64,{chunk.data_base64}"),
-                                }
-                            ],
-                        }
-                    ],
-                }
-                try:
-                    response = await client.post(
-                        "chat/completions",
-                        headers={"Authorization": f"Bearer {self._api_key}"},
-                        json=payload,
-                    )
-                    response.raise_for_status()
-                except httpx.HTTPError as error:
-                    raise ProviderError(
-                        "Qwen ASR request failed", failure=http_failure(error, input_bytes=None)
-                    ) from error
-                try:
-                    content = response.json()["choices"][0]["message"]["content"]
-                except (IndexError, KeyError, TypeError) as error:
-                    raise ProviderError(
-                        "provider response did not contain ASR text",
-                        failure=invalid_response_failure(None, input_bytes=None),
-                    ) from error
-                if not isinstance(content, str):
-                    raise ProviderError(
-                        "provider ASR content must be a string",
-                        failure=invalid_response_failure(None, input_bytes=None),
-                    )
-                texts.append(content)
-        return "\n".join(texts)
 
 
 def audio_chunks_for_request(
