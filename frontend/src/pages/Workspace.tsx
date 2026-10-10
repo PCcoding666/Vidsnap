@@ -7,6 +7,7 @@
  *  右  — 产物 artifact 正文（深色 markdown + mermaid）+ AI 聊天（基于 /qa）
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { apiClient } from "@/services/api";
@@ -72,6 +73,15 @@ const STATUS_STYLE: Record<string, { dot: string; label: string; text: string }>
 };
 
 const HISTORY_KEY = "vidsnap_history";
+const LEFT_SIDEBAR_COLLAPSED_KEY = "vidsnap_left_sidebar_collapsed";
+
+function loadLeftSidebarCollapsed(): boolean {
+  try {
+    return localStorage.getItem(LEFT_SIDEBAR_COLLAPSED_KEY) === "true";
+  } catch {
+    return false;
+  }
+}
 
 function fmtTime(s: number): string {
   const m = Math.floor(s / 60);
@@ -129,6 +139,7 @@ export default function Workspace() {
   const [chatMsgs, setChatMsgs] = useState<ChatMsg[]>([]);
   const [chatInput, setChatInput] = useState("");
   const [chatSending, setChatSending] = useState(false);
+  const [leftSidebarCollapsed, setLeftSidebarCollapsed] = useState(loadLeftSidebarCollapsed);
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const pollRef = useRef<number | null>(null);
@@ -136,6 +147,14 @@ export default function Workspace() {
   const queryRef = useRef<HTMLTextAreaElement | null>(null);
 
   useEffect(() => setHistory(loadHist()), []);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(LEFT_SIDEBAR_COLLAPSED_KEY, String(leftSidebarCollapsed));
+    } catch {
+      return;
+    }
+  }, [leftSidebarCollapsed]);
 
   // 加载技能注册表
   useEffect(() => {
@@ -330,43 +349,69 @@ export default function Workspace() {
   const canChat = job?.status === "succeeded" && !!jobId;
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100">
-      <header className="border-b border-slate-800 px-6 py-3 flex items-center justify-between">
-        <div className="flex items-center gap-2.5">
-          <div className="h-7 w-7 rounded-md bg-gradient-to-br from-indigo-500 to-violet-500 flex items-center justify-center text-sm">🎬</div>
-          <div>
-            <h1 className="text-sm font-semibold tracking-tight">
-              VidSnap <span className="text-slate-500 font-normal">工作台</span>
-            </h1>
+    <div className="min-h-screen bg-[#080a0f] text-zinc-100">
+      <header className="sticky top-0 z-40 border-b border-white/10 bg-[#080a0f]/95 px-4 py-3 backdrop-blur sm:px-6">
+        <div className="mx-auto flex w-full max-w-[1680px] flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center gap-2.5">
+            <div className="flex h-7 w-7 items-center justify-center rounded-md bg-gradient-to-br from-violet-500 via-sky-500 to-emerald-400 text-sm">🎬</div>
+            <div>
+              <h1 className="text-sm font-semibold tracking-tight">
+                VidSnap <span className="text-zinc-500 font-normal">工作台</span>
+              </h1>
+            </div>
           </div>
+          <span className="text-[11px] text-zinc-500 sm:text-xs">本地视频 → 可复用文本资产 · 转录为唯一真相源</span>
         </div>
-        <span className="text-xs text-slate-600">本地视频 → 可复用文本资产 · 转录为唯一真相源</span>
       </header>
 
-      <div className="grid grid-cols-1 lg:grid-cols-[340px_1fr_400px] gap-0 h-[calc(100vh-53px)]">
+      <div
+        className={`mx-auto grid w-full max-w-[1680px] grid-cols-1 gap-px bg-white/10 p-px transition-[grid-template-columns] duration-200 ease-out lg:items-start ${
+          leftSidebarCollapsed
+            ? "lg:grid-cols-[64px_minmax(0,1fr)] xl:grid-cols-[64px_minmax(480px,1fr)_minmax(340px,420px)]"
+            : "lg:grid-cols-[minmax(300px,360px)_minmax(0,1fr)] xl:grid-cols-[minmax(300px,340px)_minmax(480px,1fr)_minmax(340px,420px)]"
+        }`}
+      >
         {/* 左：视频 + 目标 + 工具 + 历史 */}
-        <section className="border-r border-slate-800 p-5 space-y-4 overflow-y-auto">
-          <div className="aspect-video w-full rounded-lg overflow-hidden bg-black flex items-center justify-center">
+        <section
+          className={`bg-[#0d0f14] p-4 sm:p-5 lg:sticky lg:top-[57px] lg:h-[calc(100vh-57px)] lg:overflow-y-auto ${
+            leftSidebarCollapsed ? "lg:p-2" : ""
+          }`}
+        >
+          <div className={`hidden h-8 items-center lg:flex ${leftSidebarCollapsed ? "justify-center" : "justify-end"}`}>
+            <button
+              type="button"
+              onClick={() => setLeftSidebarCollapsed((collapsed) => !collapsed)}
+              aria-label={leftSidebarCollapsed ? "展开左侧栏" : "收起左侧栏"}
+              aria-expanded={!leftSidebarCollapsed}
+              title={leftSidebarCollapsed ? "展开左侧栏" : "收起左侧栏"}
+              className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-white/10 text-zinc-400 transition hover:bg-white/[0.06] hover:text-zinc-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/70"
+            >
+              {leftSidebarCollapsed ? <PanelLeftOpen className="h-4 w-4" /> : <PanelLeftClose className="h-4 w-4" />}
+            </button>
+          </div>
+
+          <div className={`space-y-4 ${leftSidebarCollapsed ? "lg:hidden" : ""}`}>
+          <div className="flex aspect-video w-full items-center justify-center overflow-hidden rounded-lg border border-white/10 bg-black/90">
             {videoUrl ? (
               <video ref={videoRef} src={videoUrl} controls className="h-full w-full" />
             ) : (
-              <label className="cursor-pointer text-center text-slate-500 hover:text-slate-300 transition w-full h-full flex flex-col items-center justify-center">
+              <label className="flex h-full w-full cursor-pointer flex-col items-center justify-center text-center text-zinc-500 transition hover:text-zinc-300">
                 <input type="file" accept="video/*" className="hidden" onChange={(e) => onPickFile(e.target.files?.[0] ?? null)} />
                 <div className="text-3xl mb-1">＋</div>
                 <div className="text-xs">点击上传本地视频</div>
-                <div className="text-[10px] text-slate-600 mt-1">MP4 / MOV / MKV / AVI / WEBM / M4V</div>
+                <div className="mt-1 text-[10px] text-zinc-600">MP4 / MOV / MKV / AVI / WEBM / M4V</div>
               </label>
             )}
           </div>
           {videoUrl && (
-            <label className="inline-block text-[11px] text-slate-400 hover:text-slate-200 cursor-pointer">
+            <label className="inline-block cursor-pointer text-[11px] text-zinc-400 hover:text-zinc-200">
               <input type="file" accept="video/*" className="hidden" onChange={(e) => onPickFile(e.target.files?.[0] ?? null)} />
               更换视频 · {file?.name}
             </label>
           )}
 
           <div className="relative">
-            <label className="text-xs text-slate-400 mb-1 block">你的目标（自然语言，输入 / 唤起命令）</label>
+            <label className="mb-1 block text-xs text-zinc-400">你的目标（自然语言，输入 / 唤起命令）</label>
             <textarea
               ref={queryRef}
               value={query}
@@ -386,22 +431,22 @@ export default function Workspace() {
                 }
               }}
               rows={3}
-              className="w-full rounded-lg bg-slate-900 border border-slate-800 p-3 text-sm resize-none focus:outline-none focus:border-slate-600"
+              className="w-full resize-none rounded-lg border border-white/10 bg-zinc-950/70 p-3 text-sm focus:border-emerald-500/70 focus:outline-none"
               placeholder="例如：把视频整理成带截图的结构化笔记；或输入 / 唤起命令（如 /youtube）"
             />
             {slashOpen && SLASH_COMMANDS.some((c) => c.cmd.startsWith(query.trim().toLowerCase())) && (
-              <div className="absolute z-30 left-0 right-0 mt-1 rounded-lg border border-slate-700 bg-slate-900 shadow-xl overflow-hidden">
-                <div className="px-3 py-1.5 text-[10px] text-slate-600 border-b border-slate-800">命令 · Tab/Enter 选中</div>
+              <div className="absolute left-0 right-0 z-30 mt-1 overflow-hidden rounded-lg border border-white/10 bg-zinc-950 shadow-xl">
+                <div className="border-b border-white/10 px-3 py-1.5 text-[10px] text-zinc-600">命令 · Tab/Enter 选中</div>
                 {SLASH_COMMANDS.filter((c) => c.cmd.startsWith(query.trim().toLowerCase())).map((c) => (
                   <button
                     key={c.cmd}
                     type="button"
                     onClick={() => { setQuery(c.cmd + " "); setSlashOpen(false); queryRef.current?.focus(); }}
-                    className="w-full text-left px-3 py-2 hover:bg-slate-800 flex items-center gap-2"
+                    className="flex w-full items-center gap-2 px-3 py-2 text-left hover:bg-white/5"
                   >
                     <span className="text-emerald-400 text-sm font-mono">{c.cmd}</span>
-                    <span className="text-xs text-slate-500">{c.desc}</span>
-                    <span className="ml-auto text-[10px] text-slate-600 font-mono">{c.hint}</span>
+                    <span className="text-xs text-zinc-500">{c.desc}</span>
+                    <span className="ml-auto text-[10px] text-zinc-600 font-mono">{c.hint}</span>
                   </button>
                 ))}
               </div>
@@ -411,7 +456,7 @@ export default function Workspace() {
                 <button
                   key={q}
                   onClick={() => setQuery(q)}
-                  className="text-[11px] px-2 py-1 rounded-md border border-slate-800 bg-slate-900/50 text-slate-400 hover:text-slate-200 hover:border-slate-600 transition"
+                  className="rounded-md border border-white/10 bg-white/[0.03] px-2 py-1 text-[11px] text-zinc-400 transition hover:border-emerald-500/40 hover:text-zinc-200"
                 >
                   {q}
                 </button>
@@ -421,10 +466,10 @@ export default function Workspace() {
 
           {/* 画面截帧模式：帧是计划驱动的可选项（auto/on/off） */}
           <div>
-            <div className="text-xs text-slate-400 mb-2">
-              画面截帧 <span className="text-slate-600">（图文笔记里的关键帧）</span>
+            <div className="mb-2 text-xs text-zinc-400">
+              画面截帧 <span className="text-zinc-600">（图文笔记里的关键帧）</span>
             </div>
-            <div className="flex rounded-lg border border-slate-800 overflow-hidden text-xs">
+            <div className="flex overflow-hidden rounded-lg border border-white/10 bg-zinc-950/50 text-xs">
               {([
                 ["auto", "自动"],
                 ["on", "强制"],
@@ -433,13 +478,13 @@ export default function Workspace() {
                 <button
                   key={m}
                   onClick={() => setVisualMode(m)}
-                  className={`flex-1 py-1.5 transition ${visualMode === m ? "bg-emerald-600 text-white" : "bg-slate-900/50 text-slate-400 hover:text-slate-200"}`}
+                  className={`flex-1 py-1.5 transition ${visualMode === m ? "bg-emerald-600 text-white" : "text-zinc-400 hover:bg-white/5 hover:text-zinc-200"}`}
                 >
                   {label}
                 </button>
               ))}
             </div>
-            <div className="text-[11px] text-slate-600 mt-1">
+            <div className="mt-1 text-[11px] text-zinc-600">
               {visualMode === "auto" && "按目标里的“图文/截图”等词自动决定是否截帧"}
               {visualMode === "on" && "强制生成带关键帧的图文笔记"}
               {visualMode === "off" && "纯文本，不做任何截帧/画面分析"}
@@ -449,8 +494,8 @@ export default function Workspace() {
           {/* 工具补充 */}
           {skills.some((s) => SUPPLEMENTABLE.has(s.name)) && (
             <div>
-              <div className="text-xs text-slate-400 mb-2">
-                工具补充 <span className="text-slate-600">（planner 没自动选的可选工具）</span>
+              <div className="mb-2 text-xs text-zinc-400">
+                工具补充 <span className="text-zinc-600">（planner 没自动选的可选工具）</span>
               </div>
               <div className="space-y-2">
                 {skills
@@ -459,16 +504,16 @@ export default function Workspace() {
                     const autoIncluded = planInPlan(s.name) && !forceSkills.has(s.name);
                     const on = forceSkills.has(s.name) || autoIncluded;
                     return (
-                      <div key={s.name} className="flex items-start justify-between gap-3 rounded-lg border border-slate-800 bg-slate-900/50 p-3">
+                      <div key={s.name} className="flex items-start justify-between gap-3 rounded-lg border border-white/10 bg-white/[0.03] p-3">
                         <div className="min-w-0">
                           <div className="text-sm font-medium">{s.name}</div>
-                          <div className="text-xs text-slate-500 mt-0.5">{s.description}</div>
+                          <div className="mt-0.5 text-xs text-zinc-500">{s.description}</div>
                           {autoIncluded && <div className="text-[11px] text-emerald-400 mt-1">planner 已自动选择</div>}
                         </div>
                         <button
                           onClick={() => toggleForce(s.name)}
                           disabled={autoIncluded}
-                          className={`shrink-0 h-6 w-11 rounded-full transition relative ${on ? "bg-emerald-500" : "bg-slate-700"} ${autoIncluded ? "opacity-50 cursor-not-allowed" : ""}`}
+                          className={`relative h-6 w-11 shrink-0 rounded-full transition ${on ? "bg-emerald-500" : "bg-zinc-700"} ${autoIncluded ? "cursor-not-allowed opacity-50" : ""}`}
                         >
                           <span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white transition-all ${on ? "left-[22px]" : "left-0.5"}`} />
                         </button>
@@ -482,51 +527,52 @@ export default function Workspace() {
           <button
             onClick={run}
             disabled={(!file && !/^\/youtube\s+\S+/i.test(query.trim())) || !query.trim() || running}
-            className="w-full rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-800 disabled:text-slate-600 py-2.5 text-sm font-medium transition"
+            className="w-full rounded-lg bg-emerald-600 py-2.5 text-sm font-medium transition hover:bg-emerald-500 disabled:bg-zinc-800 disabled:text-zinc-600"
           >
             {running ? `执行中… ${job?.progress ?? 0}%` : "运行工具链"}
           </button>
           {error && <div className="text-xs text-rose-400">⚠ {error}</div>}
 
           {/* 本地历史 */}
-          <div className="pt-2 border-t border-slate-800">
-            <div className="text-xs text-slate-400 mb-2 flex items-center gap-1.5">
+          <div className="border-t border-white/10 pt-2">
+            <div className="mb-2 flex items-center gap-1.5 text-xs text-zinc-400">
               <span>历史记录</span>
-              <span className="text-slate-600">（本地，无需登录）</span>
+              <span className="text-zinc-600">（本地，无需登录）</span>
             </div>
             {history.length === 0 ? (
-              <div className="text-[11px] text-slate-600 py-2">还没有分析记录</div>
+              <div className="py-2 text-[11px] text-zinc-600">还没有分析记录</div>
             ) : (
               <div className="space-y-1">
                 {history.map((h) => (
                   <button
                     key={h.jobId}
                     onClick={() => openHistory(h)}
-                    className={`w-full text-left rounded-md px-2.5 py-2 transition border ${jobId === h.jobId ? "border-emerald-700 bg-emerald-950/30" : "border-transparent hover:bg-slate-900/60"}`}
+                    className={`w-full rounded-md border px-2.5 py-2 text-left transition ${jobId === h.jobId ? "border-emerald-700 bg-emerald-950/30" : "border-transparent hover:bg-white/[0.04]"}`}
                   >
-                    <div className="text-xs text-slate-200 line-clamp-1">{h.title}</div>
-                    <div className="text-[11px] text-slate-500 line-clamp-1 mt-0.5">{h.query}</div>
-                    <div className="text-[10px] text-slate-600 mt-0.5">{fmtAgo(h.ts)}</div>
+                    <div className="line-clamp-1 text-xs text-zinc-200">{h.title}</div>
+                    <div className="mt-0.5 line-clamp-1 text-[11px] text-zinc-500">{h.query}</div>
+                    <div className="mt-0.5 text-[10px] text-zinc-600">{fmtAgo(h.ts)}</div>
                   </button>
                 ))}
               </div>
             )}
           </div>
+          </div>
         </section>
 
         {/* 中：工具链路 + 关键帧 */}
-        <section className="p-5 space-y-5 overflow-y-auto">
-          <div className="flex items-center justify-between">
-            <h2 className="text-sm font-semibold text-slate-300">工具调用链路</h2>
+        <section className="min-h-[520px] space-y-5 bg-[#080a0f] p-4 sm:p-6 lg:min-h-[calc(100vh-57px)]">
+          <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+            <h2 className="text-sm font-semibold text-zinc-300">工具调用链路</h2>
             {plan && (
-              <span className="text-xs text-slate-500">
-                产物：<span className="text-slate-300">{plan.artifact_type}</span> · 成本 {plan.cost_tier}
+              <span className="text-xs text-zinc-500">
+                产物：<span className="text-zinc-300">{plan.artifact_type}</span> · 成本 {plan.cost_tier}
               </span>
             )}
           </div>
 
           {steps.length === 0 ? (
-            <div className="text-sm text-slate-600 py-10 text-center border border-dashed border-slate-800 rounded-lg">
+            <div className="rounded-lg border border-dashed border-white/10 py-10 text-center text-sm text-zinc-600">
               上传视频、输入目标后，模型规划的工具链路会在这里可视化
             </div>
           ) : (
@@ -541,9 +587,9 @@ export default function Workspace() {
                     <div className="flex gap-3">
                       <div className="flex flex-col items-center">
                         <span className={`h-3 w-3 rounded-full ${st.dot} mt-1.5`} />
-                        {i < steps.length - 1 && <span className="w-px flex-1 bg-slate-800 my-1" />}
+                        {i < steps.length - 1 && <span className="my-1 w-px flex-1 bg-white/10" />}
                       </div>
-                      <div className="flex-1 rounded-lg border border-slate-800 bg-slate-900/40 p-3 mb-1">
+                      <div className="mb-1 flex-1 rounded-lg border border-white/10 bg-white/[0.03] p-3">
                         <div className="flex items-center justify-between gap-2">
                           <span className="text-sm font-medium">
                             {step.skill}
@@ -551,9 +597,9 @@ export default function Workspace() {
                           </span>
                           <span className={`text-[11px] ${st.text}`}>{st.label}</span>
                         </div>
-                        <div className="text-xs text-slate-500 mt-1">{step.purpose}</div>
-                        {t?.output_summary && <div className="text-[11px] text-slate-400 mt-1.5">↳ {t.output_summary}</div>}
-                        {t?.duration_ms != null && <div className="text-[11px] text-slate-600 mt-0.5">{(t.duration_ms / 1000).toFixed(1)}s</div>}
+                        <div className="mt-1 text-xs text-zinc-500">{step.purpose}</div>
+                        {t?.output_summary && <div className="mt-1.5 text-[11px] text-zinc-400">↳ {t.output_summary}</div>}
+                        {t?.duration_ms != null && <div className="mt-0.5 text-[11px] text-zinc-600">{(t.duration_ms / 1000).toFixed(1)}s</div>}
                         {t?.error && <div className="text-[11px] text-rose-400 mt-1">{t.error}</div>}
                       </div>
                     </div>
@@ -565,22 +611,22 @@ export default function Workspace() {
 
           {frames.length > 0 && (
             <div>
-              <h3 className="text-sm font-semibold text-slate-300 mb-2">
-                模型选出的关键帧 <span className="text-slate-600">({frames.length})</span>
+              <h3 className="mb-2 text-sm font-semibold text-zinc-300">
+                模型选出的关键帧 <span className="text-zinc-600">({frames.length})</span>
               </h3>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 {frames.map((f, i) => (
                   <div key={i} className="space-y-1">
                     <button onClick={() => seekTo(f.timestamp)} className="text-left group block w-full" title="点击跳转到视频对应时间点">
-                      <img src={f.frame_url} alt={`frame@${f.timestamp}`} className="w-full rounded-md border border-slate-800 group-hover:border-emerald-500 transition" />
-                      <div className="text-[11px] text-slate-400 mt-1 flex items-center gap-1.5">
+                      <img src={f.frame_url} alt={`frame@${f.timestamp}`} className="w-full rounded-md border border-white/10 transition group-hover:border-emerald-500" />
+                      <div className="mt-1 flex items-center gap-1.5 text-[11px] text-zinc-400">
                         <span className="text-emerald-400">{fmtTime(f.timestamp)}</span>
-                        {f.frame_type && <span className="px-1 rounded bg-slate-800 text-slate-400">{f.frame_type}</span>}
+                        {f.frame_type && <span className="rounded bg-white/10 px-1 text-zinc-400">{f.frame_type}</span>}
                       </div>
-                      <div className="text-[11px] text-slate-400">{f.reason}</div>
+                      <div className="text-[11px] text-zinc-400">{f.reason}</div>
                     </button>
                     {f.ocr_text && (
-                      <div className="text-[11px] text-slate-500 bg-slate-900/60 border border-slate-800 rounded px-1.5 py-1">📃 {f.ocr_text}</div>
+                      <div className="rounded border border-white/10 bg-white/[0.03] px-1.5 py-1 text-[11px] text-zinc-500">📃 {f.ocr_text}</div>
                     )}
                   </div>
                 ))}
@@ -590,13 +636,13 @@ export default function Workspace() {
         </section>
 
         {/* 右：产物 + AI 聊天 */}
-        <section className="border-l border-slate-800 flex flex-col overflow-hidden">
-          <div className="flex-1 overflow-y-auto p-5">
-            <h2 className="text-sm font-semibold text-slate-300 mb-2">产物</h2>
+        <section className="flex min-h-[560px] flex-col overflow-hidden bg-[#080a0f] lg:col-span-2 xl:sticky xl:top-[57px] xl:col-span-1 xl:h-[calc(100vh-57px)]">
+          <div className="min-h-[320px] flex-1 overflow-y-auto p-4 sm:p-5 xl:min-h-0">
+            <h2 className="mb-2 text-sm font-semibold text-zinc-300">产物</h2>
             {artifact?.artifact?.content ? (
               <>
-                <div className="text-xs text-slate-500 mb-2">{artifact.artifact.title}</div>
-                <div className="bg-slate-900/50 border border-slate-800 rounded-lg p-4 prose prose-sm prose-invert max-w-none prose-headings:text-slate-100 prose-p:text-slate-300 prose-li:text-slate-300 prose-strong:text-slate-100 prose-a:text-emerald-400 prose-img:rounded-md prose-img:border prose-img:border-slate-800">
+                <div className="mb-2 text-xs text-zinc-500">{artifact.artifact.title}</div>
+                <div className="prose prose-sm prose-invert max-w-none rounded-lg border border-white/10 bg-white/[0.03] p-4 prose-headings:text-zinc-100 prose-p:text-zinc-300 prose-li:text-zinc-300 prose-strong:text-zinc-100 prose-a:text-emerald-400 prose-img:rounded-md prose-img:border prose-img:border-white/10">
                   <ReactMarkdown
                     urlTransform={(u) => u}
                     remarkPlugins={[remarkGfm]}
@@ -614,21 +660,21 @@ export default function Workspace() {
                 </div>
               </>
             ) : (
-              <div className="text-sm text-slate-600 py-10 text-center border border-dashed border-slate-800 rounded-lg">
+              <div className="rounded-lg border border-dashed border-white/10 py-10 text-center text-sm text-zinc-600">
                 运行完成后，生成的笔记/摘要产物会在这里显示
               </div>
             )}
           </div>
 
           {/* AI 聊天 */}
-          <div className="border-t border-slate-800 flex flex-col" style={{ maxHeight: "45%" }}>
-            <div className="px-5 py-2.5 text-xs font-semibold text-slate-300 flex items-center gap-2 border-b border-slate-800/60">
-              <span className="text-indigo-400">✦</span> AI 助手
-              {!canChat && <span className="text-slate-600 font-normal">（分析完成后可对视频提问）</span>}
+          <div className="flex min-h-[260px] flex-col border-t border-white/10 xl:max-h-[42%]">
+            <div className="flex items-center gap-2 border-b border-white/10 px-5 py-2.5 text-xs font-semibold text-zinc-300">
+              <span className="text-sky-400">✦</span> AI 助手
+              {!canChat && <span className="font-normal text-zinc-600">（分析完成后可对视频提问）</span>}
             </div>
-            <div className="flex-1 overflow-y-auto px-5 py-3 space-y-3 min-h-[80px]">
+            <div className="min-h-[80px] flex-1 space-y-3 overflow-y-auto px-5 py-3">
               {chatMsgs.length === 0 ? (
-                <div className="text-[11px] text-slate-600">
+                <div className="text-[11px] text-zinc-600">
                   {canChat ? "就这个视频问我任何问题，答案基于转录内容。" : "先上传并分析一个视频。"}
                 </div>
               ) : (
@@ -636,7 +682,7 @@ export default function Workspace() {
                   <div key={i} className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}>
                     <div
                       className={`max-w-[85%] rounded-lg px-3 py-2 text-xs whitespace-pre-wrap ${
-                        m.role === "user" ? "bg-emerald-600 text-white" : "bg-slate-900 border border-slate-800 text-slate-300"
+                        m.role === "user" ? "bg-emerald-600 text-white" : "border border-white/10 bg-white/[0.03] text-zinc-300"
                       }`}
                     >
                       {m.content}
@@ -644,22 +690,22 @@ export default function Workspace() {
                   </div>
                 ))
               )}
-              {chatSending && <div className="text-[11px] text-slate-500">思考中…</div>}
+              {chatSending && <div className="text-[11px] text-zinc-500">思考中…</div>}
               <div ref={chatEndRef} />
             </div>
-            <div className="p-3 border-t border-slate-800/60 flex gap-2">
+            <div className="flex gap-2 border-t border-white/10 p-3">
               <input
                 value={chatInput}
                 onChange={(e) => setChatInput(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && sendChat()}
                 disabled={!canChat || chatSending}
                 placeholder={canChat ? "问关于这个视频的问题…" : "分析完成后可用"}
-                className="flex-1 rounded-lg bg-slate-900 border border-slate-800 px-3 py-2 text-xs focus:outline-none focus:border-slate-600 disabled:opacity-50"
+                className="flex-1 rounded-lg border border-white/10 bg-zinc-950/70 px-3 py-2 text-xs focus:border-sky-500/70 focus:outline-none disabled:opacity-50"
               />
               <button
                 onClick={sendChat}
                 disabled={!canChat || chatSending || !chatInput.trim()}
-                className="rounded-lg bg-indigo-600 hover:bg-indigo-500 disabled:bg-slate-800 disabled:text-slate-600 px-3 text-xs transition"
+                className="rounded-lg bg-sky-600 px-3 text-xs transition hover:bg-sky-500 disabled:bg-zinc-800 disabled:text-zinc-600"
               >
                 发送
               </button>

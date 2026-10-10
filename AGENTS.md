@@ -1,37 +1,47 @@
-# Repository Guidelines
+# AGENTS.md
 
-## Project Structure & Module Organization
+This file provides guidance to the AI agent when working with code in this repository.
 
-VidSnap is a FastAPI backend plus a Vite/React frontend. Backend code lives in `backend/app/`: `api/routes/` for endpoints, `services/` for video/transcript/AI/database workflows, `models/` for data models, and `core/` for config, auth, logging, Celery, and app setup. SQL migrations live in `backend/database/migrations/`.
+## What this is
 
-Frontend code lives in `frontend/src/`: `pages/` for route screens, `components/` for shared and feature UI, `components/ui/` for shadcn/ui primitives, `contexts/` for React context, and `services/` for API clients. Public assets belong in `frontend/public/`.
+VidSnap (`vidsnap_slim` branch): FastAPI backend + Vite/React frontend, local-Postgres-only. The earlier hosted-BaaS integration is removed (compat shim: `backend/app/services/store_service.py`). Transcript from Aliyun Fun-ASR is the single source of truth; summaries/notes/QA are derived from it. Visual key-frame analysis is opt-in via `visual_mode` (`auto`/`on`/`off`, default `auto`).
 
-## Build, Test, and Development Commands
+## Commands
 
-- `./start_local.sh`: starts PostgreSQL/Redis with Docker Compose, then backend `8000` and frontend `8081`.
-- `docker-compose up -d`: starts only PostgreSQL and Redis.
-- `cd backend && uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload`: runs the API.
-- `cd frontend && npm run dev`: runs Vite.
-- `cd frontend && npm run build`: builds `frontend/dist/`.
-- `cd frontend && npm run lint`: runs ESLint.
-- `cd backend && pytest`: runs backend tests when present.
+```bash
+./start_local.sh            # Docker Postgres+Redis → backend:8000, frontend:8081. Requires backend/.env.
+docker-compose up -d        # Infra only (Postgres 5432, Redis 6379)
+cd backend && uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+cd backend && pytest app/tests/<file>::<test>      # tests live in backend/app/tests/, test_*.py
+cd frontend && npm run dev -- --port 8081 --host 0.0.0.0
+cd frontend && npm run build && npm run lint
+```
 
-## Coding Style & Naming Conventions
+Health: `:8000/health` · Swagger: `:8000/docs` · Frontend: `:8081` (not 5173).
 
-Use 4-space indentation for Python. Keep async service code explicit, name route modules by feature (`video.py`, `analysis.py`), and end service modules with `_service.py`. Keep environment reads centralized in `backend/app/core/config.py`.
+## Architectural gotchas (silently break if violated)
 
-Frontend code uses TypeScript, React function components, Tailwind CSS, and the `@/` alias for `frontend/src`. Name components in `PascalCase`, hooks as `useSomething`, and follow `frontend/eslint.config.js`.
+- **Workspace jobs are `asyncio.Task`s, NOT Celery.** `core/celery_app.py` exists but `include=[]` and is unused; the real executor is `services/workspace_job_service.py` (`self.tasks: Dict[str, asyncio.Task]`). Don't wire jobs into Celery.
+- **Planner is deliberately rule-based** (`services/planner_service.py`, P0). Query → `SkillPlan` via keyword/term matching, kept deterministic so the golden-set can score it reproducibly. LLM planning must slot behind the same `SkillPlan` contract, not replace it.
+- **Transcript is the single source of truth.** Don't infer visuals unless `visual_mode` resolves to needing them. Notes/QA must cite transcript timestamps.
 
-## Testing Guidelines
+## Configuration
 
-There is currently no committed test suite in the active tree. Add backend tests under `backend/app/tests/` using `test_*.py` names and `pytest`/`pytest-asyncio` for async paths. Prefer focused service tests for transcript, video, database, and pipeline logic. Frontend tests are not configured; add tooling before committing UI tests.
+- All env reads centralized in `backend/app/core/config.py` — add new settings there, never inline. Load order (each fills missing): **system env > project-root `.env` > `backend/.env`**. `start_local.sh` hard-fails if `backend/.env` is missing.
+- `DASHSCOPE_API_KEY` precedence (computed): `TRANSCRIPT_SERVICE_API_KEY > QWEN_API_KEY > DASHSCOPE_API_KEY`.
+- **Real Paraformer transcription needs OSS enabled** (it fetches audio via a signed URL). For planner-only work, leave `ENABLE_OSS_UPLOADS=false`.
+- `JWT_SECRET` auto-generates per-process if unset — production must set a stable value via env.
 
-## Commit & Pull Request Guidelines
+## YouTube downloads
 
-Git history mostly uses concise Conventional Commit prefixes such as `feat:`, `fix:`, `chore:`, and `refactor:`. Keep messages imperative and scoped, for example `fix: handle empty transcript response`.
+`FetchYouTube` is a thin wrapper — it does NOT bypass YouTube anti-bot. All three are required for real downloads: **Deno** (`brew install deno`) + **bgutil PO Token provider** (script mode, `BGUTIL_SCRIPT_PATH=...`) + browser cookies (`YOUTUBE_COOKIES_FROM_BROWSER=chrome`). Data-center IPs trigger the strictest regime. See README for the full three-piece config.
 
-Pull requests should include a summary, affected backend/frontend areas, config or migration notes, and verification commands. Include screenshots or recordings for visible UI changes, and link issues when applicable.
+## Conventions
 
-## Security & Configuration Tips
+- Python: 4-space indent, explicit `async` service code. Route modules named by feature (`workspace.py`, `video.py`); service modules end in `_service.py`.
+- Frontend: `@/` alias → `frontend/src`. Components PascalCase, hooks `useSomething`.
+- **Commits and code comments are frequently in Chinese — match surrounding style.** Conventional Commits (`feat:`, `fix:`, `chore:`, `refactor:`), imperative, scoped. PR includes summary + affected areas + config/migration notes + verification commands.
 
-Do not commit secrets, cookies, logs, or local `.env` files. Backend config expects values such as `DATABASE_URL`, `QWEN_API_KEY`, Aliyun OSS credentials, Google OAuth values, and SMTP credentials from the environment or `backend/.env`.
+## Security
+
+Never commit secrets, cookies, logs, or `.env`. Before any open-source release, run `SECURITY_PREPUBLISH_CHECKLIST.md` (rotate leaked keys, scrub git history). Production: replace the auto-generated `JWT_SECRET`, tighten CORS (no `allow_origins=["*"]`), inject secrets only via env/secret-manager.
