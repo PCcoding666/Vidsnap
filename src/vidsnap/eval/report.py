@@ -328,12 +328,11 @@ def comparison_table(rows: Sequence[SystemRows]) -> list[str]:
     for row in rows:
         by_suite[row.suite_id].append(row)
     for suite_id, suite_rows in sorted(by_suite.items()):
-        baselines = [
-            row for row in suite_rows if row.kind == "harness" and row.system == row.base_system
-        ]
+        plain = [r for r in suite_rows if r.kind == "harness" and r.system == r.base_system]
+        baselines = plain or [r for r in suite_rows if r.kind == "harness"]
         for baseline in baselines:
             for other in suite_rows:
-                if other is baseline:
+                if other is baseline or not set(baseline.items) & set(other.items):
                     continue
                 delta, count = _paired(baseline, other, "primary")
                 common = set(baseline.items) & set(other.items)
@@ -575,7 +574,7 @@ def build_report(
         if skipped:
             lines += [f"Skipped items: {json.dumps(skipped, ensure_ascii=False)}", ""]
     if len(rows) > 1:
-        lines += ["## Paired comparisons against the plain harness", ""]
+        lines += ["## Paired comparisons against the harness, on common items", ""]
         lines += comparison_table(rows)
         lines.append("")
     lines += ["## Findings", ""]

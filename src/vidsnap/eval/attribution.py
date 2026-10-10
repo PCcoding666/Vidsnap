@@ -133,7 +133,9 @@ def stage_metrics(
     audio = [
         path.stat().st_size for path in (bundle / "artifacts").rglob("*.wav") if path.is_file()
     ]
-    metrics["asr_upload_bytes"] = 4 * ((sum(audio) + 2) // 3) if audio else 0
+    recognizer = _speech_recognizer_id(events)
+    uploaded = bool(audio) and recognizer is not None and recognizer not in ("oracle", "mock")
+    metrics["asr_upload_bytes"] = 4 * ((sum(audio) + 2) // 3) if uploaded else 0
     if not harness:
         return metrics
     evidence = read_evidence(bundle)
@@ -186,6 +188,16 @@ def stage_metrics(
     metrics["loss_by_point"] = per_point
     metrics.update(_verifier_metrics(events))
     return metrics
+
+
+def _speech_recognizer_id(events: list[RunEvent]) -> str | None:
+    for event in events:
+        if event.event_type == "run.started":
+            recognizer = event.payload.get("speech_recognizer")
+            if isinstance(recognizer, dict) and isinstance(recognizer.get("id"), str):
+                return str(recognizer["id"])
+            return None
+    return None
 
 
 def _verifier_metrics(events: list[RunEvent]) -> dict[str, JsonValue]:

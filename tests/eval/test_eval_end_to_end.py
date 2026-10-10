@@ -249,6 +249,8 @@ async def test_live_harness_path_is_traced_priced_and_never_leaks_the_key(
     assert document["spent"] == pytest.approx(cost["amount"])
     assert record["machine"]["key_point_coverage"] == pytest.approx(0.5)
     assert record["stages"]["losses"]["lost_at_asr"] == 2
+    assert record["stages"]["asr_upload_bytes"] > 0
+    assert record["stages"]["model_request_bytes"] > 0
     header = next(
         e for e in events(Path(record["bundle_path"])) if e.get("event_type") == "run.started"
     )
@@ -301,5 +303,5 @@ async def test_regrade_recomputes_from_bundles_without_model_calls(tmp_path: Pat
             continue
         assert record["machine"]["primary"] == original[record["item_id"]]["machine"]["primary"]
         assert record["stages"]["model_request_bytes"] >= 0
-        assert record["stages"]["asr_upload_bytes"] > 0
+        assert record["stages"]["asr_upload_bytes"] == 0  # mock recognizer uploads nothing
     assert "regraded_at" in regraded
