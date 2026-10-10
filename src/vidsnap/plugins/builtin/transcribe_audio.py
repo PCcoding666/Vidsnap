@@ -9,6 +9,8 @@ from vidsnap.contracts import Evidence, ProviderUsage
 from vidsnap.contracts.models import StrictModel
 from vidsnap.plugins.base import ToolArgumentError, ToolExecutionContext, ToolResult
 from vidsnap.plugins.manifest import PluginManifest
+from vidsnap.video.audio import AudioSegment, audio_trace_summary
+from vidsnap.video.ports import extract_asr_audio
 
 
 class TimeWindow(StrictModel):
@@ -62,20 +64,31 @@ class TranscribeAudioPlugin:
         windows = arguments.windows or (TimeWindow(start_seconds=0, end_seconds=duration),)
         windows_within_duration(windows, duration)
 
+        compressed = bool(getattr(context.recognizer, "accepts_compressed_audio", False))
         evidence_ids: list[str] = []
         character_count = 0
         total_usage = ProviderUsage()
+        sent: list[AudioSegment] = []
         for index, window in enumerate(windows):
-            audio_path = context.artifact_root / "audio" / f"window-{index:03d}.wav"
-            await context.media.extract_audio(
+            audio_dir = context.artifact_root / "audio"
+            segments = await extract_asr_audio(
+                context.media,
                 context.source_path,
-                audio_path,
+                audio_dir / f"window-{index:03d}",
+                audio_dir / f"window-{index:03d}.wav",
+                compressed=compressed,
                 start_seconds=window.start_seconds,
                 end_seconds=window.end_seconds,
             )
-            response = await context.recognizer.transcribe(
-                audio_path.read_bytes(), mime_type="audio/wav"
-            )
+            texts: list[str] = []
+            for segment in segments:
+                response = await context.recognizer.transcribe(
+                    segment.path.read_bytes(), mime_type=segment.mime_type
+                )
+                texts.append(response.text)
+                total_usage = total_usage + response.usage
+            sent.extend(segments)
+            text = "\n".join(texts)
             evidence_id = context.evidence_sink.next_id("transcript")
             context.evidence_sink.add(
                 Evidence(
@@ -83,12 +96,11 @@ class TranscribeAudioPlugin:
                     start_seconds=window.start_seconds,
                     end_seconds=window.end_seconds,
                     modality="transcript",
-                    content=response.text,
+                    content=text,
                 )
             )
             evidence_ids.append(evidence_id)
-            character_count += len(response.text)
-            total_usage = total_usage + response.usage
+            character_count += len(text)
 
         return ToolResult(
             status="completed",
@@ -96,6 +108,7 @@ class TranscribeAudioPlugin:
             summary={
                 "transcript_count": len(evidence_ids),
                 "character_count": character_count,
+                **audio_trace_summary(sent),
             },
             usage=total_usage,
         )

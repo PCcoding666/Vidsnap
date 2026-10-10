@@ -232,6 +232,25 @@ async def test_asr_keeps_the_released_request_shape() -> None:
     assert not response.usage.reported
 
 
+@pytest.mark.asyncio
+async def test_asr_sends_compressed_audio_whole_with_its_real_mime_type() -> None:
+    seen: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={"choices": [{"message": {"content": "转写文本"}}]})
+
+    recognizer = EvalAsrRecognizer(api_key=KEY, transport=transport(handler, seen))
+    audio = b"\xff\xfb" * 3_700_000  # 7.4 MB: over the 7 MB WAV chunk size, under 10 MB of Base64
+
+    assert recognizer.accepts_compressed_audio is True
+    response = await recognizer.transcribe(audio, mime_type="audio/mpeg")
+
+    assert len(seen) == 1 and response.usage.model_calls == 1
+    uri = json.loads(seen[0].content)["messages"][0]["content"][0]["input_audio"]
+    assert uri.startswith("data:audio/mpeg;base64,")
+    assert base64.b64decode(uri.removeprefix("data:audio/mpeg;base64,")) == audio
+
+
 def test_system_names_are_allow_listed() -> None:
     assert parse_system("harness+qwen3.8-max+oracle-asr+frame-labels").name == (
         "harness+qwen3.8-max+oracle-asr+frame-labels"

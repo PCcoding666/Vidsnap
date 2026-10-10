@@ -34,6 +34,7 @@ from vidsnap.plugins.base import TranscriptionResponse
 from vidsnap.providers.base import ProviderError, ProviderIdentity
 from vidsnap.runtime.context import RunContext
 from vidsnap.tasks.base import TaskVerification
+from vidsnap.video.audio import ASR_SEGMENT_SECONDS, AudioSegment, CompressedAudioFormat
 from vidsnap.video.ports import FFmpegPort
 from vidsnap.video.probe import ExtractedFrame, MediaProbe
 from vidsnap.video.sampling import FrameCandidate
@@ -317,9 +318,29 @@ class OracleFramesMedia:
             source, output_path, start_seconds=start_seconds, end_seconds=end_seconds
         )
 
+    async def extract_audio_segments(
+        self,
+        source: Path,
+        output_dir: Path,
+        *,
+        start_seconds: float = 0.0,
+        end_seconds: float | None = None,
+        segment_seconds: float = ASR_SEGMENT_SECONDS,
+        audio_format: CompressedAudioFormat = "mp3",
+    ) -> list[AudioSegment]:
+        return await self._inner.extract_audio_segments(
+            source,
+            output_dir,
+            start_seconds=start_seconds,
+            end_seconds=end_seconds,
+            segment_seconds=segment_seconds,
+            audio_format=audio_format,
+        )
+
 
 _FAKE_JPEG = b"\xff\xd8\xff\xe0fake-eval-frame\xff\xd9"
 _FAKE_WAV = b"RIFF\x24\x00\x00\x00WAVEfmt \x10\x00\x00\x00\x01\x00\x01\x00"
+_FAKE_COMPRESSED_AUDIO = b"ID3\x04\x00\x00\x00\x00\x00\x00fake-eval-audio"
 
 
 class FakeMedia:
@@ -388,6 +409,29 @@ class FakeMedia:
         output_path.parent.mkdir(parents=True, exist_ok=True)
         output_path.write_bytes(_FAKE_WAV)
         return output_path
+
+    async def extract_audio_segments(
+        self,
+        source: Path,
+        output_dir: Path,
+        *,
+        start_seconds: float = 0.0,
+        end_seconds: float | None = None,
+        segment_seconds: float = ASR_SEGMENT_SECONDS,
+        audio_format: CompressedAudioFormat = "mp3",
+    ) -> list[AudioSegment]:
+        del source, start_seconds, end_seconds, segment_seconds
+        output_dir.mkdir(parents=True, exist_ok=True)
+        path = output_dir / f"segment-000.{audio_format}"
+        path.write_bytes(_FAKE_COMPRESSED_AUDIO)
+        return [
+            AudioSegment(
+                path=path,
+                index=0,
+                audio_format=audio_format,
+                size_bytes=len(_FAKE_COMPRESSED_AUDIO),
+            )
+        ]
 
 
 __all__ = [

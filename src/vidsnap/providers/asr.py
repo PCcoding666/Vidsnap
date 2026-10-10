@@ -32,6 +32,9 @@ class AudioChunk:
 # and 5 minutes of audio; 7_000_000 bytes encode to about 9.3 MB and are about 218 s of
 # 16 kHz mono 16-bit audio.
 DEFAULT_CHUNK_BYTES = 7_000_000
+# The provider's documented limit on one request's Base64-encoded audio.
+MAX_REQUEST_BASE64_BYTES = 10_000_000
+_WAV_MIME_TYPES = frozenset({"audio/wav", "audio/x-wav", "audio/wave", "audio/vnd.wave"})
 _WAV_HEADER_BYTES = 44
 _PCM_FORMAT_TAG = 1
 _UNKNOWN_DATA_SIZE = 0xFFFFFFFF
@@ -141,6 +144,10 @@ class Base64AudioChunker:
     sample-frame boundaries and each piece gets its own header with the input's
     sample rate, channel count and bit depth. Larger audio in any other format
     cannot be cut without a decoder, so it raises ``ProviderError``.
+
+    Audio that is not WAV by its ``mime_type`` (MP3, AAC) is already one standalone
+    file cut by duration upstream. It is never cut by bytes: it is sent whole, or
+    refused if its Base64 form would exceed the provider's request limit.
     """
 
     def __init__(self, *, chunk_bytes: int = DEFAULT_CHUNK_BYTES) -> None:
@@ -148,11 +155,18 @@ class Base64AudioChunker:
             raise ValueError("chunk_bytes must be positive")
         self.chunk_bytes = chunk_bytes
 
-    def encode(self, audio_bytes: bytes) -> list[AudioChunk]:
+    def encode(self, audio_bytes: bytes, *, mime_type: str = "audio/wav") -> list[AudioChunk]:
         """Return ordered Base64 chunks without writing audio to cloud storage."""
         if not audio_bytes:
             return []
-        if len(audio_bytes) <= self.chunk_bytes:
+        if mime_type.split(";", 1)[0].strip().lower() not in _WAV_MIME_TYPES:
+            if 4 * ((len(audio_bytes) + 2) // 3) > MAX_REQUEST_BASE64_BYTES:
+                raise ProviderError(
+                    f"{mime_type} audio is {len(audio_bytes)} bytes, over the 10 MB Base64 "
+                    "request limit; cut it into shorter segments by duration"
+                )
+            pieces = [audio_bytes]
+        elif len(audio_bytes) <= self.chunk_bytes:
             pieces = [audio_bytes]
         else:
             wav = _parse_pcm_wav(audio_bytes)
@@ -169,7 +183,12 @@ class Base64AudioChunker:
 
 
 class SpeechRecognizer(Protocol):
-    """Port for either Qwen ASR or a user-installed local recognizer plugin."""
+    """Port for either Qwen ASR or a user-installed local recognizer plugin.
+
+    A recognizer that can decode MP3 and AAC may set ``accepts_compressed_audio = True``.
+    The harness then sends compressed segments cut by duration with their real
+    ``mime_type``; without it, it sends one mono WAV file with ``audio/wav``.
+    """
 
     async def transcribe(self, audio_bytes: bytes, *, mime_type: str = "audio/wav") -> str:
         """Return text without persisting audio or transcript to object storage."""
@@ -199,6 +218,18 @@ class QwenAsrRecognizer:
         self._local_fallback = local_fallback
         self._transport = transport
 
+    @property
+    def accepts_compressed_audio(self) -> bool:
+        """Whether callers may send MP3/AAC segments instead of one WAV file.
+
+        The provider decodes them. An explicit ``local_fallback`` receives the same
+        bytes and MIME type, so it must declare its own ``accepts_compressed_audio``
+        for compressed audio to be used.
+        """
+        return self._local_fallback is None or bool(
+            getattr(self._local_fallback, "accepts_compressed_audio", False)
+        )
+
     async def transcribe(self, audio_bytes: bytes, *, mime_type: str = "audio/wav") -> str:
         """Try Qwen ASR first, then an explicitly supplied local plugin if needed."""
         try:
@@ -214,7 +245,7 @@ class QwenAsrRecognizer:
                 "No local ASR key is configured (VIDSNAP_ASR_API_KEY, else "
                 "VIDSNAP_QWEN_API_KEY or QWEN_API_KEY); ASR is blocked."
             )
-        chunks = self._chunker.encode(audio_bytes)
+        chunks = self._chunker.encode(audio_bytes, mime_type=mime_type)
         if not chunks:
             return ""
         texts: list[str] = []

@@ -6,6 +6,11 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import Protocol
 
+from vidsnap.video.audio import (
+    ASR_SEGMENT_SECONDS,
+    AudioSegment,
+    CompressedAudioFormat,
+)
 from vidsnap.video.probe import ExtractedFrame, MediaProbe
 from vidsnap.video.sampling import FrameCandidate
 
@@ -45,3 +50,51 @@ class FFmpegPort(Protocol):
         end_seconds: float | None = None,
     ) -> Path:
         """Extract local mono WAV audio, optionally bounded by a time window."""
+
+    async def extract_audio_segments(
+        self,
+        source: Path,
+        output_dir: Path,
+        *,
+        start_seconds: float = 0.0,
+        end_seconds: float | None = None,
+        segment_seconds: float = ASR_SEGMENT_SECONDS,
+        audio_format: CompressedAudioFormat = "mp3",
+    ) -> list[AudioSegment]:
+        """Extract compressed 16 kHz mono audio as ordered, standalone files.
+
+        Segments are cut by duration, each at most about ``segment_seconds`` long,
+        so a file can be sent to a recognizer on its own.
+        """
+
+
+async def extract_asr_audio(
+    media: FFmpegPort,
+    source: Path,
+    segments_dir: Path,
+    legacy_wav_path: Path,
+    *,
+    compressed: bool,
+    start_seconds: float = 0.0,
+    end_seconds: float | None = None,
+) -> list[AudioSegment]:
+    """Prepare the audio one recognizer will be sent, through the media port.
+
+    A recognizer that accepts compressed audio (``accepts_compressed_audio``) gets
+    MP3 segments of at most ``ASR_SEGMENT_SECONDS`` each. Every other recognizer, and
+    any port written before segmenting existed, keeps the single mono WAV file at
+    ``legacy_wav_path``, which the recognizer cuts by size if it must.
+    """
+    segmenter = getattr(media, "extract_audio_segments", None)
+    if compressed and segmenter is not None:
+        segments: list[AudioSegment] = await segmenter(
+            source,
+            segments_dir,
+            start_seconds=start_seconds,
+            end_seconds=end_seconds,
+        )
+        return segments
+    path = await media.extract_audio(
+        source, legacy_wav_path, start_seconds=start_seconds, end_seconds=end_seconds
+    )
+    return [AudioSegment(path=path, index=0, audio_format="wav", size_bytes=path.stat().st_size)]

@@ -20,6 +20,32 @@ Keep a Changelog style.
 
 ### Changed
 
+- Speech recognition now sends compressed audio instead of Base64 WAV. The
+  video port gains `extract_audio_segments`, which cuts the audio into
+  standalone 16 kHz mono MP3 files at 48 kbps (ADTS AAC if FFmpeg has no LAME
+  encoder), at most 240 s each, so duration rather than bytes is the limit
+  (`qwen3-asr-flash` takes 5 minutes and 10 MB per request). Each file is one
+  request with its real MIME type (`audio/mpeg`) and the transcripts are
+  joined with a newline, as before. This is about 5.3 times fewer bytes: 360 KB
+  per minute instead of 1.9 MB, or about 480 KB against 2.6 MB once Base64. A
+  192 s clip went from 8.2 MB to 1.5 MB, and over an uplink of about 9 KB/s
+  it now completes where the WAV upload ended in `write_timeout` (one live
+  `vidsnap eval` run, 74.6 s in the ASR stage). `FFmpegPort` gains the method,
+  `vidsnap.video.AudioSegment` and `vidsnap.video.audio` hold the types and
+  constants, and a final segment under 1 s is merged into the previous one.
+  A recognizer is sent compressed audio only if it sets
+  `accepts_compressed_audio = True` (`QwenAsrRecognizer` and the evaluation
+  recognizer do, with a `local_fallback` only if the fallback does too); all
+  others still get one mono WAV file, so custom recognizers and the benchmark
+  transcriber are unchanged. A custom `FFmpegPort` without the method keeps
+  the WAV path. `Base64AudioChunker.encode` takes a `mime_type` (default
+  `audio/wav`): only WAV is cut by size, and compressed audio is sent whole or
+  refused above 10 MB of Base64. The `transcribe_audio` phase event gains
+  `audio_format`, `audio_segments`, `audio_bytes` and `audio_segment_seconds`
+  payload keys; `asr_upload_bytes` in `vidsnap eval` counts MP3 and AAC
+  artifacts. A kept bundle now holds MP3 segments (about 22 MB per hour)
+  instead of a WAV (about 115 MB per hour) when the built-in recognizer is
+  used.
 - Speech recognition now calls the public DashScope compatible-mode endpoint
   (`https://dashscope.aliyuncs.com/compatible-mode/v1`) instead of Token Plan,
   which serves text models only, so every run with audio failed at ASR with

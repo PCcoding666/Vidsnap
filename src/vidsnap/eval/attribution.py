@@ -23,6 +23,7 @@ from vidsnap.eval.text import error_rate, matches, normalize
 from vidsnap.loop.events import RunEvent
 
 _WINDOW_TOLERANCE = 5.0
+_AUDIO_SUFFIXES = frozenset({".wav", ".mp3", ".aac"})
 LOSS_STAGES = (
     "lost_at_asr",
     "lost_at_sampling",
@@ -131,11 +132,14 @@ def stage_metrics(
         and event.usage is not None
     )
     audio = [
-        path.stat().st_size for path in (bundle / "artifacts").rglob("*.wav") if path.is_file()
+        path.stat().st_size
+        for path in (bundle / "artifacts").rglob("*")
+        if path.is_file() and path.suffix in _AUDIO_SUFFIXES
     ]
     recognizer = _speech_recognizer_id(events)
     uploaded = bool(audio) and recognizer is not None and recognizer not in ("oracle", "mock")
-    metrics["asr_upload_bytes"] = 4 * ((sum(audio) + 2) // 3) if uploaded else 0
+    # One request carries one file, so the Base64 inflation applies per file.
+    metrics["asr_upload_bytes"] = sum(4 * ((size + 2) // 3) for size in audio) if uploaded else 0
     if not harness:
         return metrics
     evidence = read_evidence(bundle)

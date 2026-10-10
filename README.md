@@ -143,8 +143,9 @@ quality, latency, or cost claims are published.
   `vidsnap runs list` prints it; `vidsnap runs review` adds edit minutes,
   publish decision, factual errors, replaced images, and a note.
 - Kept data: each `analyze` and `recipe interview` bundle under
-  `./run/<uuid>/` holds a full-length 16 kHz mono WAV of the video's audio
-  (about 115 MB per hour), the sampled frame JPEGs, transcripts, the result,
+  `./run/<uuid>/` holds a full-length 16 kHz mono recording of the video's
+  audio (MP3 segments, about 22 MB per hour, with the built-in recognizer), the
+  sampled frame JPEGs, transcripts, the result,
   and the event ledger. Delete a folder whenever you like, move them with
   `--runs-root` or `VIDSNAP_RUNS_ROOT`, or pass
   `vidsnap recipe interview --no-keep-bundle` to keep no bundle and no index

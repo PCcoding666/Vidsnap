@@ -44,7 +44,12 @@ class TranscriptionResponse:
 
 
 class TranscriptionPort(Protocol):
-    """Typed transcription result boundary used by the ASR tool plugin."""
+    """Typed transcription result boundary used by the ASR tool plugin.
+
+    A port that sets ``accepts_compressed_audio = True`` is sent MP3/AAC segments (one
+    ``transcribe`` call each, with the real ``mime_type``); any other port is sent
+    one mono WAV file, as before.
+    """
 
     async def transcribe(
         self, audio_bytes: bytes, *, mime_type: str = "audio/wav"
@@ -97,6 +102,11 @@ class SpeechRecognizerAdapter:
 
     def __init__(self, recognizer: SpeechRecognizer) -> None:
         self._recognizer = recognizer
+
+    @property
+    def accepts_compressed_audio(self) -> bool:
+        """Forward the wrapped recognizer's declaration; undeclared means WAV only."""
+        return bool(getattr(self._recognizer, "accepts_compressed_audio", False))
 
     async def transcribe(
         self, audio_bytes: bytes, *, mime_type: str = "audio/wav"

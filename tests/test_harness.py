@@ -328,3 +328,120 @@ async def test_fixed_harness_default_does_not_request_agentic_plan(tmp_path) -> 
 
     assert result.terminal_state.value == "SUCCEEDED"
     assert media.visual_candidate_calls == 1
+
+
+class SegmentedMediaPort(FakeMediaPort):
+    """A port that can also cut compressed segments, as the real FFmpeg port does."""
+
+    def __init__(self) -> None:
+        super().__init__(has_audio=True)
+        self.segment_calls = 0
+
+    async def extract_audio_segments(
+        self, source: Path, output_dir: Path, *, start_seconds=0.0, end_seconds=None, **options
+    ):
+        from vidsnap.video.audio import AudioSegment
+
+        del source, options
+        self.segment_calls += 1
+        output_dir.mkdir(parents=True, exist_ok=True)
+        segments = []
+        for index, payload in enumerate((b"mp3-one", b"mp3-two")):
+            path = output_dir / f"segment-{index:03d}.mp3"
+            path.write_bytes(payload)
+            segments.append(AudioSegment(path, index, "mp3", len(payload)))
+        return segments
+
+
+class CompressedRecognizer:
+    accepts_compressed_audio = True
+
+    def __init__(self) -> None:
+        self.calls: list[tuple[bytes, str]] = []
+
+    async def transcribe(self, audio_bytes: bytes, *, mime_type: str = "audio/wav") -> str:
+        self.calls.append((audio_bytes, mime_type))
+        return f"part {len(self.calls)}"
+
+
+def _events(run_path: Path) -> list[dict]:
+    return [json.loads(line) for line in (run_path / "events.jsonl").read_text().splitlines()]
+
+
+@pytest.mark.asyncio
+async def test_fixed_harness_sends_compressed_segments_and_traces_what_was_sent(tmp_path) -> None:
+    media = SegmentedMediaPort()
+    recognizer = CompressedRecognizer()
+    source_path = tmp_path / "input.mp4"
+    source_path.write_bytes(b"deterministic-local-video-bytes")
+
+    result = await VideoHarness(media=media, model=FakeModel(), recognizer=recognizer).run(
+        VideoSource(path=source_path),
+        VideoGoal(objective="What was said?"),
+        HarnessPolicy(output_dir=tmp_path / "run"),
+    )
+
+    assert result.terminal_state.value == "SUCCEEDED"
+    assert media.segment_calls == 1 and media.audio_calls == []  # no WAV was extracted
+    assert recognizer.calls == [(b"mp3-one", "audio/mpeg"), (b"mp3-two", "audio/mpeg")]
+    transcript = json.loads((tmp_path / "run" / "evidence" / "transcript-001.json").read_text())
+    assert transcript["content"] == "part 1\npart 2"
+    (phase,) = [
+        e
+        for e in _events(tmp_path / "run")
+        if e["phase"] == "transcribe_audio" and e["event_type"] == "phase.completed"
+    ]
+    assert phase["payload"]["audio_format"] == "mp3"
+    assert phase["payload"]["audio_segments"] == 2
+    assert phase["payload"]["audio_bytes"] == 14
+
+
+@pytest.mark.asyncio
+async def test_fixed_harness_keeps_wav_for_a_recognizer_that_does_not_take_compressed_audio(
+    tmp_path,
+) -> None:
+    media = SegmentedMediaPort()  # could segment, but the recognizer never asked for it
+    source_path = tmp_path / "input.mp4"
+    source_path.write_bytes(b"deterministic-local-video-bytes")
+
+    result = await VideoHarness(media=media, model=FakeModel(), recognizer=FakeRecognizer()).run(
+        VideoSource(path=source_path),
+        VideoGoal(objective="What was said?"),
+        HarnessPolicy(output_dir=tmp_path / "run"),
+    )
+
+    assert result.terminal_state.value == "SUCCEEDED"
+    assert media.segment_calls == 0 and media.audio_calls == [(0.0, 10.0)]
+
+
+@pytest.mark.asyncio
+async def test_legacy_transcribe_step_uses_the_same_segments_and_trace_summary(tmp_path) -> None:
+    from vidsnap.contracts.loopspec import default_loop_spec
+    from vidsnap.harness import _RunContext
+    from vidsnap.loop.run_bundle import RunBundle
+    from vidsnap.loop.state_machine import LoopController
+
+    harness = VideoHarness(media=SegmentedMediaPort(), model=FakeModel())
+    recognizer = CompressedRecognizer()
+    bundle = RunBundle.create(tmp_path / "run", loop_spec=default_loop_spec(), provider_url="x://y")
+    policy = HarnessPolicy(output_dir=tmp_path / "run")
+    context = _RunContext(
+        source=VideoSource(path=tmp_path / "input.mp4"),
+        goal=VideoGoal(objective="What was said?"),
+        policy=policy,
+        controller=LoopController(policy, max_repair_rounds=1),
+        bundle=bundle,
+        media=harness.media,
+        model=FakeModel(),
+        recognizer=recognizer,
+        sampler=harness.sampler,
+        planner=None,
+        probe=MediaProbe(duration_seconds=10, fps=24, width=640, height=360, has_audio=True),
+    )
+
+    await harness._transcribe_audio(context)
+
+    assert [mime for _, mime in recognizer.calls] == ["audio/mpeg", "audio/mpeg"]
+    assert context.evidence[0].content == "part 1\npart 2"
+    (phase,) = [e for e in _events(tmp_path / "run") if e["phase"] == "transcribe_audio"]
+    assert phase["payload"]["status"] == "captured" and phase["payload"]["audio_segments"] == 2
