@@ -124,6 +124,16 @@ def stage_metrics(
             metrics["frame_width"] = event.payload.get("width")
             metrics["frame_height"] = event.payload.get("height")
             break
+    metrics["model_request_bytes"] = sum(
+        event.usage.input_bytes
+        for event in events
+        if (event.event_type or "") in ("model.request.completed", "model.request.failed")
+        and event.usage is not None
+    )
+    audio = [
+        path.stat().st_size for path in (bundle / "artifacts").rglob("*.wav") if path.is_file()
+    ]
+    metrics["asr_upload_bytes"] = 4 * ((sum(audio) + 2) // 3) if audio else 0
     if not harness:
         return metrics
     evidence = read_evidence(bundle)

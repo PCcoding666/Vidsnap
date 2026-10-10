@@ -13,7 +13,12 @@ from vidsnap.eval.costs import load_eval_prices
 from vidsnap.eval.providers import ENDPOINTS, EndpointName
 from vidsnap.eval.report import build_report, load_human, load_results
 from vidsnap.eval.review import build_review, import_scores
-from vidsnap.eval.runner import RunOptions, live_system_needs_budget, run_suite
+from vidsnap.eval.runner import (
+    RunOptions,
+    live_system_needs_budget,
+    regrade_document,
+    run_suite,
+)
 from vidsnap.eval.suite import LoadedSuite, default_media_root, load_suite, validate_suite
 from vidsnap.eval.systems import BuildOptions, list_systems, parse_system
 
@@ -211,6 +216,32 @@ def eval_report(
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(text, encoding="utf-8")
     typer.echo(str(output))
+
+
+@eval_app.command("regrade")
+def eval_regrade(
+    results: Annotated[list[Path], typer.Argument(help="vidsnap.eval-result/v1 files.")],
+    price_table: Annotated[Path | None, typer.Option("--price-table")] = None,
+    suites_dir: SuitesDirOption = None,
+) -> None:
+    """Recompute metrics from existing RunBundles (after references change); no model calls."""
+    try:
+        prices = load_eval_prices(price_table.expanduser()) if price_table else None
+        documents = load_results(results)
+    except (ValueError, OSError) as error:
+        typer.echo(f"Regrade refused: {error}", err=True)
+        raise typer.Exit(code=2) from None
+    for path, document in zip(results, documents):
+        loaded = load_suite_or_exit(
+            str(document.get("suite_path") or document["suite_id"]), suites_dir
+        )
+        try:
+            updated = regrade_document(document, loaded, prices)
+        except ValueError as error:
+            typer.echo(f"Regrade refused: {path}: {error}", err=True)
+            raise typer.Exit(code=2) from None
+        path.write_text(json.dumps(updated, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        typer.echo(str(path))
 
 
 @review_app.command("build")

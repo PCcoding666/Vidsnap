@@ -165,8 +165,8 @@ def overview_table(rows: Sequence[SystemRows], human: Sequence[HumanScore]) -> l
     lines = [
         "| System | Run | OK | Failures | Primary | Key points | Moments | Structure | "
         "Entities | Halluc. | Human (1-5) | Preferred | Cost total | Cost/item | "
-        "Latency p50 s | Latency max s |",
-        "|" + "---|" * 16,
+        "Latency p50 s | Latency max s | Upload MB/item |",
+        "|" + "---|" * 17,
     ]
     for row in rows:
         records = list(row.items.values())
@@ -206,11 +206,23 @@ def overview_table(rows: Sequence[SystemRows], human: Sequence[HumanScore]) -> l
                     ),
                     _fmt(round(median(latencies), 1) if latencies else None, 1),
                     _fmt(round(max(latencies), 1) if latencies else None, 1),
+                    _fmt(_upload_mb(records)),
                 ]
             )
             + " |"
         )
     return lines
+
+
+def _upload_mb(records: Sequence[dict[str, Any]]) -> float | None:
+    """Mean request bytes per item: model requests plus Base64 ASR audio."""
+    sizes = [
+        (_num(_stage(record, "model_request_bytes")) or 0.0)
+        + (_num(_stage(record, "asr_upload_bytes")) or 0.0)
+        for record in records
+        if _stage(record, "model_request_bytes") is not None
+    ]
+    return round(mean(sizes) / 1_000_000, 2) if sizes else None
 
 
 def _timing_share(records: Sequence[dict[str, Any]]) -> str:

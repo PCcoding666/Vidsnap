@@ -344,4 +344,54 @@ def live_system_needs_budget(spec: SystemSpec) -> bool:
     return not spec.mock
 
 
-__all__ = ["RESULT_SCHEMA", "RunOptions", "live_system_needs_budget", "run_item", "run_suite"]
+def regrade_document(
+    document: dict[str, Any], suite: LoadedSuite, prices: LoadedEvalPrices | None
+) -> dict[str, Any]:
+    """Recompute machine metrics, stages and cost from each item's RunBundle.
+
+    Used after references change (for example when a ``needs_reference`` item
+    gets key points) or graders improve; it spends nothing and re-renders nothing.
+    """
+    if document.get("suite_id") != suite.suite.suite_id:
+        raise ValueError("result file and suite differ")
+    task = get_task(suite.suite.task)
+    items = {item.item_id: item for item in suite.suite.items}
+    harness = document.get("system_kind") == "harness"
+    for record in document.get("items") or []:
+        bundle_value = record.get("bundle_path") if isinstance(record, dict) else None
+        item = items.get(str(record.get("item_id"))) if isinstance(record, dict) else None
+        if not bundle_value or item is None:
+            continue
+        bundle = Path(str(bundle_value))
+        output: EvalOutput | None = None
+        result_file = bundle / "result.json"
+        if result_file.is_file():
+            output = task.parse(json.loads(result_file.read_text(encoding="utf-8")))
+        duration_value = record.get("input_duration_seconds")
+        duration = (
+            float(duration_value)
+            if isinstance(duration_value, (int, float))
+            else (item.source.duration_seconds or 0.0)
+        )
+        previous = record.get("machine") if isinstance(record.get("machine"), dict) else {}
+        grade = grade_output(task, output, item, duration)
+        for key in ("html_valid", "render_ok"):
+            if key in previous:
+                grade[key] = previous[key]
+        record["machine"] = grade
+        record["stages"] = stage_metrics(bundle, item, grade, harness=harness)
+        if prices is not None:
+            record["cost"] = run_cost(bundle, prices)
+    document["suite_sha256"] = suite.sha256
+    document["regraded_at"] = _utc_now()
+    return document
+
+
+__all__ = [
+    "RESULT_SCHEMA",
+    "RunOptions",
+    "live_system_needs_budget",
+    "regrade_document",
+    "run_item",
+    "run_suite",
+]

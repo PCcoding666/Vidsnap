@@ -282,3 +282,24 @@ def test_cli_help_validate_and_systems() -> None:
         app, ["eval", "validate", "t3", "--suites-dir", str(SUITES_DIR), "--no-hashes"]
     )
     assert "t3 (t3): 6 items" in validate.stdout
+
+
+@pytest.mark.asyncio
+async def test_regrade_recomputes_from_bundles_without_model_calls(tmp_path: Path) -> None:
+    from vidsnap.eval.runner import regrade_document
+
+    path, document = await run_suite(mock_options(tmp_path, "t2b", "harness+mock"))
+    stored = json.loads(path.read_text(encoding="utf-8"))
+    for record in stored["items"]:
+        if "skipped" not in record:
+            record["machine"] = {}
+            record["stages"] = {}
+    regraded = regrade_document(stored, committed_suite("t2b"), None)
+    original = {r["item_id"]: r for r in document["items"] if "skipped" not in r}
+    for record in regraded["items"]:
+        if "skipped" in record:
+            continue
+        assert record["machine"]["primary"] == original[record["item_id"]]["machine"]["primary"]
+        assert record["stages"]["model_request_bytes"] >= 0
+        assert record["stages"]["asr_upload_bytes"] > 0
+    assert "regraded_at" in regraded
