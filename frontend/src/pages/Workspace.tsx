@@ -117,6 +117,49 @@ export default function Workspace() {
   const [skills, setSkills] = useState<LabSkill[]>([]);
   const [forceSkills, setForceSkills] = useState<Set<string>>(new Set());
   const [visualMode, setVisualMode] = useState<"auto" | "on" | "off">("auto");
+
+  // 桌面三栏：可拖拽宽度（持久化到 localStorage；移动端不生效，保持竖排）
+  const [isDesktop, setIsDesktop] = useState(
+    () => typeof window !== "undefined" && window.matchMedia("(min-width: 1024px)").matches,
+  );
+  const [leftW, setLeftW] = useState(() => {
+    const v = Number(localStorage.getItem("ws-leftW"));
+    return v >= 220 && v <= 560 ? v : 340;
+  });
+  const [rightW, setRightW] = useState(() => {
+    const v = Number(localStorage.getItem("ws-rightW"));
+    return v >= 280 && v <= 680 ? v : 400;
+  });
+  useEffect(() => {
+    const mq = window.matchMedia("(min-width: 1024px)");
+    const on = () => setIsDesktop(mq.matches);
+    mq.addEventListener("change", on);
+    return () => mq.removeEventListener("change", on);
+  }, []);
+  useEffect(() => { localStorage.setItem("ws-leftW", String(leftW)); }, [leftW]);
+  useEffect(() => { localStorage.setItem("ws-rightW", String(rightW)); }, [rightW]);
+  const startColResize = (side: "left" | "right") => (e: { clientX: number; preventDefault(): void }) => {
+    e.preventDefault();
+    const startX = e.clientX;
+    const startW = side === "left" ? leftW : rightW;
+    const setW = side === "left" ? setLeftW : setRightW;
+    const min = side === "left" ? 220 : 280;
+    const max = side === "left" ? 560 : 680;
+    const onMove = (ev: MouseEvent) => {
+      const delta = side === "left" ? ev.clientX - startX : startX - ev.clientX;
+      setW(Math.max(min, Math.min(max, startW + delta)));
+    };
+    const onUp = () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+    };
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+  };
   const [plan, setPlan] = useState<WorkspacePlan | null>(null);
 
   const [jobId, setJobId] = useState<string>("");
@@ -340,12 +383,15 @@ export default function Workspace() {
             </h1>
           </div>
         </div>
-        <span className="text-xs text-slate-600">本地视频 → 可复用文本资产 · 转录为唯一真相源</span>
+        <span className="hidden lg:inline text-xs text-slate-600">本地视频 → 可复用文本资产 · 转录为唯一真相源</span>
       </header>
 
-      <div className="grid grid-cols-1 lg:grid-cols-[340px_1fr_400px] gap-0 h-[calc(100vh-53px)]">
+      <div
+        className="grid grid-cols-1 gap-0 lg:h-[calc(100vh-53px)]"
+        style={isDesktop ? { gridTemplateColumns: `${leftW}px 6px minmax(0,1fr) 6px ${rightW}px` } : undefined}
+      >
         {/* 左：视频 + 目标 + 工具 + 历史 */}
-        <section className="border-r border-slate-800 p-5 space-y-4 overflow-y-auto">
+        <section className="border-r border-slate-800 p-5 space-y-4 lg:overflow-y-auto">
           <div className="aspect-video w-full rounded-lg overflow-hidden bg-black flex items-center justify-center">
             {videoUrl ? (
               <video ref={videoRef} src={videoUrl} controls className="h-full w-full" />
@@ -514,8 +560,15 @@ export default function Workspace() {
           </div>
         </section>
 
+        {/* 拖拽分隔条：左 / 中 */}
+        <div
+          onMouseDown={startColResize("left")}
+          className="hidden lg:block cursor-col-resize bg-slate-800 hover:bg-emerald-500/60 active:bg-emerald-500 transition"
+          title="拖动调整左栏宽度"
+        />
+
         {/* 中：工具链路 + 关键帧 */}
-        <section className="p-5 space-y-5 overflow-y-auto">
+        <section className="border-t border-slate-800 lg:border-t-0 p-5 space-y-5 lg:overflow-y-auto">
           <div className="flex items-center justify-between">
             <h2 className="text-sm font-semibold text-slate-300">工具调用链路</h2>
             {plan && (
@@ -543,17 +596,23 @@ export default function Workspace() {
                         <span className={`h-3 w-3 rounded-full ${st.dot} mt-1.5`} />
                         {i < steps.length - 1 && <span className="w-px flex-1 bg-slate-800 my-1" />}
                       </div>
-                      <div className="flex-1 rounded-lg border border-slate-800 bg-slate-900/40 p-3 mb-1">
+                      <div className="flex-1 rounded-lg border border-slate-800 bg-slate-900/40 px-3 py-2">
                         <div className="flex items-center justify-between gap-2">
                           <span className="text-sm font-medium">
                             {step.skill}
                             {forced && <span className="ml-2 text-[11px] text-emerald-400">手动补充</span>}
                           </span>
-                          <span className={`text-[11px] ${st.text}`}>{st.label}</span>
+                          <span className="flex items-center gap-2 shrink-0">
+                            {t?.duration_ms != null && (
+                              <span className="text-[11px] text-slate-600">{(t.duration_ms / 1000).toFixed(1)}s</span>
+                            )}
+                            <span className={`text-[11px] ${st.text}`}>{st.label}</span>
+                          </span>
                         </div>
-                        <div className="text-xs text-slate-500 mt-1">{step.purpose}</div>
-                        {t?.output_summary && <div className="text-[11px] text-slate-400 mt-1.5">↳ {t.output_summary}</div>}
-                        {t?.duration_ms != null && <div className="text-[11px] text-slate-600 mt-0.5">{(t.duration_ms / 1000).toFixed(1)}s</div>}
+                        {(status === "planned" || status === "running") && (
+                          <div className="text-xs text-slate-500 mt-1">{step.purpose}</div>
+                        )}
+                        {t?.output_summary && <div className="text-[11px] text-slate-400 mt-1">↳ {t.output_summary}</div>}
                         {t?.error && <div className="text-[11px] text-rose-400 mt-1">{t.error}</div>}
                       </div>
                     </div>
@@ -589,8 +648,15 @@ export default function Workspace() {
           )}
         </section>
 
+        {/* 拖拽分隔条：中 / 右 */}
+        <div
+          onMouseDown={startColResize("right")}
+          className="hidden lg:block cursor-col-resize bg-slate-800 hover:bg-emerald-500/60 active:bg-emerald-500 transition"
+          title="拖动调整右栏宽度"
+        />
+
         {/* 右：产物 + AI 聊天 */}
-        <section className="border-l border-slate-800 flex flex-col overflow-hidden">
+        <section className="border-t lg:border-t-0 lg:border-l border-slate-800 flex flex-col lg:overflow-hidden">
           <div className="flex-1 overflow-y-auto p-5">
             <h2 className="text-sm font-semibold text-slate-300 mb-2">产物</h2>
             {artifact?.artifact?.content ? (
@@ -621,7 +687,7 @@ export default function Workspace() {
           </div>
 
           {/* AI 聊天 */}
-          <div className="border-t border-slate-800 flex flex-col" style={{ maxHeight: "45%" }}>
+          <div className="border-t border-slate-800 flex flex-col lg:max-h-[45%]">
             <div className="px-5 py-2.5 text-xs font-semibold text-slate-300 flex items-center gap-2 border-b border-slate-800/60">
               <span className="text-indigo-400">✦</span> AI 助手
               {!canChat && <span className="text-slate-600 font-normal">（分析完成后可对视频提问）</span>}
