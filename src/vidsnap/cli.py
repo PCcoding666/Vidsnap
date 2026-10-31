@@ -19,6 +19,7 @@ from vidsnap.eval.cli import eval_app
 from vidsnap.harness import VideoHarness
 from vidsnap.plugins import PluginRegistry, ToolPlugin, discovery
 from vidsnap.plugins.project import validate_plugin_project
+from vidsnap.recipes.article import DEFAULT_GOAL, ArticleRecipeRunner
 from vidsnap.recipes.runner import InterviewRecipeRunner
 from vidsnap.trace.export import export_trace
 from vidsnap.trace.pricing import LoadedPriceTable, load_price_table
@@ -306,6 +307,53 @@ def analyze(
                 "terminal_state": result.terminal_state.value,
                 "run_path": str(result.run_path),
                 "claims": [claim.model_dump(mode="json") for claim in result.claims],
+            },
+            ensure_ascii=True,
+        )
+    )
+
+
+@recipe_app.command("article")
+def recipe_article(
+    video: Path = typer.Argument(..., exists=True, readable=True),
+    output_dir: Path = typer.Option(..., "--output-dir", help="Where article.md and images/ go."),
+    goal: str = typer.Option(DEFAULT_GOAL, "--goal", min=1),
+    runs_root: RunsRootOption = Path("run"),
+    price_table: PriceTableOption = None,
+    model: str = typer.Option(
+        "qwen3.8-max", "--model", help="One of: " + ", ".join(APPROVED_QWEN_MODELS) + "."
+    ),
+    endpoint: str = typer.Option(
+        "dashscope",
+        "--endpoint",
+        help="dashscope (key: VIDSNAP_DASHSCOPE_API_KEY) or token-plan (VIDSNAP_QWEN_API_KEY).",
+    ),
+) -> None:
+    """Turn one local video into an illustrated article whose figures cite frames.
+
+    Runs the same bounded loop, prompt, gates and renderer as `vidsnap eval`'s
+    t1 task. The RunBundle goes under the runs root and is indexed.
+    """
+    if endpoint not in ("dashscope", "token-plan"):
+        raise typer.BadParameter("--endpoint must be dashscope or token-plan")
+    try:
+        runner = ArticleRecipeRunner(system=f"harness+{model}", endpoint=endpoint)  # type: ignore[arg-type]
+    except ValueError as error:
+        raise typer.BadParameter(str(error)) from error
+    prices = _load_prices(price_table)
+    resolved_root = _prepare_runs_root(runs_root)
+    run_dir = resolved_root / str(uuid.uuid4())
+    result = asyncio.run(
+        runner.run(video, goal, output_dir.expanduser().resolve(), run_dir=run_dir)
+    )
+    _index_run(result.run_path, resolved_root, command="recipe article", prices=prices)
+    typer.echo(
+        json.dumps(
+            {
+                "terminal_state": result.terminal_state.value,
+                "run_path": str(result.run_path),
+                "article": str(result.article_path) if result.article_path else None,
+                "figures": result.figures,
             },
             ensure_ascii=True,
         )
