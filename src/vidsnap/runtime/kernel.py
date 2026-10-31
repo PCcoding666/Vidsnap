@@ -174,8 +174,8 @@ class HarnessKernel(Generic[OutputT, ModelT]):
         span = context.trace.start("probe", phase="probe_media")
         try:
             probe = await context.media.probe(context.source.path)
-        except BaseException:
-            context.trace.finish(span, status="failed")
+        except BaseException as error:
+            context.trace.finish(span, status="failed", payload=_model_failure_payload(error))
             raise
         context.probe = probe
         context.trace.finish(
@@ -292,7 +292,10 @@ class HarnessKernel(Generic[OutputT, ModelT]):
             result = await plugin.execute(validated, execution)
         except BaseException as error:
             context.trace.finish(
-                span, status="failed", payload={"name": name}, usage=_error_usage(error)
+                span,
+                status="failed",
+                payload={"name": name, **_model_failure_payload(error)},
+                usage=_error_usage(error),
             )
             self._emit_budget(context)
             raise
@@ -659,7 +662,12 @@ def _failure_record(error: BaseException) -> ProviderFailure:
 
 
 def _model_failure_payload(error: BaseException) -> dict[str, JsonValue]:
-    """The ``vidsnap.provider-failure/v1`` payload for one failed model request."""
+    """The ``vidsnap.provider-failure/v1`` payload for one failed model, tool or probe step.
+
+    Only the structured record is kept: a category from the fixed allow-list and the
+    HTTP status when one exists. Exception text, URLs, keys and provider bodies never
+    enter the ledger.
+    """
     return {"failure": _failure_record(error).as_payload()}
 
 

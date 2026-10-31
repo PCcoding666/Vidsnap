@@ -207,6 +207,42 @@ def _frame_ids(evidence: Sequence[Evidence]) -> set[str]:
     return {item.id for item in evidence if item.modality == "frame"}
 
 
+_WORD = re.compile(r"[a-z0-9]{3,}")
+_CJK = re.compile(r"[\u4e00-\u9fff]")
+
+
+def _grounding_tokens(text: str) -> set[str]:
+    """Latin words of 3+ characters plus CJK bigrams, lower-cased, for overlap checks."""
+    lowered = text.lower()
+    tokens = set(_WORD.findall(lowered))
+    cjk = "".join(_CJK.findall(lowered))
+    tokens.update(cjk[index : index + 2] for index in range(len(cjk) - 1))
+    return tokens
+
+
+def _captions_grounded(figures: Sequence[Figure], evidence: Sequence[Evidence]) -> bool:
+    """Every caption shares a token with the text the harness recorded for its cited frame.
+
+    The 2026-11-01 live run showed captions that named the slide the transcript was
+    discussing rather than the slide the cited frame actually shows. This gate catches
+    that whenever the frame evidence carries perception text (OCR or a description);
+    frames without recorded text cannot be checked and are not counted against the
+    output.
+    """
+    content_by_id = {
+        item.id: item.content
+        for item in evidence
+        if item.modality == "frame" and isinstance(item.content, str) and item.content.strip()
+    }
+    for figure in figures:
+        content = content_by_id.get(figure.evidence_id or "")
+        if content is None:
+            continue
+        if not (_grounding_tokens(figure.caption) & _grounding_tokens(content)):
+            return False
+    return True
+
+
 def _transcript_text(evidence: Sequence[Evidence]) -> str:
     return "\n".join(item.content or "" for item in evidence if item.modality == "transcript")
 
@@ -353,6 +389,7 @@ class ArticleTask(EvalTask[ArticleOutput]):
             gates["referenced_evidence_exists"] = all(
                 figure.evidence_id in frame_ids for figure in figures
             )
+            gates["figure_captions_grounded"] = _captions_grounded(figures, evidence)
         return gates
 
     def mock_output(
