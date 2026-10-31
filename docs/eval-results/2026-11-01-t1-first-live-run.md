@@ -62,6 +62,36 @@ English UI strings quoted in Chinese prose; the reviewer did not treat it as a d
    in the middle of the talk. `Figure.evidence_id` is optional and the
    `referenced_evidence_exists` gate covers claims, not figures.
 
+## Follow-up ablation: frame labels (same day)
+
+`harness+qwen3.8-max+frame-labels` on the no-audio talk — the same run as the
+frames-only baseline, except that every image is preceded by a
+`[frame-id @ MM:SS]` text label:
+
+| System | Cost (CNY) | Figures | Figures correct | Key points |
+|---|---|---|---|---|
+| frames only (baseline) | 2.95 | 9 | 8/9 | 0.67 |
+| frames + labels | 2.75 | 13 | **13/13** | **1.00** |
+
+Without a transcript, the label alone took key-point coverage to 1.00 and every
+caption matched its frame, including the six mid-talk slides the oracle run
+got wrong. Labels are now the default for the harness synthesis call in both
+the evaluation and the live client; `+plain-frames` is the ablation.
+
+## What changed in the repository because of this run
+
+- `figure_captions_grounded` gate on the article task (active once frames
+  carry perception text).
+- `tool.call.failed` / `probe.failed` carry the structured failure record.
+- Frame labels on by default; prompt version `eval-prompts/2026-11-01`.
+- Model and endpoint chosen from an allow-list before a run
+  (`VIDSNAP_QWEN_MODEL`, `VIDSNAP_QWEN_ENDPOINT`); `analyze --mode/--tools/
+  --model/--endpoint`; `HarnessPolicy.allowed_tools`.
+- `vidsnap recipe article`, built on the t1 machinery.
+
+Still open: the native upload path for long videos, perception text on frames
+(which would make the caption gate bite), and per-run clip directories.
+
 ## Defects found in the harness (actionable)
 
 - **Figures bypass the evidence gate.** Require `evidence_id` on every figure in
