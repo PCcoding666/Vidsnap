@@ -168,6 +168,14 @@ class HarnessKernel(Generic[OutputT, ModelT]):
             verification=context.verification,
         )
 
+    def has_tool(self, name: str) -> bool:
+        """Whether this run's frozen registry offers the named model-visible tool."""
+        try:
+            self._registry.tool_by_name(name)
+        except ValueError:
+            return False
+        return True
+
     async def run_probe(self, context: RunContext[OutputT, ModelT]) -> None:
         """Probe the local media once and complete the probe_media phase."""
         self._enforce_wall(context)

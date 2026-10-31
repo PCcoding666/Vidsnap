@@ -241,7 +241,7 @@ class VideoHarness:
         )
         kernel: HarnessKernel[VideoAnalysisResult, VideoModelPort] = HarnessKernel(
             policy=FixedPolicy(),
-            registry=default_plugin_registry(),
+            registry=default_plugin_registry(policy.allowed_tools),
         )
         kernel_result: KernelRunResult[VideoAnalysisResult] = await kernel.run(context)
         return HarnessRunResult(
@@ -280,7 +280,7 @@ class VideoHarness:
         )
         kernel: HarnessKernel[VideoAnalysisResult, VideoModelPort] = HarnessKernel(
             policy=AgenticPolicy(),
-            registry=default_plugin_registry(),
+            registry=default_plugin_registry(policy.allowed_tools),
         )
         kernel_result: KernelRunResult[VideoAnalysisResult] = await kernel.run(context)
         return HarnessRunResult(

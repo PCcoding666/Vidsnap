@@ -1,6 +1,7 @@
 """Command-line entry point for VidSnap Harness."""
 
 import asyncio
+import dataclasses
 import json
 import os
 import uuid
@@ -11,7 +12,7 @@ import typer
 from pydantic import ValidationError
 
 from vidsnap.benchmark.trust import TrustEvaluationInput, evaluate_trust
-from vidsnap.config import HarnessConfig
+from vidsnap.config import APPROVED_QWEN_MODELS, ENDPOINT_BASE_URLS, HarnessConfig
 from vidsnap.contracts import HarnessPolicy, TerminalState, VideoGoal, VideoSource
 from vidsnap.demo import replay_demo_run
 from vidsnap.eval.cli import eval_app
@@ -216,6 +217,40 @@ def root() -> None:
     """VidSnap Harness command group."""
 
 
+def _analysis_config(model: str | None, endpoint: str | None) -> HarnessConfig | None:
+    """The environment's config with the CLI's model/endpoint choice applied.
+
+    Returns ``None`` when neither was given so the harness keeps its own defaults.
+    """
+    if model is None and endpoint is None:
+        return None
+    try:
+        config = HarnessConfig.from_env()
+        if model is not None:
+            config = dataclasses.replace(config, model=model)
+        if endpoint is not None:
+            if endpoint not in ENDPOINT_BASE_URLS:
+                raise ValueError("endpoint must be one of: " + ", ".join(ENDPOINT_BASE_URLS))
+            config = dataclasses.replace(config, base_url=ENDPOINT_BASE_URLS[endpoint])
+    except ValueError as error:
+        raise typer.BadParameter(str(error)) from error
+    return config
+
+
+def _analysis_policy(run_dir: Path, mode: str, tools: str | None) -> HarnessPolicy:
+    """A per-run policy that can only narrow the published LoopSpec."""
+    fields: dict[str, object] = {"output_dir": run_dir, "tool_mode": mode}
+    if tools is not None:
+        fields["allowed_tools"] = tuple(part.strip() for part in tools.split(",") if part.strip())
+    try:
+        return HarnessPolicy.model_validate(fields)
+    except ValidationError as error:
+        raise typer.BadParameter(
+            "--mode must be fixed or agentic and --tools a subset of "
+            "transcribe_audio,sample_evidence"
+        ) from error
+
+
 @app.command()
 def analyze(
     video: Path = typer.Argument(..., exists=True, readable=True),
@@ -223,6 +258,24 @@ def analyze(
     output_dir: Path | None = typer.Option(None, "--output-dir"),
     runs_root: RunsRootOption = Path("run"),
     price_table: PriceTableOption = None,
+    mode: str = typer.Option(
+        "fixed",
+        "--mode",
+        help="fixed: probe, transcribe, sample, synthesize, verify. "
+        "agentic: the model chooses each bounded tool call; the harness keeps the budgets.",
+    ),
+    tools: str | None = typer.Option(
+        None,
+        "--tools",
+        help="Comma-separated subset of the default tools "
+        "(transcribe_audio,sample_evidence). Never adds a tool.",
+    ),
+    model: str | None = typer.Option(
+        None, "--model", help="One of: " + ", ".join(APPROVED_QWEN_MODELS) + "."
+    ),
+    endpoint: str | None = typer.Option(
+        None, "--endpoint", help="One of: " + ", ".join(ENDPOINT_BASE_URLS) + "."
+    ),
 ) -> None:
     """Analyze one local video through the bounded evidence harness.
 
@@ -236,11 +289,14 @@ def analyze(
     else:
         resolved_root = runs_root.expanduser().resolve()
         run_dir = output_dir
+    config = _analysis_config(model, endpoint)
+    policy = _analysis_policy(run_dir, mode, tools)
+    harness = VideoHarness() if config is None else VideoHarness(config)
     result = asyncio.run(
-        VideoHarness().run(
+        harness.run(
             VideoSource(path=video),
             VideoGoal(objective=goal),
-            HarnessPolicy(output_dir=run_dir),
+            policy,
         )
     )
     _index_run(result.run_path, resolved_root, command="analyze", prices=prices)
