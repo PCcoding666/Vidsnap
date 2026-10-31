@@ -21,7 +21,7 @@ from vidsnap.contracts.models import StrictModel
 from vidsnap.eval.suite import EvalItem, TaskId
 from vidsnap.eval.text import cjk_ratio, parse_timestamp
 
-PROMPT_VERSION = "eval-prompts/2026-10-10"
+PROMPT_VERSION = "eval-prompts/2026-11-01"
 
 Seconds = Annotated[float, BeforeValidator(parse_timestamp)]
 

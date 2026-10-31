@@ -111,7 +111,8 @@ async def test_qwen_client_sends_captured_frame_as_a_local_data_uri(tmp_path) ->
     content = captured["payload"]["messages"][1]["content"]
     assert content[0]["type"] == "text"
     assert json.loads(content[0]["text"])["evidence"][0]["id"] == "frame-1"
-    assert content[1]["image_url"]["url"] == "data:image/jpeg;base64,anBlZy1ieXRlcw=="
+    assert content[1] == {"type": "text", "text": "[frame-1 @ 00:00]"}
+    assert content[2]["image_url"]["url"] == "data:image/jpeg;base64,anBlZy1ieXRlcw=="
     assert response.result.summary == "ok"
 
 

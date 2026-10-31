@@ -49,9 +49,12 @@ mode:
 
 ## Limitations
 
-- The built-in provider targets only `qwen3.8-max` on Alibaba Cloud's
-  Beijing endpoint and needs its key in `VIDSNAP_QWEN_API_KEY` (fallback
-  `QWEN_API_KEY`); others injectable from code only.
+- The built-in provider defaults to `qwen3.8-max` on Alibaba Cloud's Token Plan
+  endpoint and needs its key in `VIDSNAP_QWEN_API_KEY` (fallback `QWEN_API_KEY`).
+  `VIDSNAP_QWEN_MODEL` may pick `qwen3.8-flash` or `qwen3.8-omni-flash` and
+  `VIDSNAP_QWEN_ENDPOINT=dashscope` the public DashScope compatible-mode host;
+  nothing outside that allow-list, and nothing during a run. Other providers are
+  injectable from code only.
 - The built-in speech recognizer (`qwen-audio-3.1-asr-flash`) calls the public
   DashScope native API, not Token Plan (text models only), with `VIDSNAP_ASR_API_KEY`
   (fallback: the text-model key, which may not be valid there). Details:
@@ -157,8 +160,8 @@ quality, latency, or cost claims are published.
 
 ## Honest limitations
 
-- The built-in provider is pinned to one model (qwen3.8-max) with concurrency
-  capped at two. Keys come only from local environment variables, are never
+- The built-in provider offers three allow-listed Qwen models on two allow-listed
+  endpoints, fixed before the run starts, with concurrency capped at two. Keys come only from local environment variables, are never
   accepted by the API, and are never stored in a RunBundle.
 - The API binds to 127.0.0.1 with no accounts, jobs, history, or WebSockets,
   and deletes its temporary RunBundle when the request finishes or is

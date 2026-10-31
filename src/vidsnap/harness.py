@@ -35,7 +35,7 @@ from vidsnap.providers.base import (
     VideoModelPort,
     declared_identity,
 )
-from vidsnap.providers.qwen import QWEN_PROVIDER_IDENTITY, QwenCompatibleClient
+from vidsnap.providers.qwen import QwenCompatibleClient
 from vidsnap.runtime import AgenticPolicy, FixedPolicy, HarnessKernel, default_plugin_registry
 from vidsnap.runtime.context import RunContext as KernelRunContext
 from vidsnap.runtime.kernel import KernelRunResult
@@ -125,6 +125,8 @@ class VideoHarness:
                     api_key=self.config.api_key,
                     model_concurrency=self.config.model_concurrency,
                     timeout_seconds=self.config.request_timeout_seconds,
+                    model=self.config.model,
+                    base_url=self.config.base_url,
                 )
                 self.model = default_client
                 self.planner = planner or default_client
@@ -307,7 +309,7 @@ class VideoHarness:
         if port is None:
             return None
         if self._default_client is not None and port is self._default_client:
-            return QWEN_PROVIDER_IDENTITY
+            return self._default_client.identity
         return declared_identity(port)
 
     def _recognizer_header_identity(self) -> ProviderIdentity | None:
