@@ -78,6 +78,34 @@ caption matched its frame, including the six mid-talk slides the oracle run
 got wrong. Labels are now the default for the harness synthesis call in both
 the evaluation and the live client; `+plain-frames` is the ablation.
 
+## Follow-up: the native upload path (same day, owner's OSS bucket)
+
+The "native cannot take long video" result above is a limit of the inline
+Base64 path, not of the model. Uploading the 26-minute tutorial to a private
+OSS bucket, handing qwen3.8-max a two-hour signed URL as `video_url` with the
+same t1 native prompt, rendering the figures from the local file, then deleting
+the object (verified absent afterwards):
+
+| System, 26-minute tutorial | Cost (CNY) | Tokens | Wall s | Figures | Figures correct (sampled) |
+|---|---|---|---|---|---|
+| harness + qwen3.8-max | **2.09** | 100k in | 561 | 14 | 5/5 |
+| native qwen3.8-max via OSS URL | 3.47 | 254k video + 11k out | **364** | 12 | 5/5 |
+
+Both articles are good. The native one is more detailed in places (the
+`No session ID found` error and its static-session fix, the zip code, the two
+trails suggested in the follow-up chat) and faster; the harness one is 40%
+cheaper. The native article states the recommended run's estimated time as
+"2h 35m"; the harness article says "1h 35m", and the frame it cites shows
+1h 35m. Neither system has a gate on numbers — the harness can only be
+checked because its figures cite frames.
+
+This narrows the claim once more. With the upload path wired in, "native cannot
+run long video" is gone. What remains for the harness on long video is **cost
+(~40% less), auditability (every figure and timestamp traces to a sampled
+frame), and bounded budgets** — not capability. The upload path should become
+a native system variant in the evaluation so this comparison runs under the
+same harness, with the same graders, and on more than one video.
+
 ## What changed in the repository because of this run
 
 - `figure_captions_grounded` gate on the article task (active once frames
