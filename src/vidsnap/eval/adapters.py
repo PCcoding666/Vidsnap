@@ -109,7 +109,7 @@ def evidence_content(
 class HarnessEvalAdapter(Generic[OutputT]):
     """Task adapter for ``harness+<model>``: one synthesis call over typed evidence."""
 
-    def __init__(self, task: EvalTask[Any], item: EvalItem, *, frame_labels: bool = False) -> None:
+    def __init__(self, task: EvalTask[Any], item: EvalItem, *, frame_labels: bool = True) -> None:
         self.task = task
         self.item = item
         self.goal = _goal(item)

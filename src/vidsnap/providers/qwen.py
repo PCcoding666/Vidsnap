@@ -7,12 +7,17 @@ import base64
 import json
 import mimetypes
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 
 import httpx
 
-from vidsnap.config import QWEN_MODEL, TOKEN_PLAN_BASE_URL
+from vidsnap.config import (
+    APPROVED_BASE_URLS,
+    APPROVED_QWEN_MODELS,
+    QWEN_MODEL,
+    TOKEN_PLAN_BASE_URL,
+)
 from vidsnap.contracts import Evidence, ToolPlan, VideoAnalysisResult, VideoGoal
 from vidsnap.contracts.agent import AgentDecision, ProviderUsage
 from vidsnap.providers.base import (
@@ -58,14 +63,24 @@ QWEN_PROVIDER_IDENTITY = ProviderIdentity(id="qwen", model=QWEN_MODEL, base_url=
 
 @dataclass(frozen=True, slots=True)
 class QwenProfile:
-    """Immutable profile pinned to the approved Qwen model and endpoint."""
+    """Immutable profile: an approved Qwen model on an approved endpoint, fixed per client."""
 
-    model: str = field(default=QWEN_MODEL, init=False)
-    base_url: str = field(default=TOKEN_PLAN_BASE_URL, init=False)
+    model: str = QWEN_MODEL
+    base_url: str = TOKEN_PLAN_BASE_URL
+
+    def __post_init__(self) -> None:
+        if self.model not in APPROVED_QWEN_MODELS:
+            raise ValueError(f"model must be one of: {', '.join(APPROVED_QWEN_MODELS)}")
+        if self.base_url not in APPROVED_BASE_URLS:
+            raise ValueError("base_url must be an approved endpoint")
 
 
 class QwenCompatibleClient:
-    """A low-concurrency client that never accepts a caller-selected model or URL."""
+    """A low-concurrency client whose model and endpoint are fixed at construction.
+
+    The choice comes from ``HarnessConfig`` (local environment variables), never from
+    the model, a request body or anything else that arrives during a run.
+    """
 
     def __init__(
         self,
@@ -74,9 +89,12 @@ class QwenCompatibleClient:
         model_concurrency: int = 1,
         transport: httpx.AsyncBaseTransport | None = None,
         timeout_seconds: float = 120.0,
+        model: str = QWEN_MODEL,
+        base_url: str = TOKEN_PLAN_BASE_URL,
     ) -> None:
         if model_concurrency < 1:
             raise ValueError("model_concurrency must be positive")
+        self._profile = QwenProfile(model=model, base_url=base_url)
         self._api_key = api_key
         self._transport = transport
         self._timeout_seconds = timeout_seconds
@@ -94,7 +112,7 @@ class QwenCompatibleClient:
             )
 
         request_payload = {
-            "model": QWEN_MODEL,
+            "model": self._profile.model,
             "messages": [
                 {"role": "system", "content": _SYSTEM_MESSAGE},
                 {
@@ -139,7 +157,7 @@ class QwenCompatibleClient:
             sort_keys=True,
         )
         request_payload = {
-            "model": QWEN_MODEL,
+            "model": self._profile.model,
             "messages": [
                 {"role": "system", "content": _PLANNER_SYSTEM_MESSAGE},
                 {"role": "user", "content": planner_input},
@@ -199,7 +217,7 @@ class QwenCompatibleClient:
         if image_parts:
             content = [{"type": "text", "text": text}, *image_parts]
         request_payload = {
-            "model": QWEN_MODEL,
+            "model": self._profile.model,
             "messages": [
                 {"role": "system", "content": _AGENT_SYSTEM_MESSAGE},
                 {"role": "user", "content": content},
@@ -232,7 +250,7 @@ class QwenCompatibleClient:
         """Send one request and decode its JSON body, attaching structured failures."""
         async with self._semaphore:
             async with httpx.AsyncClient(
-                base_url=f"{TOKEN_PLAN_BASE_URL}/",
+                base_url=f"{self._profile.base_url}/",
                 timeout=self._timeout_seconds,
                 transport=self._transport,
             ) as client:
@@ -256,6 +274,13 @@ class QwenCompatibleClient:
             ) from error
         return payload
 
+    @property
+    def identity(self) -> ProviderIdentity:
+        """The model and endpoint this client was constructed with."""
+        return ProviderIdentity(
+            id="qwen", model=self._profile.model, base_url=self._profile.base_url
+        )
+
     @staticmethod
     def _evidence_content(
         evidence: Sequence[Evidence],
@@ -277,6 +302,10 @@ class QwenCompatibleClient:
         for item in evidence:
             if item.artifact_path is None:
                 continue
+            # A label before each image binds captions and timestamps to the frame
+            # they describe; without it the model dates slides by the transcript.
+            minutes, seconds = divmod(int(item.start_seconds), 60)
+            content.append({"type": "text", "text": f"[{item.id} @ {minutes:02d}:{seconds:02d}]"})
             content.append(QwenCompatibleClient._image_part(item.artifact_path))
         return text if len(content) == 1 else content
 
@@ -376,8 +405,10 @@ class QwenCompatibleClient:
 
 
 class QwenProvider(QwenCompatibleClient):
-    """Provider entry point with a fixed, read-only Qwen identity."""
+    """Provider entry point with a read-only Qwen identity fixed at construction."""
 
     @property
     def identity(self) -> ProviderIdentity:
-        return ProviderIdentity(id="qwen", model=QWEN_MODEL, base_url=TOKEN_PLAN_BASE_URL)
+        return ProviderIdentity(
+            id="qwen", model=self._profile.model, base_url=self._profile.base_url
+        )

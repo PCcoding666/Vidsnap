@@ -67,10 +67,10 @@ fixed per system and recorded in the run header.
 
 | System | What runs |
 |---|---|
-| `harness+<model>` | `HarnessKernel` with `FixedPolicy`: probe, `transcribe_audio` (Qwen ASR), `sample_evidence` (`AdaptiveSampler`), one synthesis call to `<model>` with the transcript and frames, the task's verifier gates, at most one targeted repair round |
+| `harness+<model>` | `HarnessKernel` with `FixedPolicy`: probe, `transcribe_audio` (Qwen ASR), `sample_evidence` (`AdaptiveSampler`), one synthesis call to `<model>` with the transcript and frames (each image preceded by a `[frame-id @ MM:SS]` label), the task's verifier gates, at most one targeted repair round |
 | `harness+<model>+oracle-asr` | Same, but ASR returns the reference transcript (ablation) |
 | `harness+<model>+oracle-frames` | Same, but frame candidates are the reference key moments (ablation) |
-| `harness+<model>+frame-labels` | Same, with a `[frame-id @ MM:SS]` text label before every image (candidate fix) |
+| `harness+<model>+plain-frames` | Same, but images are sent without the `[frame-id @ MM:SS]` labels (ablation; the pre-2026-11-01 default) |
 | `native:<model>` | `HarnessKernel` with `NativePolicy`: probe, then one request that sends the whole video file (Base64 `video_url`) and the task prompt to a video-capable model with its own defaults; no ASR, sampling, verifier repair or retries |
 | `harness+mock`, `native:mock` | Deterministic offline providers for tests and plumbing checks |
 

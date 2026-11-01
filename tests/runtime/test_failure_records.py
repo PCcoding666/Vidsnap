@@ -320,6 +320,53 @@ async def test_media_probe_failure_records_media_error(tmp_path: Path) -> None:
     assert _run_failure(context)["category"] == "media_error"  # type: ignore[index]
     ledger = (context.bundle.path / "events.jsonl").read_text(encoding="utf-8")
     assert "sentinel-ffprobe-detail" not in ledger
+    # The probe step itself records the structured failure, not only the run.
+    (failed_probe,) = _events(context, "probe.failed")
+    assert failed_probe["payload"] == {
+        "failure": {
+            "schema_version": "vidsnap.provider-failure/v1",
+            "category": "media_error",
+            "http_status": None,
+            "input_bytes": None,
+            "input_tokens": None,
+            "output_tokens": None,
+        }
+    }
+
+
+class _FailingTranscriber:
+    """A recognizer whose only request fails with an HTTP 400 provider error."""
+
+    async def transcribe(self, audio_bytes: bytes, *, mime_type: str = "audio/wav") -> str:
+        del audio_bytes, mime_type
+        raise ProviderError(
+            "Qwen ASR request failed: sentinel-asr-body-text",
+            failure=ProviderFailure(category="http_4xx", http_status=400),
+        )
+
+
+@pytest.mark.asyncio
+async def test_failed_tool_call_records_structured_failure(tmp_path: Path) -> None:
+    context, *_ = build_context(tmp_path, has_audio=True)
+    context.recognizer = _FailingTranscriber()  # type: ignore[assignment]
+
+    result = await make_kernel().run(context)
+
+    assert result.terminal_state is TerminalState.FAILED
+    (failed_tool,) = _events(context, "tool.call.failed")
+    assert failed_tool["payload"] == {
+        "name": "transcribe_audio",
+        "failure": {
+            "schema_version": "vidsnap.provider-failure/v1",
+            "category": "http_4xx",
+            "http_status": 400,
+            "input_bytes": None,
+            "input_tokens": None,
+            "output_tokens": None,
+        },
+    }
+    ledger = (context.bundle.path / "events.jsonl").read_text(encoding="utf-8")
+    assert "sentinel-asr-body-text" not in ledger
 
 
 @pytest.mark.asyncio

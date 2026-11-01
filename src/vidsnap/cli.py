@@ -1,6 +1,7 @@
 """Command-line entry point for VidSnap Harness."""
 
 import asyncio
+import dataclasses
 import json
 import os
 import uuid
@@ -11,13 +12,14 @@ import typer
 from pydantic import ValidationError
 
 from vidsnap.benchmark.trust import TrustEvaluationInput, evaluate_trust
-from vidsnap.config import HarnessConfig
+from vidsnap.config import APPROVED_QWEN_MODELS, ENDPOINT_BASE_URLS, HarnessConfig
 from vidsnap.contracts import HarnessPolicy, TerminalState, VideoGoal, VideoSource
 from vidsnap.demo import replay_demo_run
 from vidsnap.eval.cli import eval_app
 from vidsnap.harness import VideoHarness
 from vidsnap.plugins import PluginRegistry, ToolPlugin, discovery
 from vidsnap.plugins.project import validate_plugin_project
+from vidsnap.recipes.article import DEFAULT_GOAL, ArticleRecipeRunner
 from vidsnap.recipes.runner import InterviewRecipeRunner
 from vidsnap.trace.export import export_trace
 from vidsnap.trace.pricing import LoadedPriceTable, load_price_table
@@ -216,6 +218,40 @@ def root() -> None:
     """VidSnap Harness command group."""
 
 
+def _analysis_config(model: str | None, endpoint: str | None) -> HarnessConfig | None:
+    """The environment's config with the CLI's model/endpoint choice applied.
+
+    Returns ``None`` when neither was given so the harness keeps its own defaults.
+    """
+    if model is None and endpoint is None:
+        return None
+    try:
+        config = HarnessConfig.from_env()
+        if model is not None:
+            config = dataclasses.replace(config, model=model)
+        if endpoint is not None:
+            if endpoint not in ENDPOINT_BASE_URLS:
+                raise ValueError("endpoint must be one of: " + ", ".join(ENDPOINT_BASE_URLS))
+            config = dataclasses.replace(config, base_url=ENDPOINT_BASE_URLS[endpoint])
+    except ValueError as error:
+        raise typer.BadParameter(str(error)) from error
+    return config
+
+
+def _analysis_policy(run_dir: Path, mode: str, tools: str | None) -> HarnessPolicy:
+    """A per-run policy that can only narrow the published LoopSpec."""
+    fields: dict[str, object] = {"output_dir": run_dir, "tool_mode": mode}
+    if tools is not None:
+        fields["allowed_tools"] = tuple(part.strip() for part in tools.split(",") if part.strip())
+    try:
+        return HarnessPolicy.model_validate(fields)
+    except ValidationError as error:
+        raise typer.BadParameter(
+            "--mode must be fixed or agentic and --tools a subset of "
+            "transcribe_audio,sample_evidence"
+        ) from error
+
+
 @app.command()
 def analyze(
     video: Path = typer.Argument(..., exists=True, readable=True),
@@ -223,6 +259,24 @@ def analyze(
     output_dir: Path | None = typer.Option(None, "--output-dir"),
     runs_root: RunsRootOption = Path("run"),
     price_table: PriceTableOption = None,
+    mode: str = typer.Option(
+        "fixed",
+        "--mode",
+        help="fixed: probe, transcribe, sample, synthesize, verify. "
+        "agentic: the model chooses each bounded tool call; the harness keeps the budgets.",
+    ),
+    tools: str | None = typer.Option(
+        None,
+        "--tools",
+        help="Comma-separated subset of the default tools "
+        "(transcribe_audio,sample_evidence). Never adds a tool.",
+    ),
+    model: str | None = typer.Option(
+        None, "--model", help="One of: " + ", ".join(APPROVED_QWEN_MODELS) + "."
+    ),
+    endpoint: str | None = typer.Option(
+        None, "--endpoint", help="One of: " + ", ".join(ENDPOINT_BASE_URLS) + "."
+    ),
 ) -> None:
     """Analyze one local video through the bounded evidence harness.
 
@@ -236,11 +290,14 @@ def analyze(
     else:
         resolved_root = runs_root.expanduser().resolve()
         run_dir = output_dir
+    config = _analysis_config(model, endpoint)
+    policy = _analysis_policy(run_dir, mode, tools)
+    harness = VideoHarness() if config is None else VideoHarness(config)
     result = asyncio.run(
-        VideoHarness().run(
+        harness.run(
             VideoSource(path=video),
             VideoGoal(objective=goal),
-            HarnessPolicy(output_dir=run_dir),
+            policy,
         )
     )
     _index_run(result.run_path, resolved_root, command="analyze", prices=prices)
@@ -250,6 +307,53 @@ def analyze(
                 "terminal_state": result.terminal_state.value,
                 "run_path": str(result.run_path),
                 "claims": [claim.model_dump(mode="json") for claim in result.claims],
+            },
+            ensure_ascii=True,
+        )
+    )
+
+
+@recipe_app.command("article")
+def recipe_article(
+    video: Path = typer.Argument(..., exists=True, readable=True),
+    output_dir: Path = typer.Option(..., "--output-dir", help="Where article.md and images/ go."),
+    goal: str = typer.Option(DEFAULT_GOAL, "--goal", min=1),
+    runs_root: RunsRootOption = Path("run"),
+    price_table: PriceTableOption = None,
+    model: str = typer.Option(
+        "qwen3.8-max", "--model", help="One of: " + ", ".join(APPROVED_QWEN_MODELS) + "."
+    ),
+    endpoint: str = typer.Option(
+        "dashscope",
+        "--endpoint",
+        help="dashscope (key: VIDSNAP_DASHSCOPE_API_KEY) or token-plan (VIDSNAP_QWEN_API_KEY).",
+    ),
+) -> None:
+    """Turn one local video into an illustrated article whose figures cite frames.
+
+    Runs the same bounded loop, prompt, gates and renderer as `vidsnap eval`'s
+    t1 task. The RunBundle goes under the runs root and is indexed.
+    """
+    if endpoint not in ("dashscope", "token-plan"):
+        raise typer.BadParameter("--endpoint must be dashscope or token-plan")
+    try:
+        runner = ArticleRecipeRunner(system=f"harness+{model}", endpoint=endpoint)  # type: ignore[arg-type]
+    except ValueError as error:
+        raise typer.BadParameter(str(error)) from error
+    prices = _load_prices(price_table)
+    resolved_root = _prepare_runs_root(runs_root)
+    run_dir = resolved_root / str(uuid.uuid4())
+    result = asyncio.run(
+        runner.run(video, goal, output_dir.expanduser().resolve(), run_dir=run_dir)
+    )
+    _index_run(result.run_path, resolved_root, command="recipe article", prices=prices)
+    typer.echo(
+        json.dumps(
+            {
+                "terminal_state": result.terminal_state.value,
+                "run_path": str(result.run_path),
+                "article": str(result.article_path) if result.article_path else None,
+                "figures": result.figures,
             },
             ensure_ascii=True,
         )

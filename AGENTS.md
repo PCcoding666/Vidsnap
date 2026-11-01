@@ -9,7 +9,7 @@ VidSnap Harness is a Python src-layout package. All runtime code lives in src/vi
 - contracts — typed public contracts shared across every module. This is the integration surface of the project.
 - Core runtime — the bounded loop that orchestrates a run. It executes only registered tools and plugins through contracts, under declared budgets. It calls model/provider capabilities only through typed ports — never raw clients, endpoints, or credentials.
 - Local video ports — file-system-backed ports for local video and subtitle ingestion. These are the only components that touch user media.
-- Providers — model adapters behind typed provider ports. Qwen is the locked default/reference provider (qwen3.8-max); the bundled Qwen provider enforces concurrency of at most two; keys come only from local environment variables. An application may inject a conforming ProviderProtocol before a run; provider, model, or base_url cannot be switched during a run.
+- Providers — model adapters behind typed provider ports. Qwen qwen3.8-max on Token Plan is the default/reference; the model and endpoint are chosen before a run from a fixed allow-list (`APPROVED_QWEN_MODELS`, `ENDPOINT_BASE_URLS` in `config.py`) via `VIDSNAP_QWEN_MODEL` and `VIDSNAP_QWEN_ENDPOINT`, never from a request, a prompt or model output; the bundled Qwen provider enforces concurrency of at most two; keys come only from local environment variables. An application may inject a conforming ProviderProtocol before a run; provider, model, or base_url cannot be switched during a run.
 - Bounded tools and plugins — the capability layer. Tools and plugins are registered explicitly, validated against allow-lists, and constrained by explicit budgets. Neither spawns shells, browsers, or network connections on its own.
 - Recipes — versioned task packages with fixed goals and budgets, implemented as typed Python models plus their adapters, runners, and renderers — not merely declarative data.
 - RunBundles — write-once run artifacts recording immutable, auditable events plus outputs. They are never committed to the repository.
@@ -62,7 +62,7 @@ Never commit, publish, or embed in artifacts or fixtures: credentials, API keys,
 - Allow-lists: tools, paths, commands, and URL schemes validated against explicit lists.
 - Explicit budgets: step, time, token, and size limits declared up front and enforced by the core runtime.
 - Immutable, auditable events: append-only run records that replay offline.
-- Provider pinning: Qwen (qwen3.8-max) as the locked default/reference; a conforming ProviderProtocol may be injected by the application before a run; concurrency of at most two, enforced by the bundled Qwen provider (custom providers may differ); environment-variable key sourcing; no provider, model, or base_url switching during a run.
+- Provider pinning: Qwen (qwen3.8-max on Token Plan) as the default/reference, with the model and endpoint selectable only from the allow-list in `config.py` through local environment variables; a conforming ProviderProtocol may be injected by the application before a run; concurrency of at most two, enforced by the bundled Qwen provider (custom providers may differ); environment-variable key sourcing; no provider, model, or base_url switching during a run.
 
 ## Forbidden patterns
 

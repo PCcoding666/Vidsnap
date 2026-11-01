@@ -168,6 +168,25 @@ def test_cli_help_lists_harness_commands() -> None:
     assert "recipe" in help_text
 
 
+def test_analyze_help_offers_mode_tools_model_and_endpoint() -> None:
+    result = CliRunner().invoke(app, ["analyze", "--help"])
+
+    assert result.exit_code == 0
+    help_text = strip_ansi(result.stdout)
+    for option in ("--mode", "--tools", "--model", "--endpoint"):
+        assert option in help_text
+    assert "agentic" in help_text
+
+
+def test_analyze_rejects_tools_outside_the_default_set(tmp_path) -> None:
+    video = tmp_path / "v.mp4"
+    video.write_bytes(b"x")
+    result = CliRunner().invoke(app, ["analyze", str(video), "--tools", "run_shell"])
+
+    assert result.exit_code != 0
+    assert "subset" in strip_ansi(result.output)
+
+
 def test_cli_help_exposes_trace_export() -> None:
     result = CliRunner().invoke(app, ["trace", "--help"])
 

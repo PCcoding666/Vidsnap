@@ -51,6 +51,18 @@ class HarnessPolicy(StrictModel):
     max_wall_seconds: int = Field(default=900, ge=1, le=900)
     output_dir: Path | None = None
     tool_mode: Literal["fixed", "agentic"] = "fixed"
+    # The model-visible tools this run may call: a subset of the LoopSpec's two, never
+    # more. FixedPolicy skips a tool that is not listed; AgenticPolicy never sees it.
+    allowed_tools: tuple[Literal["transcribe_audio", "sample_evidence"], ...] = (
+        "transcribe_audio",
+        "sample_evidence",
+    )
+
+    @model_validator(mode="after")
+    def validate_allowed_tools(self) -> HarnessPolicy:
+        if len(set(self.allowed_tools)) != len(self.allowed_tools):
+            raise ValueError("allowed_tools must not repeat a tool")
+        return self
 
 
 class EvidenceReference(StrictModel):
