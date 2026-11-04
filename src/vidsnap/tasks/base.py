@@ -48,3 +48,13 @@ class TaskAdapter(Protocol, Generic[OutputT, ModelT]):
         probe: MediaProbe,
     ) -> TaskVerification:
         """Check one parsed output against captured evidence deterministically."""
+
+
+StepT = TypeVar("StepT", covariant=True)
+
+
+class ModelStep(Protocol[ModelT, StepT]):
+    """One typed model operation, executed and budgeted by the kernel."""
+
+    async def request(self, model: ModelT) -> tuple[StepT, ProviderUsage]:
+        """Call the run's pinned model port and return validated output plus usage."""
