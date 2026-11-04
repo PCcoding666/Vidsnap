@@ -153,7 +153,8 @@ class ArticleRecipeRunner:
         figures = 0
         if result.output is not None:
             resolver = make_frame_resolver(
-                read_evidence(run_path), video if self._media is None else None
+                read_evidence(run_path),
+                video if not reviewed and self._media is None else None,
             )
             render = render_output(result.output, output_dir, resolver)
             images = render.get("images")

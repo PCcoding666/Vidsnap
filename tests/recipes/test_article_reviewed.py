@@ -423,3 +423,30 @@ def test_v2_cli_option_is_exposed_and_invalid_version_fails_before_work(tmp_path
     )
     assert result.exit_code != 0
     assert not (tmp_path / "out").exists()
+
+
+@pytest.mark.asyncio
+async def test_v2_renderer_never_extracts_unrecorded_frames(tmp_path, monkeypatch):
+    import vidsnap.recipes.article as recipe_module
+
+    media_arguments = []
+
+    def resolver_spy(evidence, media):
+        media_arguments.append(media)
+        # Do not let the legacy renderer launch FFmpeg in this offline regression.
+        return lambda figure, destination: None
+
+    monkeypatch.setattr(recipe_module, "make_frame_resolver", resolver_spy)
+    monkeypatch.setattr(
+        recipe_module, "FFmpegMediaPort", lambda: FakeMedia(duration_seconds=120, has_audio=False)
+    )
+    video = tmp_path / "synthetic.mp4"
+    video.write_bytes(b"synthetic, no real media")
+    model = ScriptedSynthesis(draft_article(), ProviderError("synthetic review failure"))
+    result = await ArticleRecipeRunner(
+        system="harness+mock",
+        recipe_version="v2",
+        synthesis_port=model,
+    ).run(video, "图文文章", tmp_path / "out", run_dir=tmp_path / "run")
+    assert result.terminal_state is TerminalState.FAILED
+    assert media_arguments == [None]

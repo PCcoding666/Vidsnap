@@ -51,7 +51,9 @@ valid article remains available if drafting already completed. An available
 ## Local outputs and audit
 
 The output directory keeps the existing `article.md`, `output.json` and `images/`
-layout. ArticleOutput and RunBundle schemas remain compatible. The run header
+layout. V2 renders only captured evidence images; missing citations never trigger
+extra extraction after the run. ArticleOutput and RunBundle schemas remain
+compatible. The run header
 identifies `recipe/article` version `2.0.0`, and the dense sampler identifies its
 separate versioned plugin. The run index exposes failed visual/editorial gates.
 
