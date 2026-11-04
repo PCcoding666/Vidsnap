@@ -12,18 +12,23 @@ from __future__ import annotations
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 import httpx
 
 from vidsnap.contracts import HarnessPolicy, TerminalState, VideoSource, default_loop_spec
 from vidsnap.eval.attribution import read_evidence
-from vidsnap.eval.providers import EndpointName
+from vidsnap.eval.providers import EndpointName, SynthesisPort
 from vidsnap.eval.render import make_frame_resolver, render_output
 from vidsnap.eval.suite import EvalItem, ItemInputs, SourceVideo
 from vidsnap.eval.systems import BuildOptions, build_components, parse_system
 from vidsnap.eval.tasks import PROMPT_VERSION, get_task
 from vidsnap.loop.run_bundle import RunBundle
+from vidsnap.recipes.article_review import (
+    REVIEWED_VERSION,
+    ReviewedArticlePolicy,
+    reviewed_registry,
+)
 from vidsnap.runtime import HarnessKernel, RecipeIdentity, RunContext, default_plugin_registry
 from vidsnap.video.ports import FFmpegPort
 from vidsnap.video.probe import FFmpegMediaPort
@@ -59,7 +64,15 @@ class ArticleRecipeRunner:
         media: FFmpegPort | None = None,
         timeout_seconds: float = 900.0,
         transport: httpx.AsyncBaseTransport | None = None,
+        recipe_version: Literal["v1", "v2"] = "v1",
+        synthesis_port: SynthesisPort | None = None,
     ) -> None:
+        if recipe_version not in ("v1", "v2"):
+            raise ValueError("recipe_version must be v1 or v2")
+        if synthesis_port is not None and recipe_version != "v2":
+            raise ValueError("synthesis_port injection is available only for article v2")
+        self._recipe_version = recipe_version
+        self._synthesis_port = synthesis_port
         self._spec = parse_system(system)
         if self._spec.kind != "harness":
             raise ValueError("the article recipe runs harness systems only")
@@ -87,16 +100,39 @@ class ArticleRecipeRunner:
         media = self._media or FFmpegMediaPort()
         components = build_components(self._spec, task, item, media=media, options=self._options)
         run_path = (run_dir or Path.cwd() / "run" / str(uuid.uuid4())).expanduser().resolve()
+        if self._synthesis_port is not None:
+            components.task_model = self._synthesis_port
+            components.provider_identity = self._synthesis_port.identity
+        reviewed = self._recipe_version == "v2"
+        policy = (
+            HarnessPolicy(max_model_calls=4, max_tool_calls=3, max_iterations=2)
+            if reviewed
+            else HarnessPolicy()
+        )
+        loop_spec = default_loop_spec()
+        if reviewed:
+            loop_spec = loop_spec.model_copy(
+                update={
+                    "max_repair_rounds": 1,
+                    "budgets": loop_spec.budgets.model_copy(
+                        update={
+                            "max_model_calls": 4,
+                            "max_tool_calls": 3,
+                            "max_iterations": 2,
+                        }
+                    ),
+                }
+            )
         identity = components.provider_identity
         bundle = RunBundle.create(
             run_path,
-            loop_spec=default_loop_spec(),
+            loop_spec=loop_spec,
             provider_url=identity.base_url,
             provider_identity=identity,
         )
         context: RunContext[Any, Any] = RunContext(
             source=VideoSource(path=video),
-            policy=HarnessPolicy(),
+            policy=policy,
             bundle=bundle,
             task_adapter=components.adapter,
             task_model=components.task_model,
@@ -106,10 +142,13 @@ class ArticleRecipeRunner:
             result_writer=bundle.write_result,
             provider_identity=identity,
             speech_recognizer_identity=components.recognizer_identity,
-            recipe=RecipeIdentity(id=RECIPE_ID, version=PROMPT_VERSION),
+            recipe=RecipeIdentity(
+                id=RECIPE_ID, version=REVIEWED_VERSION if reviewed else PROMPT_VERSION
+            ),
         )
         kernel: HarnessKernel[Any, Any] = HarnessKernel(
-            policy=components.policy, registry=default_plugin_registry()
+            policy=ReviewedArticlePolicy(components.adapter) if reviewed else components.policy,
+            registry=reviewed_registry() if reviewed else default_plugin_registry(),
         )
         result = await kernel.run(context)
         article_path: Path | None = None

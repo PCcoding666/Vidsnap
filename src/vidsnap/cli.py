@@ -320,6 +320,9 @@ def recipe_article(
     goal: str = typer.Option(DEFAULT_GOAL, "--goal", min=1),
     runs_root: RunsRootOption = Path("run"),
     price_table: PriceTableOption = None,
+    recipe_version: str = typer.Option(
+        "v1", "--recipe-version", help="v1 (default) or v2 (visual review and one revision)."
+    ),
     model: str = typer.Option(
         "qwen3.8-max", "--model", help="One of: " + ", ".join(APPROVED_QWEN_MODELS) + "."
     ),
@@ -349,6 +352,7 @@ def recipe_article(
             system=f"harness+{model}",
             endpoint=endpoint,  # type: ignore[arg-type]
             timeout_seconds=timeout,
+            recipe_version=recipe_version,  # type: ignore[arg-type]
         )
     except ValueError as error:
         raise typer.BadParameter(str(error)) from error
