@@ -342,8 +342,8 @@ def recipe_article(
 ) -> None:
     """Turn one local video into an illustrated article whose figures cite frames.
 
-    Runs the same bounded loop, prompt, gates and renderer as `vidsnap eval`'s
-    t1 task. The RunBundle goes under the runs root and is indexed.
+    V1 follows the evaluation t1 task. Opt-in v2 adds visual review and one
+    bounded revision. The RunBundle goes under the runs root and is indexed.
     """
     if endpoint not in ("dashscope", "token-plan"):
         raise typer.BadParameter("--endpoint must be dashscope or token-plan")

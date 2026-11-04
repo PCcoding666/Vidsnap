@@ -1,10 +1,8 @@
 """The article recipe: one local video to an illustrated, evidence-cited article.
 
-A thin shell over the evaluation's t1 machinery, so a recipe run is produced and
-checked by exactly the components `vidsnap eval` measures: the same prompt and
-schema, the same frame labels, the same verifier gates (including
-``figure_captions_grounded``), the same renderer. The run leaves an ordinary
-RunBundle; the article and its figures go to the output directory.
+V1 uses the evaluation's t1 machinery unchanged. Opt-in v2 adds actual-image
+review and one bounded local revision through the same pinned model port.
+Both versions leave ordinary RunBundles and render articles to the output directory.
 """
 
 from __future__ import annotations
