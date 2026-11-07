@@ -1,8 +1,39 @@
 # VidSnap Project State
 
-This page is the single source of truth for project state: the current main objective, task cards, state transitions, and repository settings awaiting user authorization. Pull-request facts below combine the read-only 2026-08-23 snapshot recorded in the approved implementation plan (`docs/superpowers/plans/2026-08-23-ai-native-development-protocol.md`) with later 2026-08-23 facts: the PR #7/#8/#9 facts were verified by the main agent on 2026-08-23 through read-only GitHub queries, the PR #10 facts (real URL, base/head branches, both GitHub Actions runs, and mergeState) were reported from live GitHub state on 2026-08-23, and the later 2026-08-23 STACK-001 verification facts for PR #10 (head `13a49b3b`, push run `32645998762` and `pull_request` run `32645998504` both success, and the combined `vidsnap_slim` + #10 merge-tree local gate with 333 passed) were also recorded from live state. The Active Stacked Pull Requests table now records the integration-progress facts of the user-authorized STACK-001 sequence: PRs #7, #8, #9, and #10 are all MERGED in order via four normal merge commits `d4ac1e96`, `887c25aa`, `04546ad9`, and `9ffca61f`; PR #10 merged into `vidsnap_slim` via normal merge commit `9ffca61f` on 2026-08-23 after latest-head CI. PRs #7, #8, and #9 were not modified during GOV-001; the branch push and the Draft PR #10 creation were GOV-001-authorized release actions. No provider query was performed and none is required for this task.
+This page is the single source of truth for project state. The current objective
+and its task contract are at the top; the 2026-08-23 integration record is kept
+below, unchanged, as the archive it is. Last updated 2026-11-07.
 
 ## Current Main Objective
+
+ROADMAP-2026-11 — make `vidsnap recipe article` produce publishable, frame-cited
+illustrated articles for creators, prove it on real videos, and ship it so a
+stranger can run it. The four milestones are in `ROADMAP.md`; the first live
+comparison that set this direction is in
+`docs/eval-results/2026-11-01-t1-first-live-run.md`.
+
+## Task Contract: ROADMAP-2026-11
+
+- Objective: (M0) consolidate the repository — PR #24 merged, Codex's article v2 rebased and open as PR #27, stale worktrees and pull requests cleared, this page and the roadmap truthful; (M1) measure article v1, v2 and the native URL baseline on five videos against the hand-edited 2026-11-04 articles with a fixed rubric, and promote v2 to the default only if it passes; (M2) PyPI release, one-command creator workflow, a second provider through `ProviderProtocol`, a creator-facing README with a real example; (M3) public write-up and first external contributors.
+- Non-goals: No SaaS, accounts, hosted library or publishing platform. No merge of PR #27 before the M1 comparison. No change to the host that still serves the retired 2026-07 web application without the owner's separate decision.
+- Acceptance evidence: M0 — `git worktree list` shows only the main checkout and the v2 worktree; open pull requests are only #27 and Dependabot's; `PROJECT_STATE.md` and `ROADMAP.md` describe the present. M1 — a results page under `docs/eval-results/` with per-video figure fidelity (target ≥ 95%), zero wrong numbers or names, key-step coverage ≥ the hand-edited articles, blind readability not below them on at least half the videos, ≤ 5 CNY and ≤ 15 minutes per article; every row backed by a RunBundle kept outside the repository. M2 — `pipx install vidsnap-harness` and one command produce an article on a fresh machine. M3 — a merged pull request from someone other than the owner.
+- Authority / data / secret boundaries: The owner decides every merge and every provider spend. Keys come only from local environment variables and are never printed or committed; media, RunBundles and result files stay outside the repository. Changes to the production host, repository settings and default branch are the owner's alone.
+- Owner / executor / reviewer: Owner: the user. Executors: Claude Code (this session) and Codex, each on its own branch. Reviewer: CI plus the owner; a model's self-report is not acceptance.
+- Next human gate: the owner's go for the paid M1 runs (about 30–50 CNY) and the decision on the retired production host.
+
+Status: `IN_PROGRESS`
+
+Last transition: 2026-11-07 — `APPROVED` → `IN_PROGRESS`, because the owner chose the creator audience, a multi-provider M2 and the M1 thresholds, and M0 work started: PR #24 merged (`ce7499cf`), PR #27 opened, stale Codex worktrees pruned, Dependabot #11–#13 merged.
+
+## Archived record (2026-08-23 integration)
+
+Everything below is the state page as it stood after the 2026-08-23 stacked
+integration. It is kept verbatim as history; nothing in it describes current
+work.
+
+This page is the single source of truth for project state: the current main objective, task cards, state transitions, and repository settings awaiting user authorization. Pull-request facts below combine the read-only 2026-08-23 snapshot recorded in the approved implementation plan (`docs/superpowers/plans/2026-08-23-ai-native-development-protocol.md`) with later 2026-08-23 facts: the PR #7/#8/#9 facts were verified by the main agent on 2026-08-23 through read-only GitHub queries, the PR #10 facts (real URL, base/head branches, both GitHub Actions runs, and mergeState) were reported from live GitHub state on 2026-08-23, and the later 2026-08-23 STACK-001 verification facts for PR #10 (head `13a49b3b`, push run `32645998762` and `pull_request` run `32645998504` both success, and the combined `vidsnap_slim` + #10 merge-tree local gate with 333 passed) were also recorded from live state. The Active Stacked Pull Requests table now records the integration-progress facts of the user-authorized STACK-001 sequence: PRs #7, #8, #9, and #10 are all MERGED in order via four normal merge commits `d4ac1e96`, `887c25aa`, `04546ad9`, and `9ffca61f`; PR #10 merged into `vidsnap_slim` via normal merge commit `9ffca61f` on 2026-08-23 after latest-head CI. PRs #7, #8, and #9 were not modified during GOV-001; the branch push and the Draft PR #10 creation were GOV-001-authorized release actions. No provider query was performed and none is required for this task.
+
+## Archived: main objective of 2026-08-23
 
 STACK-001 — execute the user-authorized sequential integration of PRs #7, #8, #9, and #10 into `vidsnap_slim`. At most one main objective may be active at a time; STACK-001 is that objective, currently `RELEASED`. GOV-001 is preserved below as a historical `VERIFIED` task and its recorded facts are not rewritten. All other work remains `PROPOSED`, `BLOCKED`, or already `VERIFIED` or `RELEASED`.
 
