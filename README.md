@@ -48,23 +48,8 @@ mode:
     vidsnap manifest run/<bundle-dir>
 
 
-## Limitations
-
-- The built-in provider defaults to `qwen3.8-max` on Alibaba Cloud's Token Plan
-  endpoint and needs its key in `VIDSNAP_QWEN_API_KEY` (fallback `QWEN_API_KEY`).
-  `VIDSNAP_QWEN_MODEL` may pick `qwen3.8-flash` or `qwen3.8-omni-flash` and
-  `VIDSNAP_QWEN_ENDPOINT=dashscope` the public DashScope compatible-mode host;
-  nothing outside that allow-list, and nothing during a run. Other providers are
-  injectable from code only.
-- The built-in speech recognizer (`qwen-audio-3.1-asr-flash`) calls the public
-  DashScope native API, not Token Plan (text models only), with `VIDSNAP_ASR_API_KEY`
-  (fallback: the text-model key, which may not be valid there). Details:
-  [providers](docs/providers.md#speech-recognition).
-- Live `vidsnap analyze` is experimental: verification made no live provider
-  call; `vidsnap demo` is offline and needs no key.
-- Local video files only; FFmpeg/ffprobe required on PATH. No URLs/remote
-  media.
-- No hosted service; `vidsnap serve` binds to 127.0.0.1 only.
+For actual-image caption review and one bounded revision, add `--recipe-version v2`.
+See [the v2 article workflow, limits and artifacts](docs/article-v2.md).
 
 ## Why VidSnap exists
 
@@ -109,6 +94,24 @@ Five boundaries, each separately documented:
   providers are `QwenProvider` and the offline `MockProvider`. See the
   [Provider guide](docs/providers.md).
 - Trace — the RunBundle event log and its offline HTML export.
+
+## Limitations
+
+- The built-in provider defaults to `qwen3.8-max` on Alibaba Cloud's Token Plan
+  endpoint and needs its key in `VIDSNAP_QWEN_API_KEY` (fallback `QWEN_API_KEY`).
+  `VIDSNAP_QWEN_MODEL` may pick `qwen3.8-flash` or `qwen3.8-omni-flash` and
+  `VIDSNAP_QWEN_ENDPOINT=dashscope` the public DashScope compatible-mode host;
+  nothing outside that allow-list, and nothing during a run. Other providers are
+  injectable from code only.
+- The built-in speech recognizer (`qwen-audio-3.1-asr-flash`) calls the public
+  DashScope native API, not Token Plan (text models only), with `VIDSNAP_ASR_API_KEY`
+  (fallback: the text-model key, which may not be valid there). Details:
+  [providers](docs/providers.md#speech-recognition).
+- Live `vidsnap analyze` is experimental: verification made no live provider
+  call; `vidsnap demo` is offline and needs no key.
+- Local video files only; FFmpeg/ffprobe required on PATH. No URLs/remote
+  media.
+- No hosted service; `vidsnap serve` binds to 127.0.0.1 only.
 
 ## Current guarantees
 

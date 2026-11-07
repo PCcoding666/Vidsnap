@@ -320,6 +320,9 @@ def recipe_article(
     goal: str = typer.Option(DEFAULT_GOAL, "--goal", min=1),
     runs_root: RunsRootOption = Path("run"),
     price_table: PriceTableOption = None,
+    recipe_version: str = typer.Option(
+        "v1", "--recipe-version", help="v1 (default) or v2 (visual review and one revision)."
+    ),
     model: str = typer.Option(
         "qwen3.8-max", "--model", help="One of: " + ", ".join(APPROVED_QWEN_MODELS) + "."
     ),
@@ -339,8 +342,8 @@ def recipe_article(
 ) -> None:
     """Turn one local video into an illustrated article whose figures cite frames.
 
-    Runs the same bounded loop, prompt, gates and renderer as `vidsnap eval`'s
-    t1 task. The RunBundle goes under the runs root and is indexed.
+    V1 follows the evaluation t1 task. Opt-in v2 adds visual review and one
+    bounded revision. The RunBundle goes under the runs root and is indexed.
     """
     if endpoint not in ("dashscope", "token-plan"):
         raise typer.BadParameter("--endpoint must be dashscope or token-plan")
@@ -349,6 +352,7 @@ def recipe_article(
             system=f"harness+{model}",
             endpoint=endpoint,  # type: ignore[arg-type]
             timeout_seconds=timeout,
+            recipe_version=recipe_version,  # type: ignore[arg-type]
         )
     except ValueError as error:
         raise typer.BadParameter(str(error)) from error

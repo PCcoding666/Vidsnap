@@ -33,7 +33,7 @@ from vidsnap.providers.base import (
     ProviderUnavailable,
 )
 from vidsnap.runtime.context import RunContext
-from vidsnap.tasks.base import TaskVerification
+from vidsnap.tasks.base import ModelStep, TaskVerification
 from vidsnap.video.identity import FileIdentity, read_file_identity
 from vidsnap.video.probe import FFmpegError
 
@@ -42,6 +42,7 @@ if TYPE_CHECKING:
 
 OutputT = TypeVar("OutputT", bound=StrictModel)
 ModelT = TypeVar("ModelT")
+StepT = TypeVar("StepT")
 
 RUN_HEADER_SCHEMA = "vidsnap.run-header/v1"
 
@@ -366,6 +367,45 @@ class HarnessKernel(Generic[OutputT, ModelT]):
             {"input_tokens": usage.input_tokens, "output_tokens": usage.output_tokens},
         )
         self._emit_budget(context)
+
+    async def run_model_step(
+        self,
+        context: RunContext[OutputT, ModelT],
+        operation: ModelStep[ModelT, StepT],
+        *,
+        phase: str,
+    ) -> StepT:
+        """Run an additive typed operation within the shared call and wall budgets."""
+        self._enforce_wall(context)
+        if context.model_calls >= context.policy.max_model_calls:
+            raise BudgetExceeded("model-call budget exceeded")
+        assert self._started_at is not None
+        remaining = context.policy.max_wall_seconds - (self._clock() - self._started_at)
+        if remaining <= 0:
+            raise WallClockExceeded("wall-clock budget exceeded")
+        context.model_calls += 1
+        span = context.trace.start("model.request", phase=phase)
+        try:
+            try:
+                output, usage = await asyncio.wait_for(
+                    operation.request(context.task_model), timeout=remaining
+                )
+            except asyncio.TimeoutError as error:
+                raise WallClockExceeded("wall-clock budget exceeded") from error
+            self._enforce_wall(context)
+        except BaseException as error:
+            context.trace.finish(
+                span,
+                status="failed",
+                payload=_model_failure_payload(error),
+                usage=_error_usage(error),
+            )
+            self._emit_budget(context)
+            raise
+        context.trace.finish(span, status="completed", usage=usage)
+        self._complete_phase(context, phase)
+        self._emit_budget(context)
+        return output
 
     async def request_agent_decision(
         self, context: RunContext[OutputT, ModelT], *, format_repair: bool = False

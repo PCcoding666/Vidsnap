@@ -76,3 +76,63 @@ class SampleEvidencePlugin:
             evidence_ids=tuple(evidence_ids),
             summary={"frame_count": len(evidence_ids)},
         )
+
+
+class DenseSampleEvidencePlugin(SampleEvidencePlugin):
+    """V2 sampling: acquire new frames inside windows, independent of global candidates."""
+
+    manifest = PluginManifest(
+        id="vidsnap.tool.sample_evidence.dense",
+        version="2.0.0",
+        kind="tool",
+        model_visible=True,
+    )
+
+    async def execute(self, arguments: StrictModel, context: ToolExecutionContext) -> ToolResult:
+        from vidsnap.video.sampling import FrameCandidate
+
+        if not isinstance(arguments, SampleEvidenceArgs):
+            raise TypeError("sample_evidence requires SampleEvidenceArgs")
+        if not arguments.windows:
+            return await super().execute(arguments, context)
+        windows_within_duration(arguments.windows, context.probe.duration_seconds)
+        # Allocate round-robin so even short windows receive frames. Sample centers
+        # rather than endpoints (a video frame at exactly duration may not exist).
+        timestamps: set[float] = set()
+        for index, window in enumerate(arguments.windows):
+            count = arguments.max_frames // len(arguments.windows)
+            count += int(index < arguments.max_frames % len(arguments.windows))
+            timestamps.update(
+                window.start_seconds
+                + (offset + 0.5) * (window.end_seconds - window.start_seconds) / count
+                for offset in range(count)
+            )
+        candidates = [
+            FrameCandidate(timestamp=t, score=1.0, perceptual_hash=f"dense-{t:.9f}")
+            for t in sorted(timestamps)
+        ]
+        frames = await context.media.extract_frames(
+            context.source_path, candidates, context.artifact_root / "frames"
+        )
+        if len(frames) > arguments.max_frames:
+            raise ValueError("media port exceeded requested frame cap")
+        evidence_ids = []
+        for frame in frames:
+            if frame.timestamp not in timestamps:
+                raise ValueError("media port returned a frame outside requested timestamps")
+            evidence_id = context.evidence_sink.next_id("frame")
+            context.evidence_sink.add(
+                Evidence(
+                    id=evidence_id,
+                    start_seconds=frame.timestamp,
+                    end_seconds=frame.timestamp,
+                    modality="frame",
+                    artifact_path=frame.path,
+                )
+            )
+            evidence_ids.append(evidence_id)
+        return ToolResult(
+            status="completed",
+            evidence_ids=tuple(evidence_ids),
+            summary={"frame_count": len(evidence_ids)},
+        )
