@@ -73,7 +73,7 @@ def test_cli_mock_run_of_each_suite(task: str, system: str, tmp_path: Path) -> N
         header = next(e for e in events(bundle) if e.get("event_type") == "run.started")
         assert header["payload"]["recipe"] == {
             "id": f"eval/{task}",
-            "version": "eval-prompts/2026-10-10",
+            "version": "eval-prompts/2026-11-01",
         }
         assert header["payload"]["policy"] == (
             "FixedPolicy" if system.startswith("harness") else "NativePolicy"

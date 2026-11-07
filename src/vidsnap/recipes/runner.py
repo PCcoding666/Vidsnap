@@ -25,7 +25,7 @@ from vidsnap.providers.base import (
     ProviderProtocol,
     declared_identity,
 )
-from vidsnap.providers.qwen import QWEN_PROVIDER_IDENTITY, QwenCompatibleClient
+from vidsnap.providers.qwen import QwenCompatibleClient
 from vidsnap.recipes.interview import InterviewRecipeResult
 from vidsnap.recipes.render import InterviewRecipeArtifacts, render_interview_recipe
 from vidsnap.recipes.task import InterviewRecipeTaskAdapter
@@ -123,6 +123,8 @@ class InterviewRecipeRunner:
                     api_key=config.api_key,
                     model_concurrency=config.model_concurrency,
                     timeout_seconds=config.request_timeout_seconds,
+                    model=config.model,
+                    base_url=config.base_url,
                 )
                 recognizer = self._recognizer or SpeechRecognizerAdapter(
                     QwenAsrRecognizer(
@@ -132,8 +134,9 @@ class InterviewRecipeRunner:
                 )
                 provider_identity = None
                 header_provider = (
-                    QWEN_PROVIDER_IDENTITY
-                    if agent_model is not self._agent_model
+                    agent_model.identity
+                    if isinstance(agent_model, QwenCompatibleClient)
+                    and agent_model is not self._agent_model
                     else declared_identity(agent_model)
                 )
                 header_recognizer = (

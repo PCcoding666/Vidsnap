@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from typing import TYPE_CHECKING, Generic, Protocol, TypeVar
 
 from pydantic import JsonValue
@@ -33,9 +34,16 @@ class ExecutionPolicy(Protocol, Generic[OutputT, ModelT]):
         """Drive one bounded run to a truthful terminal state on the context."""
 
 
-def default_plugin_registry() -> PluginRegistry:
-    """Assemble and freeze the approved default tool plugins exactly once."""
+def default_plugin_registry(allowed_tools: Iterable[str] | None = None) -> PluginRegistry:
+    """Assemble and freeze the approved default tool plugins exactly once.
+
+    ``allowed_tools`` keeps only the named default tools (a run's
+    ``HarnessPolicy.allowed_tools``); it can never add a tool.
+    """
     plugins = default_tool_plugins()
+    if allowed_tools is not None:
+        names = frozenset(allowed_tools)
+        plugins = tuple(plugin for plugin in plugins if plugin.name in names)
     registry = PluginRegistry(allowed_ids=tuple(plugin.manifest.id for plugin in plugins))
     for plugin in plugins:
         registry.register(plugin)
@@ -82,8 +90,15 @@ class FixedPolicy(Generic[OutputT, ModelT]):
         """Run one acquisition iteration; repair rounds resample frames only."""
         kernel.record_iteration(context)
         probe = context.probe
-        if not repair_round and probe is not None and probe.has_audio:
+        if (
+            not repair_round
+            and probe is not None
+            and probe.has_audio
+            and kernel.has_tool("transcribe_audio")
+        ):
             await kernel.run_tool(context, "transcribe_audio", {})
+        if not kernel.has_tool("sample_evidence"):
+            return
         kernel.ensure_frame_headroom(context)
         arguments: dict[str, JsonValue] = {
             "max_frames": kernel.remaining_frame_budget(context),

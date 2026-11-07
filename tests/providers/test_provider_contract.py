@@ -68,8 +68,13 @@ def test_qwen_identity_is_locked_and_immutable() -> None:
     profile = QwenProfile()
     assert profile.model == QWEN_MODEL == "qwen3.8-max"
     assert profile.base_url == TOKEN_PLAN_BASE_URL
-    with pytest.raises(TypeError):
-        QwenProfile(model="other-model")  # type: ignore[call-arg]
+    # Only allow-listed models and endpoints can be chosen, and only at construction.
+    with pytest.raises(ValueError):
+        QwenProfile(model="other-model")
+    with pytest.raises(ValueError):
+        QwenProfile(base_url="https://example.invalid/v1")
+    with pytest.raises(FrozenInstanceError):
+        profile.model = "qwen3.8-flash"  # type: ignore[misc]
 
     identity = make_qwen_provider().identity
     assert isinstance(identity, ProviderIdentity)

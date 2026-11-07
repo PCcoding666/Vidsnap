@@ -77,7 +77,7 @@ def eval_systems() -> None:
     """List the allow-listed systems and harness modifiers."""
     for name in list_systems():
         typer.echo(name)
-    typer.echo("harness modifiers: +oracle-asr, +oracle-frames, +frame-labels")
+    typer.echo("harness modifiers: +oracle-asr, +oracle-frames, +plain-frames")
 
 
 @eval_app.command("run")

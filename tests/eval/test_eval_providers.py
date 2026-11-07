@@ -325,9 +325,13 @@ async def test_asr_identity_timeout_and_endpoint_rules() -> None:
 
 
 def test_system_names_are_allow_listed() -> None:
-    assert parse_system("harness+qwen3.8-max+oracle-asr+frame-labels").name == (
-        "harness+qwen3.8-max+oracle-asr+frame-labels"
+    assert parse_system("harness+qwen3.8-max+oracle-asr+plain-frames").name == (
+        "harness+qwen3.8-max+oracle-asr+plain-frames"
     )
+    assert parse_system("harness+qwen3.8-max").frame_labels is True
+    assert parse_system("harness+qwen3.8-max+plain-frames").frame_labels is False
+    with pytest.raises(ValueError):
+        parse_system("harness+qwen3.8-max+frame-labels")
     assert parse_system("native:qwen3.8-omni-flash").kind == "native"
     for bad in ("harness+gpt-5", "native:any-model", "harness+qwen3.8-max+fast", "direct:x"):
         with pytest.raises(ValueError):

@@ -44,12 +44,38 @@ def test_asr_endpoint_is_a_fixed_public_dashscope_constant_apart_from_token_plan
     assert DASHSCOPE_COMPATIBLE_BASE_URL != TOKEN_PLAN_BASE_URL
 
 
-def test_text_model_endpoint_stays_pinned_to_token_plan() -> None:
-    with pytest.raises(ValueError, match="Token Plan"):
-        HarnessConfig(base_url=DASHSCOPE_ASR_BASE_URL)
-    with pytest.raises(ValueError, match="Token Plan"):
-        HarnessConfig(base_url="https://example.invalid/compatible-mode/v1")
+def test_text_model_endpoint_comes_from_a_fixed_allow_list() -> None:
+    # Token Plan stays the default; the public compatible-mode host is the one alternative.
     assert HarnessConfig().base_url == TOKEN_PLAN_BASE_URL
+    assert HarnessConfig(base_url=DASHSCOPE_COMPATIBLE_BASE_URL).base_url == (
+        DASHSCOPE_COMPATIBLE_BASE_URL
+    )
+    with pytest.raises(ValueError, match="approved endpoint"):
+        HarnessConfig(base_url=DASHSCOPE_ASR_BASE_URL)
+    with pytest.raises(ValueError, match="approved endpoint"):
+        HarnessConfig(base_url="https://example.invalid/compatible-mode/v1")
+
+
+def test_text_model_comes_from_a_fixed_allow_list() -> None:
+    assert HarnessConfig().model == "qwen3.8-max"
+    assert HarnessConfig(model="qwen3.8-flash").model == "qwen3.8-flash"
+    with pytest.raises(ValueError, match="model must be one of"):
+        HarnessConfig(model="gpt-anything")
+
+
+def test_env_selects_model_and_endpoint_but_never_an_arbitrary_url(monkeypatch) -> None:
+    monkeypatch.setenv("VIDSNAP_QWEN_API_KEY", "rotated-secret")
+    monkeypatch.setenv("VIDSNAP_QWEN_MODEL", "qwen3.8-omni-flash")
+    monkeypatch.setenv("VIDSNAP_QWEN_ENDPOINT", "dashscope")
+
+    config = HarnessConfig.from_env()
+
+    assert config.model == "qwen3.8-omni-flash"
+    assert config.base_url == DASHSCOPE_COMPATIBLE_BASE_URL
+
+    monkeypatch.setenv("VIDSNAP_QWEN_ENDPOINT", "https://example.invalid/v1")
+    with pytest.raises(ValueError, match="VIDSNAP_QWEN_ENDPOINT"):
+        HarnessConfig.from_env()
 
 
 def test_asr_key_prefers_the_dedicated_variable_without_touching_the_text_key(

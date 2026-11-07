@@ -65,11 +65,17 @@ run.
 ### QwenProvider
 
 QwenProvider is the reference provider. It subclasses `QwenCompatibleClient`,
-which speaks the OpenAI-compatible chat-completions protocol against the
-single approved endpoint, with a semaphore capping model concurrency at two.
-It reads only the typed inputs each port receives, never accepts a
-caller-selected model or URL, and sends evidence images only as base64 data
-URLs (JPEG, PNG, or WebP, at most 5 MB each).
+which speaks the OpenAI-compatible chat-completions protocol against one of
+two approved endpoints, with a semaphore capping model concurrency at two.
+The model and endpoint are fixed when the client is constructed, from the
+allow-list in `vidsnap.config` (`APPROVED_QWEN_MODELS`: `qwen3.8-max`,
+`qwen3.8-flash`, `qwen3.8-omni-flash`; `ENDPOINT_BASE_URLS`: `token-plan`,
+`dashscope`), selected with `VIDSNAP_QWEN_MODEL` and `VIDSNAP_QWEN_ENDPOINT`.
+Nothing that arrives during a run can change them. The client reads only the
+typed inputs each port receives and sends evidence images only as base64 data
+URLs (JPEG, PNG, or WebP, at most 5 MB each), each preceded by a
+`[frame-id @ MM:SS]` label so captions and timestamps stay bound to the frame
+they describe.
 
 ```python
 import os

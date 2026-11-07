@@ -4,6 +4,7 @@ import json
 from importlib.resources import files
 
 import pytest
+from pydantic import ValidationError
 
 from vidsnap.contracts import (
     Claim,
@@ -32,6 +33,12 @@ def test_policy_cannot_expand_the_approved_resource_envelope() -> None:
 
 
 def test_policy_bounds_model_visible_tool_calls() -> None:
+    assert HarnessPolicy().allowed_tools == ("transcribe_audio", "sample_evidence")
+    assert HarnessPolicy(allowed_tools=("sample_evidence",)).allowed_tools == ("sample_evidence",)
+    with pytest.raises(ValidationError):
+        HarnessPolicy(allowed_tools=("sample_evidence", "run_shell"))  # type: ignore[arg-type]
+    with pytest.raises(ValidationError):
+        HarnessPolicy(allowed_tools=("sample_evidence", "sample_evidence"))
     assert HarnessPolicy().max_tool_calls == 6
     assert HarnessPolicy(max_tool_calls=0).max_tool_calls == 0
     with pytest.raises(ValueError):

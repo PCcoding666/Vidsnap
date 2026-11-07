@@ -196,6 +196,43 @@ def test_harness_gates_require_cited_frames() -> None:
     assert "referenced_evidence_exists" not in task.gates(uncited, [], 60, harness=False)
 
 
+def _figure_article(caption: str) -> ArticleOutput:
+    return article(
+        sections=[
+            {
+                "heading": "h",
+                "body": "b",
+                "figures": [
+                    {"timestamp_seconds": 9, "caption": caption, "evidence_id": "frame-001"}
+                ],
+            }
+        ]
+    )
+
+
+def test_caption_grounding_gate_uses_recorded_frame_text() -> None:
+    task = get_task("t1")
+    slide = Evidence(
+        id="frame-001",
+        start_seconds=9,
+        end_seconds=9,
+        modality="frame",
+        content="CONFIDENT AND DEFINITE VIEW OF FUTURE",
+    )
+    # The caption names the slide the transcript was discussing, not the cited frame.
+    drifted = _figure_article("幻灯片上只有一个词 TEAM，演讲进入团队话题。")
+    assert task.gates(drifted, [slide], 60, harness=True)["figure_captions_grounded"] is False
+    grounded = _figure_article("幻灯片写着 CONFIDENT AND DEFINITE VIEW OF FUTURE。")
+    assert task.gates(grounded, [slide], 60, harness=True)["figure_captions_grounded"] is True
+    # Chinese perception text matches on character bigrams.
+    chinese = slide.model_copy(update={"content": "团队页：乐观主义者"})
+    assert task.gates(drifted, [chinese], 60, harness=True)["figure_captions_grounded"] is True
+    # A frame without recorded text cannot be checked and does not fail the output.
+    blank = Evidence(id="frame-001", start_seconds=9, end_seconds=9, modality="frame")
+    assert task.gates(drifted, [blank], 60, harness=True)["figure_captions_grounded"] is True
+    assert "figure_captions_grounded" not in task.gates(drifted, [], 60, harness=False)
+
+
 def test_storyboard_rules() -> None:
     good = StoryboardOutput.model_validate(
         {

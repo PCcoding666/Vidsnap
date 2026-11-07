@@ -37,7 +37,10 @@ from vidsnap.runtime import FixedPolicy
 from vidsnap.video.ports import FFmpegPort
 
 SystemKind = Literal["harness", "native"]
-_MODIFIERS = ("oracle-asr", "oracle-frames", "frame-labels")
+# Frame labels (``[frame-id @ MM:SS]`` before every image) are on by default since the
+# 2026-11-01 live run showed they bind captions to the frames they cite; ``plain-frames``
+# is the ablation that sends bare images.
+_MODIFIERS = ("oracle-asr", "oracle-frames", "plain-frames")
 
 
 @dataclass(frozen=True, slots=True)
@@ -48,7 +51,7 @@ class SystemSpec:
     model: str
     oracle_asr: bool = False
     oracle_frames: bool = False
-    frame_labels: bool = False
+    frame_labels: bool = True
 
     @property
     def name(self) -> str:
@@ -59,7 +62,7 @@ class SystemSpec:
             for modifier, enabled in (
                 ("oracle-asr", self.oracle_asr),
                 ("oracle-frames", self.oracle_frames),
-                ("frame-labels", self.frame_labels),
+                ("plain-frames", not self.frame_labels),
             )
             if enabled
         ]
@@ -102,7 +105,7 @@ def parse_system(name: str) -> SystemSpec:
         model=model,
         oracle_asr="oracle-asr" in modifiers,
         oracle_frames="oracle-frames" in modifiers,
-        frame_labels="frame-labels" in modifiers,
+        frame_labels="plain-frames" not in modifiers,
     )
 
 
