@@ -47,16 +47,6 @@ mode:
     vidsnap runs list
     vidsnap manifest run/<bundle-dir>
 
-`analyze` takes `--mode fixed|agentic` (let the model choose each bounded tool
-call), `--tools transcribe_audio,sample_evidence` (a subset, never more),
-`--model` and `--endpoint` (from the allow-list in `vidsnap.config`).
-
-To turn a long video into an illustrated article whose every figure cites a
-sampled frame (the task the first live comparison was run on, see
-[docs/eval-results](docs/eval-results/2026-11-01-t1-first-live-run.md)):
-
-    vidsnap recipe article /absolute/path/lecture.mp4 --output-dir ./article \
-        --endpoint dashscope   # key in VIDSNAP_DASHSCOPE_API_KEY
 
 ## Limitations
 
@@ -168,6 +158,19 @@ quality, latency, or cost claims are published.
   stateless contract as the API.
 - Localhost API: `GET /health`, `GET /v1/manifest`, `POST /v1/analyze`,
   `POST /v1/analyze/stream`.
+
+## Per-run choices and the article recipe
+
+`analyze` takes `--mode fixed|agentic` (let the model choose each bounded tool
+call), `--tools transcribe_audio,sample_evidence` (a subset, never more),
+`--model` and `--endpoint` (from the allow-list in `vidsnap.config`).
+
+To turn a long video into an illustrated article whose every figure cites a
+sampled frame (the task the first live comparison was run on, see
+[docs/eval-results](docs/eval-results/2026-11-01-t1-first-live-run.md)):
+
+    vidsnap recipe article /absolute/path/lecture.mp4 --output-dir ./article \
+        --endpoint dashscope   # key in VIDSNAP_DASHSCOPE_API_KEY
 
 ## Honest limitations
 

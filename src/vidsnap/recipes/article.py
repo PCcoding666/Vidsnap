@@ -57,7 +57,7 @@ class ArticleRecipeRunner:
         system: str = "harness+qwen3.8-max",
         endpoint: EndpointName = "dashscope",
         media: FFmpegPort | None = None,
-        timeout_seconds: float = 300.0,
+        timeout_seconds: float = 900.0,
         transport: httpx.AsyncBaseTransport | None = None,
     ) -> None:
         self._spec = parse_system(system)

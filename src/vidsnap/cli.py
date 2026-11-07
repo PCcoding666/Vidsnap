@@ -328,6 +328,14 @@ def recipe_article(
         "--endpoint",
         help="dashscope (key: VIDSNAP_DASHSCOPE_API_KEY) or token-plan (VIDSNAP_QWEN_API_KEY).",
     ),
+    timeout: float = typer.Option(
+        900.0,
+        "--timeout",
+        min=10.0,
+        max=900.0,
+        help="Per-request model timeout in seconds. Synthesis for a 26-minute video "
+        "measured 290-360 s, so the default is the loop's 900 s wall budget.",
+    ),
 ) -> None:
     """Turn one local video into an illustrated article whose figures cite frames.
 
@@ -337,7 +345,11 @@ def recipe_article(
     if endpoint not in ("dashscope", "token-plan"):
         raise typer.BadParameter("--endpoint must be dashscope or token-plan")
     try:
-        runner = ArticleRecipeRunner(system=f"harness+{model}", endpoint=endpoint)  # type: ignore[arg-type]
+        runner = ArticleRecipeRunner(
+            system=f"harness+{model}",
+            endpoint=endpoint,  # type: ignore[arg-type]
+            timeout_seconds=timeout,
+        )
     except ValueError as error:
         raise typer.BadParameter(str(error)) from error
     prices = _load_prices(price_table)

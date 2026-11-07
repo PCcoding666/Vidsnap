@@ -48,5 +48,6 @@ def test_recipe_article_help() -> None:
 
     assert result.exit_code == 0
     text = strip_ansi(result.stdout)
-    for option in ("--goal", "--output-dir", "--model", "--endpoint"):
+    for option in ("--goal", "--output-dir", "--model", "--endpoint", "--timeout"):
         assert option in text
+    assert "900" in text
